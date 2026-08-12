@@ -15,6 +15,7 @@ import {
   clearSessionHistory,
   createSession,
   loginOptions,
+  readSettings,
   resolveModel,
   writeSettings,
   type AgentSession,
@@ -55,6 +56,11 @@ export function App({ registry }: { registry: Registry }) {
   const [auth, setAuth] = useState<Map<string, { ok: boolean; envKey?: string }>>(new Map());
   // bumped to re-render after an in-place theme swap
   const [, setThemeTick] = useState(0);
+  // persisted UI preferences (sidebar visibility, thinking visibility)
+  const [prefs, setPrefs] = useState(() => {
+    const s = readSettings();
+    return { sidebar: s.sidebar ?? "show", thinking: s.thinking ?? "show" };
+  });
   // Live agent sessions, one per session key (created lazily on first prompt).
   const agents = useRef(new Map<string, Promise<AgentSession>>());
   // ↑/↓ recall position in the active session's history; null = live input
@@ -528,8 +534,16 @@ export function App({ registry }: { registry: Registry }) {
         setLogin({ provider, type: type === "api_key" ? "api_key" : "oauth" });
       return;
     }
+    if (trimmed.startsWith("/settings ")) {
+      const [key, value] = trimmed.slice(10).trim().split(/\s+/);
+      if ((key === "sidebar" || key === "thinking") && (value === "show" || value === "hide")) {
+        setPrefs((p) => ({ ...p, [key]: value }));
+        writeSettings({ [key]: value });
+      }
+      return;
+    }
     // bare option-commands: open their menu instead of sending to the agent
-    if (["/model", "/theme", "/login"].includes(trimmed)) {
+    if (["/model", "/theme", "/login", "/settings"].includes(trimmed)) {
       setInput(`${trimmed} `);
       return;
     }
@@ -591,8 +605,15 @@ export function App({ registry }: { registry: Registry }) {
         }),
       themes: themeNames,
       logins: loginOptions(),
+      settings: (["sidebar", "thinking"] as const).flatMap((key) =>
+        (["show", "hide"] as const).map((value) => ({
+          key,
+          value,
+          hint: prefs[key] === value ? "current" : "",
+        })),
+      ),
     }),
-    [auth],
+    [auth, prefs],
   );
   const menu = useMemo(
     () => (input.startsWith("/") ? menuItems(input, menuCtx) : []),
@@ -634,7 +655,14 @@ export function App({ registry }: { registry: Registry }) {
           ) : palette ? (
             <Palette items={paletteItems} onClose={() => setPalette(false)} />
           ) : (
-            <Transcript entries={session.entries} active={!modalOpen} />
+            <Transcript
+              entries={
+                prefs.thinking === "hide"
+                  ? session.entries.filter((e) => e.kind !== "thinking")
+                  : session.entries
+              }
+              active={!modalOpen}
+            />
           )}
           {/* prompt block, opencode structure: card + strip + footer row stack
               tight; question/permission panels replace the whole block */}
@@ -666,6 +694,7 @@ export function App({ registry }: { registry: Registry }) {
           )}
           </box>
         </box>
+        {prefs.sidebar === "show" && (
         <Sidebar
           workspaces={workspaces}
           services={environment.services}
@@ -675,6 +704,7 @@ export function App({ registry }: { registry: Registry }) {
           tokens={session.tokens}
           running={workspaces.map((w) => getSession(sessions, w.id).busy)}
         />
+        )}
       </box>
     </box>
   );

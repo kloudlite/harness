@@ -34,7 +34,7 @@ export const models = runtime;
 
 export type ModelRef = { provider: string; id: string };
 
-type Settings = { defaultModel?: ModelRef; theme?: string };
+type Settings = { defaultModel?: ModelRef; theme?: string; sidebar?: "show" | "hide"; thinking?: "show" | "hide" };
 
 const SETTINGS_PATH = join(CONFIG_DIR, "settings.json");
 

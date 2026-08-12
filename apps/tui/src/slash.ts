@@ -12,6 +12,7 @@ export const commands: SlashCommand[] = [
   { name: "/model", description: "Set this session's model", hasOptions: true },
   { name: "/theme", description: "Switch theme", hasOptions: true },
   { name: "/login", description: "Log in to a provider", hasOptions: true },
+  { name: "/settings", description: "Adjust settings", hasOptions: true },
   { name: "/env-close", description: "Close the active environment tab" },
   { name: "/exit", description: "Quit" },
 ];
@@ -28,6 +29,8 @@ export type MenuContext = {
   models: { provider: string; id: string; hint: string }[];
   themes: string[];
   logins: { provider: string; type: string; label: string }[];
+  /** flat option rows for /settings, hint marks the current value */
+  settings: { key: string; value: string; hint: string }[];
 };
 
 export const MENU_MAX = 8;
@@ -70,6 +73,14 @@ export function menuItems(input: string, ctx: MenuContext): MenuItem[] {
         insert: `/login ${l.provider} ${l.type}`,
         label: `${l.provider} · ${l.label}`,
         hint: l.type === "oauth" ? "oauth" : "api key",
+      }));
+  if (cmd === "/settings")
+    return ctx.settings
+      .filter((o) => filter(`${o.key} ${o.value}`))
+      .map((o) => ({
+        insert: `/settings ${o.key} ${o.value}`,
+        label: `${o.key} ${o.value}`,
+        hint: o.hint,
       }));
   return [];
 }
