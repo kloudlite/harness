@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { writeSync } from "node:fs";
 import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
 import { Registry } from "@kloudlite-tui/tools";
@@ -24,3 +25,9 @@ const renderer = await createCliRenderer({
 });
 
 createRoot(renderer).render(<App registry={registry} />);
+
+// Re-assert modifyOtherKeys mode 2: opentui's native setup writes CSI >4;1m
+// (mode 1), which downgrades the mode-2 enable above — and mode 1 keeps
+// ctrl+h/ctrl+j as legacy control bytes. The patched process.stdout would
+// swallow this, so write straight to the fd once the initial frames settle.
+setTimeout(() => writeSync(1, "\x1b[>4;2m"), 150);
