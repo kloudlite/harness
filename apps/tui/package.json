@@ -8,7 +8,8 @@
   },
   "scripts": {
     "dev": "bun run src/cli.tsx",
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "serve": "bun run src/server.tsx"
   },
   "dependencies": {
     "@kloudlite-tui/agent": "workspace:*",

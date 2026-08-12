@@ -38,7 +38,14 @@ export const SIDEBAR_WIDTH = 42;
  * thinking, coding tools, steering queues, compaction, retries). A running
  * turn belongs to its session and keeps streaming while you look elsewhere.
  */
-export function App({ registry }: { registry: Registry }) {
+export function App({
+  registry,
+  onExit,
+}: {
+  registry: Registry;
+  /** Called on quit; defaults to killing the process (single-user CLI). */
+  onExit?: () => void;
+}) {
   const renderer = useRenderer();
   const { width: columns, height: rows } = useTerminalDimensions();
   const [sessions, setSessions] = useState<SessionMap>({});
@@ -79,7 +86,8 @@ export function App({ registry }: { registry: Registry }) {
   const session = getSession(sessions, activeKey);
   const busy = session.busy;
 
-  function exit(): never {
+  function exit(): void {
+    if (onExit) return onExit(); // server session: close the connection only
     renderer.destroy();
     process.exit(0);
   }
