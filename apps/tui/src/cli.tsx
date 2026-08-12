@@ -7,18 +7,20 @@ import { App } from "./app.tsx";
 // No built-in tools. Register your own set here.
 const registry = new Registry();
 
+// xterm modifyOtherKeys: terminals without kitty-protocol support enabled
+// (WezTerm default config) otherwise send ctrl+h as a bare backspace byte,
+// indistinguishable from Backspace. Must be written BEFORE createCliRenderer:
+// opentui patches process.stdout and buffers writes, so sequences written
+// afterwards never reach the terminal. opentui's parser understands the
+// CSI 27;…~ encodings this turns on.
+process.stdout.write("\x1b[>4;2m");
+process.on("exit", () => process.stdout.write("\x1b[>4;0m"));
+
 // opentui owns the terminal: alternate screen, kitty keyboard protocol,
 // SGR mouse, and a cell-diff compositor (no stale-cell artifacts).
 const renderer = await createCliRenderer({
   exitOnCtrlC: false, // the app handles ctrl+c (and /exit) itself
   useMouse: true, // wheel scrolling in the transcript
 });
-
-// xterm modifyOtherKeys: terminals without kitty-protocol support enabled
-// (WezTerm default config) otherwise send ctrl+h as a bare backspace byte,
-// making it indistinguishable from Backspace. opentui's parser understands
-// the CSI 27;…~ encodings this turns on.
-process.stdout.write("\x1b[>4;2m");
-process.on("exit", () => process.stdout.write("\x1b[>4;0m"));
 
 createRoot(renderer).render(<App registry={registry} />);
