@@ -59,7 +59,11 @@ export function Sidebar({
         </text>
       )}
       <Section title="Workspaces · attached">
+        {workspaces.filter((w) => w.owner === CURRENT_USER).length === 0 && (
+          <text fg={theme.muted} attributes={TextAttributes.DIM}>none — ^a to create one</text>
+        )}
         {workspaces.map((w, i) => {
+          if (w.owner !== CURRENT_USER) return null;
           const active = focus === i + 1;
           return (
             <text key={w.id}>
@@ -72,13 +76,28 @@ export function Sidebar({
               </span>{" "}
               <span fg={theme.muted} attributes={TextAttributes.DIM}>
                 {w.status === "cloning" ? (w.progress ?? w.status) : w.status}
-                {w.owner === CURRENT_USER ? "" : ` · ${w.owner}`}
               </span>
               {running[i] ? <span fg={theme.warning}> ⋯</span> : ""}
             </text>
           );
         })}
       </Section>
+
+      {workspaces.some((w) => w.owner !== CURRENT_USER) && (
+        <Section title="Attached by others">
+          {workspaces.map((w) =>
+            w.owner === CURRENT_USER ? null : (
+              <text key={w.id}>
+                <span fg={dot(w.status)}>•</span>{" "}
+                <span fg={theme.muted}>{w.name}</span>{" "}
+                <span fg={theme.muted} attributes={TextAttributes.DIM}>
+                  {w.status} · {w.owner}
+                </span>
+              </text>
+            ),
+          )}
+        </Section>
+      )}
 
       <Section title="Services">
         {services.map((svc) => (
