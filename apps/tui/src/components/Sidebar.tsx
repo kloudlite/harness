@@ -101,7 +101,7 @@ export function Sidebar({
         <box flexDirection="column">
           <text fg={theme.accent}><b>{ws.name}</b></text>
           <text fg={theme.muted} attributes={TextAttributes.DIM}>{ws.repo}</text>
-          <text fg={theme.muted}> {ws.branch}</text>
+          <text fg={theme.muted}>⎇ {ws.branch}</text>
           <text fg={theme.muted}>
             {ws.ports.length > 0
               ? `ports ${ws.ports.map((p) => `:${p}`).join(" ")}`
