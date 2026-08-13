@@ -155,7 +155,7 @@ export function App({
       } else {
         pushAskRef.current({
           title: envLabel(environment),
-          subtitle: environment.owner === CURRENT_USER ? "your environment" : `shared by ${environment.owner}`,
+          subtitle: environment.owner === CURRENT_USER ? "your environment" : `owned by ${environment.owner}`,
           layout: "list",
           options: [
             { id: "new", label: "New workspace…" },
@@ -592,7 +592,7 @@ export function App({
           .map((e, i) => ({
             id: String(i),
             label: envLabel(e),
-            hint: e.owner === CURRENT_USER ? (openEnvs.includes(i) ? "open" : "") : `shared by ${e.owner}`,
+            hint: e.owner === CURRENT_USER ? (openEnvs.includes(i) ? "open" : "") : `owned by ${e.owner}`,
           }))
           .filter((o) => Number(o.id) !== env),
         { id: "cancel", label: "Cancel" },
@@ -840,7 +840,7 @@ export function App({
       hint:
         e.owner === CURRENT_USER
           ? i === env ? "active" : openEnvs.includes(i) ? "open" : ""
-          : `shared by ${e.owner}`,
+          : `owned by ${e.owner}`,
       group: "Environments",
       run: () => {
         setOpenEnvs((open) => (open.includes(i) ? open : [...open, i]));
@@ -894,7 +894,7 @@ export function App({
                     ? openEnvs.includes(i)
                       ? "environment · open"
                       : "environment"
-                    : `shared by ${e.owner}`,
+                    : `owned by ${e.owner}`,
               }))
               .filter((_, i) => i !== env)
           : [],

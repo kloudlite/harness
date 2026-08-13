@@ -55,7 +55,7 @@ export function Sidebar({
       <box flexDirection="column" flexShrink={0} gap={1} paddingRight={1}>
       {envOwner && (
         <text fg={theme.muted}>
-          shared by <span fg={theme.accent}>{envOwner}</span>
+          owned by <span fg={theme.accent}>{envOwner}</span>
         </text>
       )}
       <Section title="Owned workspaces">
