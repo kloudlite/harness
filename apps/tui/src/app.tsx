@@ -199,9 +199,9 @@ export function App({
     };
     if (key.ctrl && key.name === "h") return tabMove(-1);
     if (key.ctrl && key.name === "l") return tabMove(1);
-    // Ctrl+E: re-attach the current workspace to the next environment
+    // Ctrl+E: attach picker for the current workspace (choose the environment)
     if (key.ctrl && key.name === "e") {
-      if (focus > 0) attachTo((env + 1) % envs.length);
+      if (focus > 0) askAttach();
       return;
     }
     // Ctrl+1..9: jump straight to workspace N; Ctrl+0: main context

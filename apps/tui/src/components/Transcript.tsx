@@ -256,7 +256,7 @@ export function Transcript({
               ["^1-9", "jump to workspace · ^0 main"],
               ["^j ^k", "cycle workspaces"],
               ["^h ^l", "switch environment"],
-              ["^e", "re-attach workspace to the next environment"],
+              ["^e", "attach workspace to an environment"],
               ["^b", "back to the main context"],
               ["!", "shell mode inside a workspace"],
             ] as const
