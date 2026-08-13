@@ -1,6 +1,6 @@
 import { TextAttributes } from "@opentui/core";
 import { theme } from "../theme.ts";
-import type { Service, Workspace, WorkspaceStatus } from "../workspaces.ts";
+import { CURRENT_USER, type Service, type Workspace, type WorkspaceStatus } from "../workspaces.ts";
 
 // resolved per render: the theme singleton mutates on /theme
 const dot = (status: WorkspaceStatus) =>
@@ -20,6 +20,7 @@ export function Sidebar({
   workspaces,
   services,
   envName,
+  envOwner,
   running,
   focus,
   width,
@@ -28,6 +29,8 @@ export function Sidebar({
   workspaces: Workspace[];
   services: Service[];
   envName: string;
+  /** Environment owner, shown when it isn't the signed-in user. */
+  envOwner?: string;
   /** Per-workspace: session has a turn running */
   running: boolean[];
   /** 0 = main context, 1..N = workspace */
@@ -50,6 +53,11 @@ export function Sidebar({
     >
       <scrollbox flexGrow={1} flexBasis={0} flexShrink={1} scrollbarOptions={{ visible: false }}>
       <box flexDirection="column" flexShrink={0} gap={1} paddingRight={1}>
+      {envOwner && (
+        <text fg={theme.muted}>
+          shared by <span fg={theme.accent}>{envOwner}</span>
+        </text>
+      )}
       <Section title="Workspaces">
         {workspaces.map((w, i) => {
           const active = focus === i + 1;
@@ -64,6 +72,7 @@ export function Sidebar({
               </span>{" "}
               <span fg={theme.muted} attributes={TextAttributes.DIM}>
                 {w.status === "cloning" ? (w.progress ?? w.status) : w.status}
+                {w.owner === CURRENT_USER ? "" : ` · ${w.owner}`}
               </span>
               {running[i] ? <span fg={theme.warning}> ⋯</span> : ""}
             </text>

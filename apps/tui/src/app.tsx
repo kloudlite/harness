@@ -8,7 +8,7 @@ import { HintBar } from "./components/HintBar.tsx";
 import { Palette, type PaletteItem } from "./components/Palette.tsx";
 import { Tabs } from "./components/Tabs.tsx";
 import { matchCommands, menuItems, placeholders } from "./slash.ts";
-import { MOCK_ENVIRONMENTS } from "./workspaces.ts";
+import { CURRENT_USER, envLabel, MOCK_ENVIRONMENTS } from "./workspaces.ts";
 import { setTheme, theme, themeNames } from "./theme.ts";
 import { catalog, loadProviderAuth, modelLabel } from "./models.ts";
 import {
@@ -58,6 +58,8 @@ export function App({
   // Environment tabs: indexes into MOCK_ENVIRONMENTS that are open; one active
   const [openEnvs, setOpenEnvs] = useState<number[]>([0, 1, 2]);
   const [env, setEnv] = useState(0);
+  // environments are state: /move re-homes a workspace into another one
+  const [envs, setEnvs] = useState(MOCK_ENVIRONMENTS);
   const [palette, setPalette] = useState(false);
   const [login, setLogin] = useState<{ provider: string; type: "oauth" | "api_key" } | null>(null);
   // provider id → auth status, resolved once on startup
@@ -78,7 +80,7 @@ export function App({
   // tools granted "always allow" per session key
   const alwaysAllow = useRef(new Map<string, Set<string>>());
 
-  const environment = MOCK_ENVIRONMENTS[env]!;
+  const environment = envs[env]!;
   const workspaces = environment.workspaces;
   const activeKey = sessionKey(
     environment.id,
@@ -119,10 +121,61 @@ export function App({
     const menuOpen = matchCommands(input).length > 0;
     // Ctrl+P: jump palette
     if (key.ctrl && key.name === "p") return setPalette(true);
+    // Ctrl+A: contextual actions for the current selection
+    if (key.ctrl && key.name === "a") {
+      if (focus > 0) {
+        const ws = workspaces[focus - 1]!;
+        const intercepting = environment.services.some((s) => s.interceptedBy === ws.name);
+        pushAskRef.current({
+          title: ws.name,
+          subtitle: `attached to ${envLabel(environment)}`,
+          options: [
+            { id: "attach", label: "Attach to environment…" },
+            { id: "intercept", label: "Intercept a service…" },
+            ...(intercepting ? [{ id: "release", label: "Release interception" }] : []),
+            { id: "clone", label: "Clone workspace" },
+            { id: "cancel", label: "Cancel" },
+          ],
+          escapeId: "cancel",
+        }).then((id) => {
+          if (id === "attach") askAttach();
+          if (id === "intercept") askIntercept();
+          if (id === "release") releaseInterception();
+          if (id === "clone") cloneWorkspace();
+        });
+      } else {
+        pushAskRef.current({
+          title: envLabel(environment),
+          subtitle: environment.owner === CURRENT_USER ? "your environment" : `shared by ${environment.owner}`,
+          options: [
+            { id: "new", label: "New workspace…" },
+            { id: "clone-env", label: "Clone environment" },
+            { id: "close", label: "Close tab" },
+            { id: "cancel", label: "Cancel" },
+          ],
+          escapeId: "cancel",
+        }).then((id) => {
+          if (id === "new") setInput("/workspace new ");
+          if (id === "clone-env") cloneEnvironment();
+          if (id === "close") closeTab();
+        });
+      }
+      return;
+    }
     const n = workspaces.length;
-    // cycle among workspaces only; entering from main lands on first/last
+    // only your own workspaces can be entered; others are visible but attached
+    // to their owner's session
+    const own = workspaces
+      .map((w, i) => (w.owner === CURRENT_USER ? i + 1 : -1))
+      .filter((i) => i > 0);
+    // cycle among your workspaces; entering from main lands on first/last
     const cycle = (delta: number) =>
-      setFocus((f) => (f === 0 ? (delta > 0 ? 1 : n) : ((f - 1 + delta + n) % n) + 1));
+      setFocus((f) => {
+        if (own.length === 0) return 0;
+        const pos = own.indexOf(f);
+        if (pos === -1) return delta > 0 ? own[0]! : own[own.length - 1]!;
+        return own[(pos + delta + own.length) % own.length]!;
+      });
     // Ctrl+J/K cycle workspaces (legacy terminals report ctrl+j as a bare linefeed)
     if ((key.ctrl && key.name === "j") || key.name === "linefeed") return cycle(1);
     if (key.ctrl && key.name === "k") return cycle(-1);
@@ -136,6 +189,16 @@ export function App({
     };
     if (key.ctrl && key.name === "h") return tabMove(-1);
     if (key.ctrl && key.name === "l") return tabMove(1);
+    // Ctrl+1..9: jump straight to workspace N; Ctrl+0: main context
+    if (key.ctrl && /^[0-9]$/.test(key.name)) {
+      const d = Number(key.name);
+      if (d === 0) {
+        setMode("agent");
+        return setFocus(0);
+      }
+      if (d <= n && workspaces[d - 1]!.owner === CURRENT_USER) return setFocus(d);
+      return;
+    }
     if (key.name === "tab" && !menuOpen) return cycle(key.shift ? -1 : 1);
     // ↑/↓ recall this session's prompt history (menu closed only)
     if (!menuOpen && (key.name === "up" || key.name === "down")) {
@@ -482,6 +545,140 @@ export function App({
     setInput(v);
   }
 
+  // ---- environment / workspace verbs (mock-state mutations) ----
+  const uid = useRef(100);
+  const freshId = () => `w${uid.current++}`;
+
+  function attachTo(target: number) {
+    if (focus === 0 || target === -1 || target === env) return;
+    const ws = workspaces[focus - 1]!;
+    setEnvs((prev) =>
+      prev.map((e, i) => {
+        if (i === env)
+          return {
+            ...e,
+            workspaces: e.workspaces.filter((w) => w.id !== ws.id),
+            // detaching releases any interception it held here
+            services: e.services.map((s) => (s.interceptedBy === ws.name ? { ...s, interceptedBy: undefined } : s)),
+          };
+        if (i === target) return { ...e, workspaces: [...e.workspaces, ws] };
+        return e;
+      }),
+    );
+    // follow the workspace: open + activate the target env, keep it focused
+    setOpenEnvs((open) => (open.includes(target) ? open : [...open, target]));
+    setEnv(target);
+    setFocus(envs[target]!.workspaces.length + 1);
+  }
+
+  function askAttach() {
+    const ws = workspaces[focus - 1]!;
+    pushAskRef.current({
+      title: "Attach to environment",
+      subtitle: `${ws.name} → choose where to plug in`,
+      options: [
+        ...envs.map((e, i) => ({ id: String(i), label: envLabel(e) })).filter((o) => Number(o.id) !== env),
+        { id: "cancel", label: "Cancel" },
+      ],
+      escapeId: "cancel",
+    }).then((id) => {
+      if (id !== "cancel") attachTo(Number(id));
+    });
+  }
+
+  function interceptService(name: string) {
+    const ws = workspaces[focus - 1]!;
+    if (!environment.services.some((s) => s.name === name)) return;
+    setEnvs((prev) =>
+      prev.map((e, i) =>
+        i === env
+          ? { ...e, services: e.services.map((s) => (s.name === name ? { ...s, interceptedBy: ws.name } : s)) }
+          : e,
+      ),
+    );
+    append(activeKey, { kind: "info", text: `intercepting ${name}.${environment.name} → ${ws.name}` });
+  }
+
+  function askIntercept() {
+    pushAskRef.current({
+      title: "Intercept a service",
+      subtitle: `traffic will route to ${workspaces[focus - 1]!.name}`,
+      options: [
+        ...environment.services.map((s) => ({
+          id: s.name,
+          label: `${s.name}:${s.port}`,
+        })),
+        { id: "cancel", label: "Cancel" },
+      ],
+      escapeId: "cancel",
+    }).then((id) => {
+      if (id !== "cancel") interceptService(id);
+    });
+  }
+
+  function releaseInterception() {
+    const ws = workspaces[focus - 1]!;
+    setEnvs((prev) =>
+      prev.map((e, i) =>
+        i === env
+          ? { ...e, services: e.services.map((s) => (s.interceptedBy === ws.name ? { ...s, interceptedBy: undefined } : s)) }
+          : e,
+      ),
+    );
+    append(activeKey, { kind: "info", text: `released interceptions held by ${ws.name}` });
+  }
+
+  function newWorkspace(name: string) {
+    const ws = {
+      id: freshId(),
+      name,
+      owner: CURRENT_USER,
+      status: "running" as const,
+      ports: [],
+      repo: `kloudlite/${name}`,
+      branch: "main",
+    };
+    setEnvs((prev) => prev.map((e, i) => (i === env ? { ...e, workspaces: [...e.workspaces, ws] } : e)));
+    setFocus(environment.workspaces.length + 1);
+  }
+
+  function cloneWorkspace() {
+    const src = workspaces[focus - 1]!;
+    const ws = { ...src, id: freshId(), name: `${src.name}-copy`, owner: CURRENT_USER };
+    setEnvs((prev) => prev.map((e, i) => (i === env ? { ...e, workspaces: [...e.workspaces, ws] } : e)));
+    setFocus(environment.workspaces.length + 1);
+  }
+
+  function cloneEnvironment() {
+    // clones services and YOUR attached workspaces; the copy is yours
+    const src = environment;
+    const cloned = {
+      ...src,
+      id: `e${uid.current++}`,
+      name: `${src.name}-copy`,
+      owner: CURRENT_USER,
+      services: src.services.map((s) => ({ ...s })),
+      workspaces: src.workspaces
+        .filter((w) => w.owner === CURRENT_USER)
+        .map((w) => ({ ...w, id: freshId() })),
+    };
+    setEnvs((prev) => [...prev, cloned]);
+    setOpenEnvs((open) => [...open, envs.length]);
+    setEnv(envs.length);
+    setFocus(0);
+    setMode("agent");
+  }
+
+  function closeTab() {
+    setOpenEnvs((open) => {
+      if (open.length <= 1) return open;
+      const next = open.filter((i) => i !== env);
+      setEnv(next[0]!);
+      setFocus(0);
+      return next;
+    });
+  }
+
   function submit(text: string) {
     const trimmed = text.trim();
     if (!trimmed) return;
@@ -510,16 +707,6 @@ export function App({
     }
     if (trimmed === "/help")
       return append(activeKey, { kind: "agent", text: "Type / to see commands." });
-    if (trimmed === "/env-close") {
-      setOpenEnvs((open) => {
-        if (open.length <= 1) return open;
-        const next = open.filter((i) => i !== env);
-        setEnv(next[0]!);
-        setFocus(0);
-        return next;
-      });
-      return;
-    }
     if (trimmed.startsWith("/theme ")) {
       const name = trimmed.slice(7).trim();
       setTheme(name);
@@ -544,6 +731,54 @@ export function App({
       const [provider, type] = trimmed.slice(7).trim().split(/\s+/);
       if (provider)
         setLogin({ provider, type: type === "api_key" ? "api_key" : "oauth" });
+      return;
+    }
+    if (trimmed === "/attach" || trimmed.startsWith("/attach ")) {
+      if (focus === 0) {
+        append(activeKey, {
+          kind: "info",
+          text: "enter a workspace first — /attach re-points the current workspace",
+        });
+        return;
+      }
+      const typed = trimmed.slice(7).trim();
+      if (typed) attachTo(envs.findIndex((e) => envLabel(e) === typed || e.name === typed));
+      else askAttach();
+      return;
+    }
+    if (trimmed === "/intercept" || trimmed.startsWith("/intercept ")) {
+      if (focus === 0) {
+        append(activeKey, { kind: "info", text: "enter a workspace first — interception routes a service into it" });
+        return;
+      }
+      const typed = trimmed.slice(10).trim();
+      if (typed) interceptService(typed);
+      else askIntercept();
+      return;
+    }
+    if (trimmed === "/release") {
+      if (focus > 0) releaseInterception();
+      return;
+    }
+    if (trimmed.startsWith("/workspace")) {
+      const rest = trimmed.slice(10).trim();
+      if (rest.startsWith("new")) {
+        const name = rest.slice(3).trim();
+        if (name) newWorkspace(name);
+        else setInput("/workspace new ");
+        return;
+      }
+      if (rest === "clone") {
+        cloneWorkspace();
+        return;
+      }
+      setInput("/workspace ");
+      return;
+    }
+    if (trimmed === "/env clone") return cloneEnvironment();
+    if (trimmed === "/env close") return closeTab();
+    if (trimmed === "/env") {
+      setInput("/env ");
       return;
     }
     if (trimmed.startsWith("/settings ")) {
@@ -574,9 +809,12 @@ export function App({
   }
 
   const paletteItems: PaletteItem[] = [
-    ...MOCK_ENVIRONMENTS.map((e, i) => ({
-      label: e.name,
-      hint: i === env ? "active" : openEnvs.includes(i) ? "open" : "",
+    ...envs.map((e, i) => ({
+      label: envLabel(e),
+      hint:
+        e.owner === CURRENT_USER
+          ? i === env ? "active" : openEnvs.includes(i) ? "open" : ""
+          : `shared by ${e.owner}`,
       group: "Environments",
       run: () => {
         setOpenEnvs((open) => (open.includes(i) ? open : [...open, i]));
@@ -584,12 +822,15 @@ export function App({
         setFocus(0);
       },
     })),
-    ...workspaces.map((w, i) => ({
-      label: w.name,
-      hint: w.status === "cloning" ? (w.progress ?? w.status) : w.status,
-      group: `Workspaces · ${environment.name}`,
-      run: () => setFocus(i + 1),
-    })),
+    ...workspaces
+      .map((w, i) => ({ w, i }))
+      .filter(({ w }) => w.owner === CURRENT_USER)
+      .map(({ w, i }) => ({
+        label: w.name,
+        hint: w.status === "cloning" ? (w.progress ?? w.status) : w.status,
+        group: `Workspaces · ${environment.name}`,
+        run: () => setFocus(i + 1),
+      })),
     {
       label: "main context",
       hint: "orchestrator",
@@ -617,6 +858,27 @@ export function App({
         }),
       themes: themeNames,
       logins: loginOptions(),
+      attach:
+        focus > 0
+          ? envs
+              .map((e, i) => ({
+                name: envLabel(e),
+                hint:
+                  e.owner === CURRENT_USER
+                    ? openEnvs.includes(i)
+                      ? "environment · open"
+                      : "environment"
+                    : `shared by ${e.owner}`,
+              }))
+              .filter((_, i) => i !== env)
+          : [],
+      intercepts:
+        focus > 0
+          ? environment.services.map((s) => ({
+              name: s.name,
+              hint: s.interceptedBy ? `⇄ ${s.interceptedBy}` : `:${s.port}`,
+            }))
+          : [],
       settings: (["sidebar", "thinking"] as const).flatMap((key) =>
         (["show", "hide"] as const).map((value) => ({
           key,
@@ -625,7 +887,7 @@ export function App({
         })),
       ),
     }),
-    [auth, prefs],
+    [auth, prefs, envs, env, focus, openEnvs, environment],
   );
   const menu = useMemo(
     () => (input.startsWith("/") ? menuItems(input, menuCtx) : []),
@@ -638,7 +900,7 @@ export function App({
     // and pushes the strip/hint bar (and tabs) off screen
     <box flexDirection="column" width={columns} height={rows} backgroundColor={theme.bg}>
       <Tabs
-        names={openEnvs.map((i) => MOCK_ENVIRONMENTS[i]!.name)}
+        names={openEnvs.map((i) => envLabel(envs[i]!))}
         active={openEnvs.indexOf(env)}
         width={columns}
       />
@@ -711,6 +973,7 @@ export function App({
           workspaces={workspaces}
           services={environment.services}
           envName={environment.name}
+          envOwner={environment.owner === CURRENT_USER ? undefined : environment.owner}
           focus={focus}
           width={SIDEBAR_WIDTH}
           tokens={session.tokens}

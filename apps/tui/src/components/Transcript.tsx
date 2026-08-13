@@ -251,7 +251,9 @@ export function Transcript({
           {(
             [
               ["/", "commands"],
+              ["^a", "actions for this workspace or environment"],
               ["^p", "jump to an environment or workspace"],
+              ["^1-9", "jump to workspace · ^0 main"],
               ["^j ^k", "cycle workspaces"],
               ["^h ^l", "switch environment"],
               ["^b", "back to the main context"],
