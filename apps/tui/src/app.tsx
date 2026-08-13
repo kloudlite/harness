@@ -730,7 +730,29 @@ export function App({
       });
     }
     if (trimmed === "/help")
-      return append(activeKey, { kind: "agent", text: "Type / to see commands." });
+      return append(activeKey, {
+        kind: "agent",
+        text: [
+          "**Navigation**",
+          "  ^p          jump to any environment or workspace (type to filter)",
+          "  ^1-9 · ^0   workspace N · main context",
+          "  ^j ^k       next / previous workspace   (also tab / shift+tab)",
+          "  ^h ^l       next / previous environment",
+          "  ^b          back to the main context",
+          "",
+          "**Actions**",
+          "  ^a          actions for the current workspace or environment",
+          "  ^e          attach this workspace to an environment",
+          "  /           commands — model, theme, settings, login…",
+          "  !           shell mode inside a workspace (backspace exits)",
+          "",
+          "**Input**",
+          "  enter       send · shift+enter or \\+enter for a new line",
+          "  up/down     prompt history",
+          "  esc         interrupt the agent · clear the input",
+          "  pgup pgdn   scroll the transcript (mouse wheel works too)",
+        ].join("\n"),
+      });
     if (trimmed.startsWith("/theme ")) {
       const name = trimmed.slice(7).trim();
       setTheme(name);

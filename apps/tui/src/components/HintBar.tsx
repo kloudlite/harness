@@ -38,6 +38,14 @@ export function HintBar({
             ! <span fg={theme.muted}>shell</span>
           </text>
         )}
+        {inWorkspace && (
+          <text fg={theme.fg}>
+            ^e <span fg={theme.muted}>attach</span>
+          </text>
+        )}
+        <text fg={theme.fg}>
+          ^a <span fg={theme.muted}>actions</span>
+        </text>
         <text fg={theme.fg}>
           ^p <span fg={theme.muted}>jump</span>
         </text>

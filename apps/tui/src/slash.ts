@@ -6,7 +6,7 @@ export type SlashCommand = {
 };
 
 export const commands: SlashCommand[] = [
-  { name: "/help", description: "Show available commands" },
+  { name: "/help", description: "Keyboard shortcuts and commands" },
   { name: "/tools", description: "List registered tools" },
   { name: "/clear", description: "Clear the transcript" },
   { name: "/model", description: "Set this session's model", hasOptions: true },
