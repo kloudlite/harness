@@ -103,6 +103,15 @@ const server = new Server({ hostKeys: [hostKey()] }, (client) => {
         } catch {}
       });
 
+      // opentui's native setup downgrades modifyOtherKeys to mode 1 (which
+      // keeps ctrl+h/ctrl+j as legacy bytes) — re-assert mode 2 once the
+      // initial frames have gone out, same as cli.tsx does for the local TTY
+      setTimeout(() => {
+        try {
+          channel.write("\x1b[>4;2m");
+        } catch {}
+      }, 200);
+
       createRoot(renderer).render(<App registry={new Registry()} onExit={close} />);
     });
   });
