@@ -30,7 +30,7 @@ export function Tabs({
   rule.push({ text: "─".repeat(Math.max(0, width - used)), accent: false });
 
   return (
-    <box flexDirection="column" width={width}>
+    <box flexDirection="column" width={width} paddingTop={1}>
       <box flexDirection="row" paddingLeft={PAD} gap={GAP}>
         {names.map((name, i) => {
           const isActive = i === active;
