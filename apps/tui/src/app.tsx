@@ -129,6 +129,7 @@ export function App({
         pushAskRef.current({
           title: ws.name,
           subtitle: `attached to ${envLabel(environment)}`,
+          layout: "list",
           options: [
             { id: "attach", label: "Attach to environment…" },
             { id: "intercept", label: "Intercept a service…" },
@@ -147,6 +148,7 @@ export function App({
         pushAskRef.current({
           title: envLabel(environment),
           subtitle: environment.owner === CURRENT_USER ? "your environment" : `shared by ${environment.owner}`,
+          layout: "list",
           options: [
             { id: "new", label: "New workspace…" },
             { id: "clone-env", label: "Clone environment" },
@@ -571,8 +573,15 @@ export function App({
     pushAskRef.current({
       title: "Attach to environment",
       subtitle: `${ws.name} → choose where to plug in`,
+      layout: "list",
       options: [
-        ...envs.map((e, i) => ({ id: String(i), label: envLabel(e) })).filter((o) => Number(o.id) !== env),
+        ...envs
+          .map((e, i) => ({
+            id: String(i),
+            label: envLabel(e),
+            hint: e.owner === CURRENT_USER ? (openEnvs.includes(i) ? "open" : "") : `shared by ${e.owner}`,
+          }))
+          .filter((o) => Number(o.id) !== env),
         { id: "cancel", label: "Cancel" },
       ],
       escapeId: "cancel",
@@ -598,10 +607,12 @@ export function App({
     pushAskRef.current({
       title: "Intercept a service",
       subtitle: `traffic will route to ${workspaces[focus - 1]!.name}`,
+      layout: "list",
       options: [
         ...environment.services.map((s) => ({
           id: s.name,
           label: `${s.name}:${s.port}`,
+          hint: s.interceptedBy ? `⇄ ${s.interceptedBy}` : "",
         })),
         { id: "cancel", label: "Cancel" },
       ],

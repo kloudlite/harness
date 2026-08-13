@@ -14,11 +14,16 @@ export type Ask = {
   body?: string;
   /** diff hunk (edit/write permission prompts) */
   diff?: FileDiff;
-  options: { id: string; label: string }[];
+  options: { id: string; label: string; hint?: string }[];
+  /** "buttons": horizontal strip (few options); "list": vertical, scrolls (many) */
+  layout?: "buttons" | "list";
   /** option chosen when the user presses esc (defaults to the last one) */
   escapeId?: string;
   resolve: (id: string) => void;
 };
+
+/** Rows shown at once in list layout; the window follows the selection. */
+const LIST_MAX = 8;
 
 /**
  * opencode's permission panel, ported 1:1: warning ┃ border on the panel bg,
@@ -30,10 +35,13 @@ export function AskPanel({ ask }: { ask: Ask }) {
   const [sel, setSel] = useState(0);
   const n = ask.options.length;
 
+  const list = ask.layout === "list";
+
   useKeyboard((key) => {
-    if (key.name === "left" || (key.name === "tab" && key.shift))
-      return setSel((i) => (i - 1 + n) % n);
-    if (key.name === "right" || key.name === "tab") return setSel((i) => (i + 1) % n);
+    const prev = list ? key.name === "up" : key.name === "left" || (key.name === "tab" && key.shift);
+    const next = list ? key.name === "down" : key.name === "right" || key.name === "tab";
+    if (prev) return setSel((i) => (i - 1 + n) % n);
+    if (next) return setSel((i) => (i + 1) % n);
     if (key.name === "return") return ask.resolve(ask.options[sel]!.id);
     if (key.name === "escape")
       return ask.resolve(ask.escapeId ?? ask.options[n - 1]!.id);
@@ -78,6 +86,36 @@ export function AskPanel({ ask }: { ask: Ask }) {
             <text fg={theme.fg}>{ask.body}</text>
           </box>
         )}
+        {list && (
+          <box flexDirection="column" paddingLeft={1}>
+            {(() => {
+              // scroll window that follows the selection
+              const start = Math.min(Math.max(0, sel - LIST_MAX + 1), Math.max(0, n - LIST_MAX));
+              return ask.options.slice(start, start + LIST_MAX).map((opt, offset) => {
+                const i = start + offset;
+                const active = i === sel;
+                return (
+                  <box
+                    key={opt.id}
+                    flexDirection="row"
+                    justifyContent="space-between"
+                    paddingLeft={1}
+                    paddingRight={1}
+                    backgroundColor={active ? theme.selection : undefined}
+                  >
+                    <text fg={active ? theme.bg : theme.fg}>{opt.label}</text>
+                    <text fg={active ? theme.bg : theme.muted}>{opt.hint ?? ""}</text>
+                  </box>
+                );
+              });
+            })()}
+            {n > LIST_MAX && (
+              <box paddingLeft={1}>
+                <text fg={theme.muted}>{sel + 1}/{n}</text>
+              </box>
+            )}
+          </box>
+        )}
       </box>
 
       {/* button strip: raised bg, buttons left, hints right */}
@@ -94,26 +132,30 @@ export function AskPanel({ ask }: { ask: Ask }) {
         alignItems="center"
       >
         <box flexDirection="row" gap={1} flexShrink={0}>
-          {ask.options.map((opt, i) => {
-            const active = i === sel;
-            return (
-              <box
-                key={opt.id}
-                paddingLeft={1}
-                paddingRight={1}
-                backgroundColor={active ? theme.warning : undefined}
-              >
-                <text fg={active ? theme.bg : theme.muted}>{opt.label}</text>
-              </box>
-            );
-          })}
+          {!list &&
+            ask.options.map((opt, i) => {
+              const active = i === sel;
+              return (
+                <box
+                  key={opt.id}
+                  paddingLeft={1}
+                  paddingRight={1}
+                  backgroundColor={active ? theme.warning : undefined}
+                >
+                  <text fg={active ? theme.bg : theme.muted}>{opt.label}</text>
+                </box>
+              );
+            })}
         </box>
         <box flexDirection="row" gap={2} flexShrink={0}>
           <text fg={theme.fg}>
-            ⇆ <span fg={theme.muted}>select</span>
+            {list ? "↑↓" : "⇆"} <span fg={theme.muted}>select</span>
           </text>
           <text fg={theme.fg}>
             enter <span fg={theme.muted}>confirm</span>
+          </text>
+          <text fg={theme.fg}>
+            esc <span fg={theme.muted}>cancel</span>
           </text>
         </box>
       </box>
