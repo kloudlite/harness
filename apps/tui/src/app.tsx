@@ -302,6 +302,9 @@ export function App({
           .join("");
         if (text) upsert(key, mid, () => ({ kind: "agent", id: mid, text }));
         if (event.type !== "message_end") break;
+        const used = msg.usage?.totalTokens ?? 0;
+        if (used)
+          setSessions((map) => patchSession(map, key, (s) => ({ tokens: s.tokens + used })));
         const m = msg;
         if (m.role === "assistant" && (m.stopReason === "error" || m.stopReason === "aborted")) {
           append(key, {
@@ -347,14 +350,6 @@ export function App({
           output: text || (prev as any)?.output,
           error: event.isError ? text.split("\n")[0] : undefined,
         }));
-        break;
-      }
-      case "turn_end": {
-        const tokens = (event.message as any)?.usage?.totalTokens ?? 0;
-        if (tokens)
-          setSessions((map) =>
-            patchSession(map, key, (s) => ({ tokens: s.tokens + tokens })),
-          );
         break;
       }
       case "queue_update":
