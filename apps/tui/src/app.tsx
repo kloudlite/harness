@@ -396,20 +396,18 @@ export function App({
       const granted = alwaysAllow.current.get(key) ?? new Set<string>();
       if (GATED.has(name) && !granted.has(name)) {
         const diff = toolDiff(name, ctx.args) ?? undefined;
-        const file = ctx.args?.path ?? "this file";
         const choice = await pushAskRef.current({
-          title: name === "bash" ? "Run command" : name === "write" ? "Write file" : "Edit file",
-          subtitle: name === "bash" ? undefined : String(file),
+          title: "Permission required",
+          subtitle:
+            name === "bash"
+              ? "Shell command"
+              : `${name === "write" ? "Write" : "Edit"} ${ctx.args?.path ?? "file"}`,
           body: name === "bash" ? `$ ${ctx.args?.command ?? ""}` : diff ? undefined : toolSummary(name, ctx.args),
           diff,
-          question:
-            name === "bash"
-              ? "Do you want to run this command?"
-              : `Do you want to make this ${name === "write" ? "write" : "edit"} to ${String(file).split("/").pop()}?`,
           options: [
-            { id: "once", label: "Yes" },
-            { id: "always", label: `Yes, allow all ${name} calls this session` },
-            { id: "reject", label: "No" },
+            { id: "once", label: "Allow once" },
+            { id: "always", label: "Allow always" },
+            { id: "reject", label: "Reject" },
           ],
           escapeId: "reject",
         });

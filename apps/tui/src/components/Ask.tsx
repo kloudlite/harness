@@ -6,16 +6,14 @@ import { DiffView } from "./Diff.tsx";
 import type { FileDiff } from "../diff.ts";
 
 export type Ask = {
-  /** e.g. "Edit file" or the question text */
+  /** e.g. "Permission required" or the question text */
   title: string;
-  /** dim secondary line, e.g. the file path or "Shell command" */
+  /** dim secondary line, e.g. "Shell command" or the file path */
   subtitle?: string;
   /** body block, e.g. "$ git status" */
   body?: string;
   /** diff hunk (edit/write permission prompts) */
   diff?: FileDiff;
-  /** confirmation line above the options, e.g. "Do you want to make this edit?" */
-  question?: string;
   options: { id: string; label: string }[];
   /** option chosen when the user presses esc (defaults to the last one) */
   escapeId?: string;
@@ -23,22 +21,19 @@ export type Ask = {
 };
 
 /**
- * Interactive prompt, Claude Code style: header + optional diff/body, then a
- * numbered vertical option list. ↑/↓ or digits select, enter confirms, esc
- * picks `escapeId`.
+ * opencode's permission panel, ported 1:1: warning ┃ border on the panel bg,
+ * "△ title" + "# subtitle" header, body, and a raised button strip —
+ * highlighted button on the warning color, "⇆ select · enter confirm" hints
+ * right. ⇆/arrows select, enter confirms, esc picks `escapeId`.
  */
 export function AskPanel({ ask }: { ask: Ask }) {
   const [sel, setSel] = useState(0);
   const n = ask.options.length;
 
   useKeyboard((key) => {
-    if (key.name === "up" || (key.name === "tab" && key.shift))
+    if (key.name === "left" || (key.name === "tab" && key.shift))
       return setSel((i) => (i - 1 + n) % n);
-    if (key.name === "down" || key.name === "tab") return setSel((i) => (i + 1) % n);
-    if (/^[1-9]$/.test(key.name)) {
-      const idx = Number(key.name) - 1;
-      if (idx < n) return ask.resolve(ask.options[idx]!.id);
-    }
+    if (key.name === "right" || key.name === "tab") return setSel((i) => (i + 1) % n);
     if (key.name === "return") return ask.resolve(ask.options[sel]!.id);
     if (key.name === "escape")
       return ask.resolve(ask.escapeId ?? ask.options[n - 1]!.id);
@@ -53,36 +48,73 @@ export function AskPanel({ ask }: { ask: Ask }) {
       borderColor={theme.warning}
       backgroundColor={theme.surface}
     >
-      <box flexDirection="column" paddingLeft={2} paddingRight={2} paddingTop={1} paddingBottom={1}>
-        <text fg={theme.fg}><b>{ask.title}</b></text>
-        {ask.subtitle && <text fg={theme.muted}>{ask.subtitle}</text>}
-
+      {/* opencode: gap 1, paddingLeft 1, paddingRight 3, paddingY 1 */}
+      <box
+        flexDirection="column"
+        gap={1}
+        paddingLeft={1}
+        paddingRight={3}
+        paddingTop={1}
+        paddingBottom={1}
+      >
+        <box flexDirection="column">
+          <box flexDirection="row" gap={1} paddingLeft={1}>
+            <text fg={theme.warning}>△</text>
+            <text fg={theme.fg}>{ask.title}</text>
+          </box>
+          {ask.subtitle && (
+            <box flexDirection="row" gap={1} paddingLeft={2}>
+              <text fg={theme.muted}># {ask.subtitle}</text>
+            </box>
+          )}
+        </box>
         {ask.diff && (
-          <box flexDirection="column" marginTop={1}>
+          <box flexDirection="column" paddingLeft={1}>
             <DiffView diff={ask.diff} />
           </box>
         )}
         {ask.body && (
-          <box flexDirection="column" marginTop={1}>
+          <box paddingLeft={1}>
             <text fg={theme.fg}>{ask.body}</text>
           </box>
         )}
+      </box>
 
-        {ask.question && (
-          <box marginTop={1}>
-            <text fg={theme.fg}>{ask.question}</text>
-          </box>
-        )}
-        <box flexDirection="column" marginTop={ask.question ? 0 : 1}>
+      {/* button strip: raised bg, buttons left, hints right */}
+      <box
+        flexDirection="row"
+        flexShrink={0}
+        gap={1}
+        paddingTop={1}
+        paddingBottom={1}
+        paddingLeft={2}
+        paddingRight={3}
+        backgroundColor={theme.surfaceRaised}
+        justifyContent="space-between"
+        alignItems="center"
+      >
+        <box flexDirection="row" gap={1} flexShrink={0}>
           {ask.options.map((opt, i) => {
             const active = i === sel;
             return (
-              <text key={opt.id} fg={active ? theme.fg : theme.muted}>
-                {active ? "❯ " : "  "}
-                {i + 1}. {opt.label}
-              </text>
+              <box
+                key={opt.id}
+                paddingLeft={1}
+                paddingRight={1}
+                backgroundColor={active ? theme.warning : undefined}
+              >
+                <text fg={active ? theme.bg : theme.muted}>{opt.label}</text>
+              </box>
             );
           })}
+        </box>
+        <box flexDirection="row" gap={2} flexShrink={0}>
+          <text fg={theme.fg}>
+            ⇆ <span fg={theme.muted}>select</span>
+          </text>
+          <text fg={theme.fg}>
+            enter <span fg={theme.muted}>confirm</span>
+          </text>
         </box>
       </box>
     </box>
