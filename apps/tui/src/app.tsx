@@ -5,7 +5,6 @@ import { Transcript, type Entry } from "./components/Transcript.tsx";
 import { Prompt } from "./components/Prompt.tsx";
 import { Sidebar } from "./components/Sidebar.tsx";
 import { HintBar } from "./components/HintBar.tsx";
-import { Palette, type PaletteItem } from "./components/Palette.tsx";
 import { Tabs } from "./components/Tabs.tsx";
 import { matchCommands, menuItems, placeholders } from "./slash.ts";
 import { CURRENT_USER, envLabel, MOCK_ENVIRONMENTS } from "./workspaces.ts";
@@ -117,10 +116,19 @@ export function App({
 
   useKeyboard((key) => {
     if (key.ctrl && key.name === "c") return exit();
-    if (palette || login || asks.length > 0) return; // modal owns the keyboard
-    const menuOpen = matchCommands(input).length > 0;
-    // Ctrl+P: jump palette
-    if (key.ctrl && key.name === "p") return setPalette(true);
+    if (login || asks.length > 0) return; // modal owns the keyboard
+    if (palette && key.name === "escape") {
+      setPalette(false);
+      setInput("");
+      return;
+    }
+    const menuOpen = palette || matchCommands(input).length > 0;
+    // Ctrl+P: jump mode on the input (searchable, menu above the card)
+    if (key.ctrl && key.name === "p") {
+      setInput("");
+      setHistIdx(null);
+      return setPalette((p) => !p);
+    }
     // Ctrl+A: contextual actions for the current selection
     if (key.ctrl && key.name === "a") {
       if (focus > 0) {
@@ -535,7 +543,7 @@ export function App({
   function changeInput(v: string) {
     setHistIdx(null); // typing exits history recall
     // shell runs inside a workspace; there is no shell at the main context
-    if (mode === "agent" && v === "!" && input === "" && focus > 0) {
+    if (!palette && mode === "agent" && v === "!" && input === "" && focus > 0) {
       setMode("shell");
       return;
     }
@@ -686,6 +694,11 @@ export function App({
   }
 
   function submit(text: string) {
+    if (palette) {
+      setPalette(false);
+      setInput("");
+      return;
+    }
     const trimmed = text.trim();
     if (!trimmed) return;
     setInput("");
@@ -815,7 +828,8 @@ export function App({
       .catch((err) => append(key, { kind: "error", text: cleanError(String(err)) }));
   }
 
-  const paletteItems: PaletteItem[] = [
+  type JumpItem = { label: string; hint: string; group: string; run: () => void };
+  const paletteItems: JumpItem[] = [
     ...envs.map((e, i) => ({
       label: envLabel(e),
       hint:
@@ -896,11 +910,24 @@ export function App({
     }),
     [auth, prefs, envs, env, focus, openEnvs, environment],
   );
-  const menu = useMemo(
-    () => (input.startsWith("/") ? menuItems(input, menuCtx) : []),
-    [input, menuCtx],
+  const jumpMatches = useMemo(
+    () =>
+      palette
+        ? paletteItems.filter((it) => it.label.toLowerCase().includes(input.toLowerCase()))
+        : [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [palette, input, envs, env, focus, openEnvs],
   );
-  const modalOpen = palette || login !== null || asks.length > 0;
+  const menu = useMemo(() => {
+    if (palette)
+      return jumpMatches.map((it, i) => ({
+        insert: String(i),
+        label: it.label,
+        hint: it.hint ? `${it.group} · ${it.hint}` : it.group,
+      }));
+    return input.startsWith("/") ? menuItems(input, menuCtx) : [];
+  }, [palette, jumpMatches, input, menuCtx]);
+  const modalOpen = login !== null || asks.length > 0; // jump mode keeps the input live
 
   return (
     // pinned to the terminal size: without it the tree grows with content
@@ -933,8 +960,6 @@ export function App({
                 }}
               />
             </box>
-          ) : palette ? (
-            <Palette items={paletteItems} onClose={() => setPalette(false)} />
           ) : (
             <Transcript
               entries={
@@ -956,7 +981,17 @@ export function App({
               value={input}
               onChange={changeInput}
               onSubmit={submit}
-              placeholder={session.entries.length === 0 ? placeholders[hint]! : ""}
+              jump={palette}
+              onPick={
+                palette
+                  ? (insert) => {
+                      jumpMatches[Number(insert)]?.run();
+                      setPalette(false);
+                      setInput("");
+                    }
+                  : undefined
+              }
+              placeholder={palette ? "Jump to…" : session.entries.length === 0 ? placeholders[hint]! : ""}
               mode={mode}
               model={modelLabel(session.model)}
               provider={session.model.provider}

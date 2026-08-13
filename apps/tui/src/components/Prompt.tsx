@@ -20,6 +20,8 @@ export function Prompt({
   workspace,
   inputActive = true,
   menu,
+  jump = false,
+  onPick,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -31,6 +33,9 @@ export function Prompt({
   workspace?: string;
   inputActive?: boolean;
   menu: MenuItem[];
+  /** Jump mode (^p): Enter runs the highlighted item via onPick. */
+  jump?: boolean;
+  onPick?: (insert: string) => void;
 }) {
   const matches = menu;
   const [sel, setSel] = useState(0);
@@ -50,6 +55,7 @@ export function Prompt({
 
   function handleSubmit(text: string) {
     // Menu open → run the highlighted entry, not the partial text.
+    if (matches.length > 0 && onPick) return onPick(matches[sel]!.insert);
     onSubmit(matches.length > 0 ? matches[sel]!.insert : text);
   }
 
@@ -112,10 +118,16 @@ export function Prompt({
           <text> </text>
           <text>
             <span fg={bar}>
-              <b>{mode === "shell" ? "Shell" : workspace ? "Agent" : "Orchestrator"}</b>
+              <b>{jump ? "Jump" : mode === "shell" ? "Shell" : workspace ? "Agent" : "Orchestrator"}</b>
             </span>
-            <span fg={theme.muted}> · {model} </span>
-            <span fg={theme.placeholder}>{provider}</span>
+            {jump ? (
+              <span fg={theme.muted}> · type to filter, esc to close</span>
+            ) : (
+              <span>
+                <span fg={theme.muted}> · {model} </span>
+                <span fg={theme.placeholder}>{provider}</span>
+              </span>
+            )}
           </text>
         </box>
       </box>
