@@ -769,7 +769,8 @@ export function App({
         return;
       }
       if (rest === "clone") {
-        cloneWorkspace();
+        if (focus > 0) cloneWorkspace();
+        else append(activeKey, { kind: "info", text: "enter a workspace first — /workspace clone copies the current one" });
         return;
       }
       setInput("/workspace ");

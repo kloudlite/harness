@@ -58,7 +58,7 @@ export function Sidebar({
           shared by <span fg={theme.accent}>{envOwner}</span>
         </text>
       )}
-      <Section title="Workspaces">
+      <Section title="Workspaces · attached">
         {workspaces.map((w, i) => {
           const active = focus === i + 1;
           return (
@@ -87,7 +87,13 @@ export function Sidebar({
               {svc.name}.{envName}:{svc.port}
             </span>
             {svc.interceptedBy ? (
-              <span fg={theme.warning}> → {svc.interceptedBy}</span>
+              <span fg={theme.warning}>
+                {" "}→ {svc.interceptedBy}
+                {(() => {
+                  const owner = workspaces.find((w) => w.name === svc.interceptedBy)?.owner;
+                  return owner && owner !== CURRENT_USER ? ` · ${owner}` : "";
+                })()}
+              </span>
             ) : (
               ""
             )}
