@@ -58,7 +58,7 @@ export function Sidebar({
           shared by <span fg={theme.accent}>{envOwner}</span>
         </text>
       )}
-      <Section title="Workspaces · attached">
+      <Section title="Owned workspaces">
         {workspaces.filter((w) => w.owner === CURRENT_USER).length === 0 && (
           <text fg={theme.muted} attributes={TextAttributes.DIM}>none — ^a to create one</text>
         )}
@@ -84,7 +84,7 @@ export function Sidebar({
       </Section>
 
       {workspaces.some((w) => w.owner !== CURRENT_USER) && (
-        <Section title="Attached by others">
+        <Section title="Other workspaces">
           {workspaces.map((w) =>
             w.owner === CURRENT_USER ? null : (
               <text key={w.id}>
