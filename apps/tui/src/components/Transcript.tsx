@@ -3,6 +3,8 @@ import { useKeyboard } from "@opentui/react";
 import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core";
 import { theme } from "../theme.ts";
 import { SplitBorder } from "../ui/border.ts";
+import { DiffView } from "./Diff.tsx";
+import type { FileDiff } from "../diff.ts";
 
 export type Entry =
   | { kind: "user"; text: string }
@@ -17,6 +19,8 @@ export type Entry =
       /** Streaming / final output (rendered for bash blocks). */
       output?: string;
       error?: string;
+      /** Unified diff hunk (edit/write tools). */
+      diff?: FileDiff;
     }
   | { kind: "info"; text: string }
   | { kind: "error"; text: string };
@@ -125,6 +129,37 @@ function Row({ entry }: { entry: Entry }) {
             </text>
             {out !== "" && <text fg={theme.muted}>{out}</text>}
             {entry.error && <text fg={theme.error}>{entry.error}</text>}
+          </box>
+        );
+      }
+
+      if (entry.diff) {
+        // Claude Code's Update block: ● Update(path), stats line, diff hunk
+        const verb = entry.name === "write" ? "Write" : "Update";
+        const stats = [
+          entry.diff.added && `Added ${entry.diff.added} line${entry.diff.added === 1 ? "" : "s"}`,
+          entry.diff.removed && `removed ${entry.diff.removed} line${entry.diff.removed === 1 ? "" : "s"}`,
+        ]
+          .filter(Boolean)
+          .join(", ");
+        return (
+          <box flexDirection="column" paddingLeft={1}>
+            <text>
+              <span fg={failed ? theme.error : theme.success}>●</span>
+              <span fg={theme.fg}> {verb}</span>
+              <span fg={theme.muted}>({entry.diff.path})</span>
+            </text>
+            <box paddingLeft={2}>
+              <text fg={theme.muted}>⎿ {stats}</text>
+            </box>
+            <box paddingLeft={2} flexDirection="column">
+              <DiffView diff={entry.diff} />
+            </box>
+            {entry.error && (
+              <box paddingLeft={2}>
+                <text fg={theme.error}>{entry.error}</text>
+              </box>
+            )}
           </box>
         );
       }

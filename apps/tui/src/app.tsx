@@ -23,6 +23,7 @@ import {
 } from "@kloudlite-tui/agent";
 import { Login } from "./components/Login.tsx";
 import { AskPanel, type Ask } from "./components/Ask.tsx";
+import { toolDiff } from "./diff.ts";
 import {
   getSession,
   patchSession,
@@ -254,6 +255,7 @@ export function App({
           name: event.toolName,
           summary: toolSummary(event.toolName, event.args),
           status: "running",
+          diff: toolDiff(event.toolName, event.args) ?? undefined,
         }));
         break;
       case "tool_execution_update": {
@@ -393,17 +395,21 @@ export function App({
       const name = ctx.toolCall.name;
       const granted = alwaysAllow.current.get(key) ?? new Set<string>();
       if (GATED.has(name) && !granted.has(name)) {
+        const diff = toolDiff(name, ctx.args) ?? undefined;
+        const file = ctx.args?.path ?? "this file";
         const choice = await pushAskRef.current({
-          title: "Permission required",
-          subtitle: name === "bash" ? "Shell command" : `${name} file`,
-          body:
+          title: name === "bash" ? "Run command" : name === "write" ? "Write file" : "Edit file",
+          subtitle: name === "bash" ? undefined : String(file),
+          body: name === "bash" ? `$ ${ctx.args?.command ?? ""}` : diff ? undefined : toolSummary(name, ctx.args),
+          diff,
+          question:
             name === "bash"
-              ? `$ ${ctx.args?.command ?? ""}`
-              : toolSummary(name, ctx.args),
+              ? "Do you want to run this command?"
+              : `Do you want to make this ${name === "write" ? "write" : "edit"} to ${String(file).split("/").pop()}?`,
           options: [
-            { id: "once", label: "Allow once" },
-            { id: "always", label: "Allow always" },
-            { id: "reject", label: "Reject" },
+            { id: "once", label: "Yes" },
+            { id: "always", label: `Yes, allow all ${name} calls this session` },
+            { id: "reject", label: "No" },
           ],
           escapeId: "reject",
         });

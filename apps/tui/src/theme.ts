@@ -14,6 +14,10 @@ type Palette = {
   selection: string;
   surface: string;
   surfaceRaised: string;
+  diffAdded: string;
+  diffRemoved: string;
+  diffAddedBg: string;
+  diffRemovedBg: string;
 };
 
 export const themes: Record<string, Palette> = {
@@ -33,6 +37,10 @@ export const themes: Record<string, Palette> = {
     selection: "#82aaff",
     surface: "#1e2030",
     surfaceRaised: "#222436",
+      diffAdded: "#c3e88d",
+    diffRemoved: "#ff757f",
+    diffAddedBg: "#20303b",
+    diffRemovedBg: "#37222c",
   },
   // default — slate, derived from the reference screenshots with opencode's generator math
   // surfaces follow opencode's step deltas (tokyonight): panel ≈ bg+5, element ≈ bg+10
@@ -50,6 +58,10 @@ export const themes: Record<string, Palette> = {
     selection: "#57b2e8",
     surface: "#2a303e",
     surfaceRaised: "#2e3444",
+      diffAdded: "#56d364",
+    diffRemoved: "#ff7b72",
+    diffAddedBg: "#24332b",
+    diffRemovedBg: "#3a262b",
   },
   // opencode's own default dark palette (their theme/assets/opencode.json defs)
   opencode: {
@@ -66,6 +78,10 @@ export const themes: Record<string, Palette> = {
     selection: "#fab283",
     surface: "#141414",
     surfaceRaised: "#1e1e1e",
+      diffAdded: "#7fd88f",
+    diffRemoved: "#e06c75",
+    diffAddedBg: "#1e2a1e",
+    diffRemovedBg: "#2e1d1f",
   },
   "kloudlite-light": {
     border: "#d1d5db",
@@ -81,6 +97,10 @@ export const themes: Record<string, Palette> = {
     selection: "#2563eb",
     surface: "#fafafa",
     surfaceRaised: "#f5f5f5",
+      diffAdded: "#166534",
+    diffRemoved: "#dc2626",
+    diffAddedBg: "#d5e5d5",
+    diffRemovedBg: "#f7d8db",
   },
 };
 
