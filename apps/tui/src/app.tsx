@@ -199,6 +199,11 @@ export function App({
     };
     if (key.ctrl && key.name === "h") return tabMove(-1);
     if (key.ctrl && key.name === "l") return tabMove(1);
+    // Ctrl+E: re-attach the current workspace to the next environment
+    if (key.ctrl && key.name === "e") {
+      if (focus > 0) attachTo((env + 1) % envs.length);
+      return;
+    }
     // Ctrl+1..9: jump straight to workspace N; Ctrl+0: main context
     if (key.ctrl && /^[0-9]$/.test(key.name)) {
       const d = Number(key.name);
