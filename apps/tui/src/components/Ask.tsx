@@ -165,7 +165,7 @@ export function AskPanel({ ask }: { ask: Ask }) {
         <box flexDirection="row" gap={1} flexShrink={0}>
           {!list &&
             ask.options.map((opt, i) => {
-              const active = i === sel;
+              const active = i === cur;
               return (
                 <box
                   key={opt.id}

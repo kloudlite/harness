@@ -85,11 +85,11 @@ test("tab cycles focus, shift-tab cycles back", async () => {
   t.done();
 });
 
-test("ctrl+j / ctrl+b cycle focus without polluting the input", async () => {
+test("NORMAL j enters a workspace, 0 returns to main", async () => {
   const t = await mount();
-  t.mockInput.pressKey("j", { ctrl: true });
+  t.mockInput.pressKey("j");
   expect(await t.frame()).toContain("main › api-gateway");
-  t.mockInput.pressKey("b", { ctrl: true }); // steps out to main context
+  t.mockInput.pressKey("0"); // back to main context
   const f = await t.frame();
   expect(f).not.toContain("main ›");
   expect(f).not.toContain("Ask anything, or / for commandsk");
@@ -149,7 +149,7 @@ test("shift+enter inserts a newline instead of submitting", async () => {
 
 test("ctrl+p palette jumps to an environment", async () => {
   const t = await mount();
-  t.mockInput.pressKey("p", { ctrl: true });
+  t.mockInput.pressKey("p");
   expect(await t.frame()).toContain("Jump to");
   await t.mockInput.typeText("stag");
   await t.frame();
@@ -175,7 +175,11 @@ test("input history is per session and recalled with arrows", async () => {
   await t.frame();
 
   // workspace session has its own (empty) history — up recalls nothing
-  t.mockInput.pressKey("j", { ctrl: true });
+  t.mockInput.pressKey("ESCAPE"); // INSERT → NORMAL
+  await t.frame();
+  t.mockInput.pressKey("j");
+  await t.frame();
+  t.mockInput.pressKey("i"); // history recall needs INSERT
   await t.frame();
   t.mockInput.pressKey("ARROW_UP");
   const f = await t.frame();
@@ -188,17 +192,17 @@ test("input history is per session and recalled with arrows", async () => {
 test("ctrl+h / ctrl+l navigate environment tabs", async () => {
   const t = await mount();
   // open staging via palette (becomes active tab)
-  t.mockInput.pressKey("p", { ctrl: true });
+  t.mockInput.pressKey("p");
   await t.frame();
   await t.mockInput.typeText("staging");
   await t.frame();
   t.mockInput.pressKey("RETURN");
   expect(await t.frame()).not.toContain("infra-iac"); // staging has no infra-iac
 
-  t.mockInput.pressKey("h", { ctrl: true }); // ← production
+  t.mockInput.pressKey("h"); // ← production
   expect(await t.frame()).toContain("infra-iac");
 
-  t.mockInput.pressKey("l", { ctrl: true }); // → staging again
+  t.mockInput.pressKey("l"); // → staging again
   expect(await t.frame()).not.toContain("infra-iac");
   t.done();
 });

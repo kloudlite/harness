@@ -7,7 +7,7 @@ import { Sidebar } from "./components/Sidebar.tsx";
 import { HintBar } from "./components/HintBar.tsx";
 import { Tabs } from "./components/Tabs.tsx";
 import { Spinner } from "./components/Spinner.tsx";
-import { matchCommands, menuItems, placeholders } from "./slash.ts";
+import { menuItems, placeholders } from "./slash.ts";
 import { CURRENT_USER, envLabel, MOCK_ENVIRONMENTS } from "./workspaces.ts";
 import { setTheme, theme, themeNames } from "./theme.ts";
 import { catalog, loadProviderAuth, modelLabel } from "./models.ts";
@@ -31,7 +31,7 @@ import {
   type SessionMap,
 } from "./sessions.ts";
 
-export const SIDEBAR_WIDTH = 42;
+const SIDEBAR_WIDTH = 42;
 
 /**
  * Sessions are hierarchical: each environment has a main session, and each
@@ -138,14 +138,8 @@ export function App({
       return;
     }
     const menuOpen = palette || cmdMode;
-    // Ctrl+P: jump mode on the input (searchable, menu above the card)
-    if (key.ctrl && key.name === "p") {
-      setInput("");
-      setHistIdx(null);
-      return setPalette((p) => !p);
-    }
-    // Ctrl+A: contextual actions for the current selection
-    if ((key.ctrl && key.name === "a") || (keyMode === "normal" && !palette && key.name === "a" && !key.ctrl)) {
+    // contextual actions for the current selection (NORMAL: a)
+    if (keyMode === "normal" && !palette && !cmdMode && key.name === "a" && !key.ctrl && !key.meta) {
       if (focus > 0) {
         const ws = workspaces[focus - 1]!;
         const intercepting = environment.services.some((s) => s.interceptedBy === ws.name);
@@ -202,10 +196,6 @@ export function App({
         if (next === 0) setMode("agent"); // shell only exists inside a workspace
         return next;
       });
-    // Ctrl+J/K cycle workspaces (legacy terminals report ctrl+j as a bare linefeed)
-    if ((key.ctrl && key.name === "j") || key.name === "linefeed") return cycle(1);
-    if (key.ctrl && key.name === "k") return cycle(-1);
-    // vim-style: Ctrl+H/L = environment tab left/right
     const tabMove = (delta: number) => {
       const pos = openEnvs.indexOf(env);
       const next = openEnvs[(pos + delta + openEnvs.length) % openEnvs.length]!;
@@ -213,25 +203,7 @@ export function App({
       setFocus(0);
       setMode("agent");
     };
-    if (key.ctrl && key.name === "h") return tabMove(-1);
-    if (key.ctrl && key.name === "l") return tabMove(1);
-    // Ctrl+M (and Ctrl+E): popup selector to move the current workspace to
-    // another environment
-    if (key.ctrl && (key.name === "m" || key.name === "e")) {
-      if (focus > 0) askAttach();
-      return;
-    }
-    // Ctrl+1..9: jump straight to workspace N; Ctrl+0: main context
-    if (key.ctrl && /^[0-9]$/.test(key.name)) {
-      const d = Number(key.name);
-      if (d === 0) {
-        setMode("agent");
-        return setFocus(0);
-      }
-      if (d <= n && workspaces[d - 1]!.owner === CURRENT_USER) return setFocus(d);
-      return;
-    }
-    if (key.name === "tab" && !menuOpen) return cycle(key.shift ? -1 : 1);
+    if (key.name === "tab" && !menuOpen && keyMode === "normal") return cycle(key.shift ? -1 : 1);
     // ↑/↓ recall this session's prompt history (menu closed only)
     if (keyMode === "insert" && !menuOpen && (key.name === "up" || key.name === "down")) {
       const h = session.history;
@@ -255,11 +227,6 @@ export function App({
     // leaving shell mode: backspace on an empty prompt
     if (mode === "shell" && (key.name === "backspace" || key.name === "delete") && input === "") {
       setMode("agent");
-    }
-    // Ctrl+B: come out of the workspace to the main context (esc stays interrupt-only)
-    if (key.ctrl && key.name === "b") {
-      setMode("agent"); // shell only exists inside a workspace
-      return setFocus(0);
     }
     if (key.name === "escape") {
       if (keyMode === "insert") {
@@ -1050,13 +1017,18 @@ export function App({
             </box>
           ) : (
             <Transcript
-              normalScroll={keyMode === "normal" && !palette && !cmdMode}
+              keys={
+                modalOpen
+                  ? "off"
+                  : keyMode === "normal" && !palette && !cmdMode
+                    ? "normal"
+                    : "page"
+              }
               entries={
                 prefs.thinking === "hide"
                   ? session.entries.filter((e) => e.kind !== "thinking")
                   : session.entries
               }
-              active={!modalOpen}
             />
           )}
           {/* prompt block, opencode structure: card + strip + footer row stack
@@ -1097,8 +1069,9 @@ export function App({
                     }
                   : submit
               }
-              jump={palette}
-              command={cmdMode}
+              overlay={
+                palette ? "jump" : cmdMode ? "command" : keyMode === "normal" ? "normal" : undefined
+              }
               onPick={
                 palette
                   ? (insert) => {
@@ -1125,7 +1098,6 @@ export function App({
               provider={session.model.provider}
               workspace={focus === 0 ? undefined : workspaces[focus - 1]!.name}
               inputActive={inputLive}
-              normal={keyMode === "normal" && !palette && !cmdMode}
               menu={menu}
             />
           <HintBar

@@ -20,9 +20,7 @@ export function Prompt({
   workspace,
   inputActive = true,
   menu,
-  jump = false,
-  command = false,
-  normal = false,
+  overlay,
   onPick,
 }: {
   value: string;
@@ -35,16 +33,13 @@ export function Prompt({
   workspace?: string;
   inputActive?: boolean;
   menu: MenuItem[];
-  /** Jump mode (^p): Enter runs the highlighted item via onPick. */
-  jump?: boolean;
-  /** Command overlay (/): filter + pick slash commands from NORMAL mode. */
-  command?: boolean;
-  /** NORMAL mode: dimmed card, no cursor, badge row. */
-  normal?: boolean;
+  /** "jump"/"command": filter overlays (Enter runs via onPick). "normal": dimmed card. */
+  overlay?: "jump" | "command" | "normal";
   onPick?: (insert: string) => void;
 }) {
   const matches = menu;
   const [sel, setSel] = useState(0);
+  const normal = overlay === "normal";
   const bar = normal ? theme.border : mode === "shell" ? theme.warning : theme.accent;
 
   // Clamp selection when the filter narrows.
@@ -124,11 +119,11 @@ export function Prompt({
           <text> </text>
           <text>
             <span fg={normal ? theme.muted : bar}>
-              <b>{normal ? "NORMAL" : command ? "Commands" : jump ? "Jump" : mode === "shell" ? "Shell" : workspace ? "Agent" : "Orchestrator"}</b>
+              <b>{normal ? "NORMAL" : overlay === "command" ? "Commands" : overlay === "jump" ? "Jump" : mode === "shell" ? "Shell" : workspace ? "Agent" : "Orchestrator"}</b>
             </span>
             {normal ? (
               <span fg={theme.muted}> · i to type · ? for help</span>
-            ) : command || jump ? (
+            ) : overlay ? (
               <span fg={theme.muted}> · type to filter, esc to close</span>
             ) : (
               <span>

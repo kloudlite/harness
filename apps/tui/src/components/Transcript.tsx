@@ -219,25 +219,22 @@ function Row({ entry }: { entry: Entry }) {
  */
 export function Transcript({
   entries,
-  active = true,
-  normalScroll = false,
+  keys = "page",
 }: {
   entries: Entry[];
-  /** Keyboard paging enabled (off while a modal owns the keys). */
-  active?: boolean;
-  /** NORMAL mode: u/d scroll half a page. */
-  normalScroll?: boolean;
+  /** "off" while a modal owns keys; "page" = pgup/pgdn; "normal" adds u/d. */
+  keys?: "off" | "page" | "normal";
 }) {
   const scrollRef = useRef<ScrollBoxRenderable>(null);
 
   useKeyboard((key) => {
-    if (!active) return;
+    if (keys === "off") return;
     const sb = scrollRef.current;
     if (!sb) return;
     const page = Math.max(1, sb.viewport.height - 2);
     if (key.name === "pageup") sb.scrollBy(-page);
     if (key.name === "pagedown") sb.scrollBy(page);
-    if (normalScroll && !key.ctrl && !key.meta) {
+    if (keys === "normal" && !key.ctrl && !key.meta) {
       if (key.name === "u") sb.scrollBy(-Math.ceil(page / 2));
       if (key.name === "d") sb.scrollBy(Math.ceil(page / 2));
     }
