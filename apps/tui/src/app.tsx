@@ -6,6 +6,7 @@ import { Prompt } from "./components/Prompt.tsx";
 import { Sidebar } from "./components/Sidebar.tsx";
 import { HintBar } from "./components/HintBar.tsx";
 import { Tabs } from "./components/Tabs.tsx";
+import { Spinner } from "./components/Spinner.tsx";
 import { matchCommands, menuItems, placeholders } from "./slash.ts";
 import { CURRENT_USER, envLabel, MOCK_ENVIRONMENTS } from "./workspaces.ts";
 import { setTheme, theme, themeNames } from "./theme.ts";
@@ -1000,6 +1001,25 @@ export function App({
           {/* prompt block, opencode structure: card + strip + footer row stack
               tight; question/permission panels replace the whole block */}
           <box flexDirection="column" flexShrink={0}>
+          {busy && asks.length === 0 && (
+            <box paddingLeft={1} marginBottom={1} flexDirection="row">
+              <text>
+                <Spinner fg={theme.accent} />{" "}
+                <span fg={theme.muted}>
+                  {(() => {
+                    const tool = [...session.entries]
+                      .reverse()
+                      .find((e) => e.kind === "tool" && e.status === "running") as
+                      | (Entry & { kind: "tool" })
+                      | undefined;
+                    if (tool) return `${tool.name} · ${tool.summary}`;
+                    const last = session.entries[session.entries.length - 1];
+                    return last?.kind === "thinking" ? "thinking…" : "working…";
+                  })()}
+                </span>
+              </text>
+            </box>
+          )}
           {asks.length > 0 ? (
             <AskPanel ask={asks[0]!} />
           ) : (

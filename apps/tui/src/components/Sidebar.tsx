@@ -81,9 +81,6 @@ export function Sidebar({
                 attributes={active ? TextAttributes.BOLD : undefined}
               >
                 {w.name}
-              </span>{" "}
-              <span fg={theme.muted} attributes={TextAttributes.DIM}>
-                {w.status === "cloning" ? (w.progress ?? w.status) : w.status}
               </span>
               {running[i] ? <span fg={theme.warning}> ⋯</span> : ""}
               {active ? <span fg={theme.muted}> ‹ here</span> : ""}
