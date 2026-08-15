@@ -262,7 +262,11 @@ export function App({
       return setFocus(0);
     }
     if (key.name === "escape") {
-      if (keyMode === "insert") return setKeyMode("normal"); // vim: esc → normal mode
+      if (keyMode === "insert") {
+        setInput(""); // esc abandons the draft
+        setHistIdx(null);
+        return setKeyMode("normal");
+      }
       if (busy) return interrupt(activeKey); // esc in NORMAL interrupts
       return;
     }
