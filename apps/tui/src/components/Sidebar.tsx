@@ -67,10 +67,14 @@ export function Sidebar({
         )}
         {workspaces.map((w, i) => {
           if (w.owner !== CURRENT_USER) return null;
+          const ownIdx = workspaces
+            .map((x, j) => (x.owner === CURRENT_USER ? j : -1))
+            .filter((j) => j >= 0);
+          const isLast = i === ownIdx[ownIdx.length - 1];
           const active = focus === i + 1;
           return (
             <text key={w.id}>
-              <span fg={theme.muted}>{"└ "}</span>
+              <span fg={theme.muted}>{isLast ? "└─ " : "├─ "}</span>
               <span fg={dot(w.status)}>•</span>{" "}
               <span
                 fg={active ? theme.accent : theme.muted}
