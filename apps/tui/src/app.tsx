@@ -304,7 +304,7 @@ export function App({
         if (focus > 0) askAttach();
         return;
       }
-      if (key.sequence === "?") return submit("/help");
+      if (key.sequence === "?") return openHelp();
       return; // unbound NORMAL-mode keys do nothing (never leak into the input)
     }
   });
@@ -515,6 +515,28 @@ export function App({
         return options[Number(picked)] ?? picked;
       },
     });
+  }
+
+  /** Help popup: the keyboard/command reference in a panel, not the transcript. */
+  function openHelp() {
+    pushAskRef.current({
+      title: "Keyboard shortcuts",
+      body: [
+        "Navigation (NORMAL mode)",
+        "  i           type a prompt        /    commands",
+        "  j k         workspace ring       h l  environments",
+        "  1-9 · 0     workspace N · main   p    jump anywhere",
+        "  a           actions              m    move workspace",
+        "  u d         scroll               !    shell (in a workspace)",
+        "  esc         interrupt the agent  ?    this help",
+        "",
+        "Typing (INSERT mode)",
+        "  enter       send                 shift+enter · \\+enter  new line",
+        "  up / down   prompt history       esc  clear + back to NORMAL",
+      ].join("\n"),
+      options: [{ id: "close", label: "Close" }],
+      escapeId: "close",
+    }).catch(() => {});
   }
 
   /** Tools that require permission before running. */
@@ -788,30 +810,7 @@ export function App({
         text: names.length ? names.join(", ") : "No tools registered.",
       });
     }
-    if (trimmed === "/help")
-      return append(activeKey, {
-        kind: "agent",
-        text: [
-          "**Navigation**",
-          "  ^p          jump to any environment or workspace (type to filter)",
-          "  ^1-9 · ^0   workspace N · main context",
-          "  ^j ^k       next / previous workspace   (also tab / shift+tab)",
-          "  ^h ^l       next / previous environment",
-          "  ^b          back to the main context",
-          "",
-          "**Actions**",
-          "  ^a          actions for the current workspace or environment",
-          "  ^e          attach this workspace to an environment",
-          "  /           commands — model, theme, settings, login…",
-          "  !           shell mode inside a workspace (backspace exits)",
-          "",
-          "**Input**",
-          "  enter       send · shift+enter or \\+enter for a new line",
-          "  up/down     prompt history",
-          "  esc         interrupt the agent · clear the input",
-          "  pgup pgdn   scroll the transcript (mouse wheel works too)",
-        ].join("\n"),
-      });
+    if (trimmed === "/help") return openHelp();
     if (trimmed.startsWith("/theme ")) {
       const name = trimmed.slice(7).trim();
       setTheme(name);
