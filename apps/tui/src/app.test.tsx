@@ -22,7 +22,12 @@ async function mount() {
     await setup.renderOnce();
     return setup.captureCharFrame();
   };
-  return { ...setup, frame, done: () => setup.renderer.destroy() };
+  const insert = async () => {
+    setup.mockInput.pressKey("i"); // NAV → INSERT
+    await tick();
+    await setup.renderOnce();
+  };
+  return { ...setup, frame, insert, done: () => setup.renderer.destroy() };
 }
 
 test("sidebar renders", async () => {
@@ -30,7 +35,7 @@ test("sidebar renders", async () => {
   const f = await t.frame();
   expect(f).toContain("main");
   expect(f).toContain("api-gateway");
-  expect(f).toContain("Orchestrator");
+  expect(f).toContain("NAV"); // modal keyboard starts in NAV
   t.done();
 });
 
@@ -58,6 +63,7 @@ test("menu navigation: arrow selects, enter runs the highlighted command", async
 
 test("card keeps its shape after submit", async () => {
   const t = await mount();
+  await t.insert();
   await t.mockInput.typeText("hi");
   await t.frame();
   t.mockInput.pressKey("RETURN");
@@ -90,17 +96,27 @@ test("ctrl+j / ctrl+b cycle focus without polluting the input", async () => {
   t.done();
 });
 
-test("plain j and k type into the input", async () => {
+test("in INSERT, plain j and k type; in NAV they navigate", async () => {
   const t = await mount();
+  await t.insert();
   await t.mockInput.typeText("jk");
   const f = await t.frame();
   expect(f).toContain("jk");
-  expect(f).not.toContain("main ›"); // still in main context
+  expect(f).not.toContain("main ›"); // typing, not navigating
+  t.done();
+});
+
+test("NAV mode: j enters a workspace without typing", async () => {
+  const t = await mount();
+  t.mockInput.pressKey("j");
+  const f = await t.frame();
+  expect(f).toContain("main › api-gateway");
   t.done();
 });
 
 test("backslash-enter continues on a new line; enter submits the whole thing", async () => {
   const t = await mount();
+  await t.insert();
   await t.mockInput.typeText("first\\");
   await t.frame();
   t.mockInput.pressKey("RETURN"); // continuation, not submit
@@ -118,6 +134,7 @@ test("backslash-enter continues on a new line; enter submits the whole thing", a
 
 test("shift+enter inserts a newline instead of submitting", async () => {
   const t = await mount();
+  await t.insert();
   await t.mockInput.typeText("hi");
   await t.frame();
   t.mockInput.pressEnter({ shift: true });
@@ -145,6 +162,7 @@ test("ctrl+p palette jumps to an environment", async () => {
 
 test("input history is per session and recalled with arrows", async () => {
   const t = await mount();
+  await t.insert();
   await t.mockInput.typeText("first prompt");
   await t.frame();
   t.mockInput.pressKey("RETURN");
@@ -187,7 +205,9 @@ test("ctrl+h / ctrl+l navigate environment tabs", async () => {
 
 test("selecting /login from the menu allows typing the sub-option filter", async () => {
   const t = await mount();
-  await t.mockInput.typeText("/login");
+  await t.mockInput.typeText("/"); // NAV: "/" jumps straight into INSERT
+  await t.frame();
+  await t.mockInput.typeText("login");
   await t.frame();
   t.mockInput.pressKey("RETURN"); // menu enter → inserts "/login "
   await t.frame();

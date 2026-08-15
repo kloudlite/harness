@@ -9,6 +9,7 @@ export function HintBar({
   queued,
   active,
   inWorkspace,
+  nav,
 }: {
   busy: boolean;
   tokens: number;
@@ -16,6 +17,7 @@ export function HintBar({
   /** Context path: "main" or "main › <workspace>" */
   active: string;
   inWorkspace: boolean;
+  nav: boolean;
 }) {
   return (
     <box flexDirection="row" flexShrink={0} justifyContent="space-between">
@@ -33,25 +35,26 @@ export function HintBar({
       </box>
       <box flexDirection="row" gap={2}>
         <text fg={theme.muted}>{tokens.toLocaleString()} tok</text>
-        {inWorkspace && (
-          <text fg={theme.fg}>
-            ! <span fg={theme.muted}>shell</span>
-          </text>
+        {nav ? (
+          <>
+            <text fg={theme.fg}>i <span fg={theme.muted}>type</span></text>
+            <text fg={theme.fg}>j k <span fg={theme.muted}>workspaces</span></text>
+            <text fg={theme.fg}>h l <span fg={theme.muted}>envs</span></text>
+            <text fg={theme.fg}>p <span fg={theme.muted}>jump</span></text>
+            <text fg={theme.fg}>a <span fg={theme.muted}>actions</span></text>
+            {inWorkspace && <text fg={theme.fg}>m <span fg={theme.muted}>move</span></text>}
+            <text fg={theme.fg}>? <span fg={theme.muted}>help</span></text>
+          </>
+        ) : (
+          <>
+            {inWorkspace && (
+              <text fg={theme.fg}>! <span fg={theme.muted}>shell</span></text>
+            )}
+            <text fg={theme.fg}>enter <span fg={theme.muted}>send</span></text>
+            <text fg={theme.fg}>esc <span fg={theme.muted}>nav mode</span></text>
+            <text fg={theme.fg}>/ <span fg={theme.muted}>commands</span></text>
+          </>
         )}
-        {inWorkspace && (
-          <text fg={theme.fg}>
-            ^m <span fg={theme.muted}>move</span>
-          </text>
-        )}
-        <text fg={theme.fg}>
-          ^a <span fg={theme.muted}>actions</span>
-        </text>
-        <text fg={theme.fg}>
-          ^p <span fg={theme.muted}>jump</span>
-        </text>
-        <text fg={theme.fg}>
-          / <span fg={theme.muted}>commands</span>
-        </text>
       </box>
     </box>
   );

@@ -52,6 +52,8 @@ export function App({
   const [sessions, setSessions] = useState<SessionMap>({});
   const [input, setInput] = useState("");
   const [mode, setMode] = useState<"agent" | "shell">("agent");
+  // vim-style modal keyboard: NAV (default) = letter commands, INSERT = typing
+  const [keyMode, setKeyMode] = useState<"nav" | "insert">("nav");
   const [hint, setHint] = useState(0);
   // 0 = main context (orchestrator); 1..N = inside workspaces[focus - 1]
   const [focus, setFocus] = useState(0);
@@ -131,7 +133,7 @@ export function App({
       return setPalette((p) => !p);
     }
     // Ctrl+A: contextual actions for the current selection
-    if (key.ctrl && key.name === "a") {
+    if ((key.ctrl && key.name === "a") || (keyMode === "nav" && !palette && key.name === "a" && !key.ctrl)) {
       if (focus > 0) {
         const ws = workspaces[focus - 1]!;
         const intercepting = environment.services.some((s) => s.interceptedBy === ws.name);
@@ -219,7 +221,7 @@ export function App({
     }
     if (key.name === "tab" && !menuOpen) return cycle(key.shift ? -1 : 1);
     // ↑/↓ recall this session's prompt history (menu closed only)
-    if (!menuOpen && (key.name === "up" || key.name === "down")) {
+    if (keyMode === "insert" && !menuOpen && (key.name === "up" || key.name === "down")) {
       const h = session.history;
       if (h.length === 0) return;
       if (key.name === "up") {
@@ -248,8 +250,50 @@ export function App({
       return setFocus(0);
     }
     if (key.name === "escape") {
-      if (busy) return interrupt(activeKey);
-      if (input !== "") setInput(""); // clear the prompt
+      if (keyMode === "insert") return setKeyMode("nav"); // vim: esc leaves typing
+      if (busy) return interrupt(activeKey); // esc in NAV interrupts
+      return;
+    }
+
+    // ---- NAV mode: single letters are commands (no modifiers, tmux-safe) ----
+    if (keyMode === "nav" && !palette && !key.ctrl && !key.meta && !key.option) {
+      if (key.name === "i") return setKeyMode("insert");
+      if (key.sequence === "/") {
+        setKeyMode("insert");
+        setInput("/");
+        return;
+      }
+      if (key.sequence === "!") {
+        if (focus > 0) {
+          setMode("shell");
+          setKeyMode("insert");
+        }
+        return;
+      }
+      if (key.name === "j") return cycle(1);
+      if (key.name === "k") return cycle(-1);
+      if (key.name === "h") return tabMove(-1);
+      if (key.name === "l") return tabMove(1);
+      if (/^[0-9]$/.test(key.name)) {
+        const d = Number(key.name);
+        if (d === 0) {
+          setMode("agent");
+          return setFocus(0);
+        }
+        if (d <= n && workspaces[d - 1]!.owner === CURRENT_USER) return setFocus(d);
+        return;
+      }
+      if (key.name === "p") {
+        setInput("");
+        setHistIdx(null);
+        return setPalette(true);
+      }
+      if (key.name === "m") {
+        if (focus > 0) askAttach();
+        return;
+      }
+      if (key.sequence === "?") return submit("/help");
+      return; // unbound NAV keys do nothing (never leak into the input)
     }
   });
 
@@ -957,7 +1001,9 @@ export function App({
       }));
     return input.startsWith("/") ? menuItems(input, menuCtx) : [];
   }, [palette, jumpMatches, input, menuCtx]);
-  const modalOpen = login !== null || asks.length > 0; // jump mode keeps the input live
+  const modalOpen = login !== null || asks.length > 0;
+  // typing reaches the input only in INSERT (jump mode always types the filter)
+  const inputLive = !modalOpen && (keyMode === "insert" || palette);
 
   return (
     // pinned to the terminal size: without it the tree grows with content
@@ -992,6 +1038,7 @@ export function App({
             </box>
           ) : (
             <Transcript
+              navScroll={keyMode === "nav" && !palette}
               entries={
                 prefs.thinking === "hide"
                   ? session.entries.filter((e) => e.kind !== "thinking")
@@ -1045,10 +1092,12 @@ export function App({
               model={modelLabel(session.model)}
               provider={session.model.provider}
               workspace={focus === 0 ? undefined : workspaces[focus - 1]!.name}
-              inputActive={!modalOpen}
+              inputActive={inputLive}
+              nav={keyMode === "nav" && !palette}
               menu={menu}
             />
           <HintBar
+            nav={keyMode === "nav" && !palette}
             busy={busy}
             tokens={session.tokens}
             queued={session.queued}

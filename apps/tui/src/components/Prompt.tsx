@@ -21,6 +21,7 @@ export function Prompt({
   inputActive = true,
   menu,
   jump = false,
+  nav = false,
   onPick,
 }: {
   value: string;
@@ -35,11 +36,13 @@ export function Prompt({
   menu: MenuItem[];
   /** Jump mode (^p): Enter runs the highlighted item via onPick. */
   jump?: boolean;
+  /** NAV mode: dimmed card, no cursor, badge row. */
+  nav?: boolean;
   onPick?: (insert: string) => void;
 }) {
   const matches = menu;
   const [sel, setSel] = useState(0);
-  const bar = mode === "shell" ? theme.warning : theme.accent;
+  const bar = nav ? theme.border : mode === "shell" ? theme.warning : theme.accent;
 
   // Clamp selection when the filter narrows.
   useEffect(() => {
@@ -117,10 +120,12 @@ export function Prompt({
           </box>
           <text> </text>
           <text>
-            <span fg={bar}>
-              <b>{jump ? "Jump" : mode === "shell" ? "Shell" : workspace ? "Agent" : "Orchestrator"}</b>
+            <span fg={nav ? theme.muted : bar}>
+              <b>{nav ? "NAV" : jump ? "Jump" : mode === "shell" ? "Shell" : workspace ? "Agent" : "Orchestrator"}</b>
             </span>
-            {jump ? (
+            {nav ? (
+              <span fg={theme.muted}> · i to type · ? for help</span>
+            ) : jump ? (
               <span fg={theme.muted}> · type to filter, esc to close</span>
             ) : (
               <span>
