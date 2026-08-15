@@ -44,9 +44,14 @@ export function Files({
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [dirCache, setDirCache] = useState<Record<string, TreeNode[]>>({});
   const [sel, setSel] = useState(0);
+  // primary = "review": every change as one scrolling diff; "browse" = tree with inline diffs
+  const [layout, setLayout] = useState<"review" | "browse">("review");
   const [pane, setPane] = useState<"tree" | "diff">("tree");
   const [open, setOpen] = useState<{ path: string; status?: Change["status"] } | null>(null);
   const [view, setView] = useState<"diff" | "full">("diff");
+  // review mode: which file's diff is at the top / current file index
+  const [reviewIdx, setReviewIdx] = useState(0);
+  const reviewRef = useRef<ScrollBoxRenderable>(null);
   const [filter, setFilter] = useState<string | null>(null); // null = not filtering
   const [flash, setFlash] = useState(false);
   const scrollRef = useRef<ScrollBoxRenderable>(null);
@@ -122,6 +127,12 @@ export function Files({
     }
   };
 
+  const allDiffs = useMemo(
+    () => changes.map((c) => ({ change: c, diff: fileDiff(root, c.path, c.status) })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [changes, refreshKey],
+  );
+
   const diff: FileDiff | null = useMemo(() => {
     if (!open?.status) return null;
     return fileDiff(root, open.path, open.status);
@@ -160,18 +171,50 @@ export function Files({
       return;
     }
     if (key.name === "escape") return onClose();
+    if (key.name === "t") return setLayout((l) => (l === "review" ? "browse" : "review"));
+    if (key.name === "r") return rescan();
+    if (layout === "review") {
+      const sb = reviewRef.current;
+      const page = Math.max(1, (sb?.viewport.height ?? 20) - 2);
+      if (key.name === "j" || key.name === "down") sb?.scrollBy(1);
+      if (key.name === "k" || key.name === "up") sb?.scrollBy(-1);
+      if (key.name === "d") sb?.scrollBy(Math.ceil(page / 2));
+      if (key.name === "u") sb?.scrollBy(-Math.ceil(page / 2));
+      if (key.name === "n" || key.name === "N") {
+        if (!changes.length) return;
+        const next = key.shift ? (reviewIdx - 1 + changes.length) % changes.length : (reviewIdx + 1) % changes.length;
+        setReviewIdx(next);
+        // scroll to that file's block: rows before it = sum of previous blocks
+        let row = 0;
+        for (let i = 0; i < next; i++) row += 3 + (allDiffs[i]?.diff?.lines.length ?? 1);
+        sb?.scrollTo(row);
+      }
+      if (key.name === "l" || key.name === "return") {
+        // open this file in browse mode
+        const c = changes[reviewIdx];
+        if (c) {
+          setOpen({ path: c.path, status: c.status });
+          setView("diff");
+          setLayout("browse");
+          setPane("diff");
+        }
+      }
+      return;
+    }
     if (key.name === "tab") return setPane((p) => (p === "tree" ? "diff" : "tree"));
     if (key.sequence === "/") return setFilter("");
-    if (key.name === "r") return rescan();
     if (pane === "tree") {
       const pos = Math.max(0, selectable.indexOf(cur));
       if (key.name === "j" || key.name === "down") return setSel(selectable[Math.min(selectable.length - 1, pos + 1)] ?? cur);
       if (key.name === "k" || key.name === "up") return setSel(selectable[Math.max(0, pos - 1)] ?? cur);
       if (key.name === "l" || key.name === "return") {
         const row = rows[cur];
-        if (row) openRow(row);
-        if (row && row.kind !== "node") setPane("diff");
-        if (row?.kind === "node" && !row.node.dir) setPane("diff");
+        if (!row) return;
+        const isFile = row.kind === "change" || (row.kind === "node" && !row.node.dir);
+        const already = isFile && open?.path === (row.kind === "change" ? row.change.path : row.kind === "node" ? row.node.path : "");
+        openRow(row);
+        // second l/enter on the opened file (or enter) expands into the reader pane
+        if (isFile && (already || key.name === "return")) setPane("diff");
         return;
       }
       if (key.name === "h") {
@@ -212,6 +255,10 @@ export function Files({
     }
   });
 
+  // browse mode: the right pane is the "expanded" reader; when the tree has
+  // focus, the opened file's diff shows inline under its row instead
+  const showPane = pane === "diff";
+
   const statusColor = (s?: Change["status"]) =>
     s === "A" ? theme.diffAdded : s === "D" ? theme.diffRemoved : s === "M" ? theme.warning : theme.muted;
 
@@ -221,7 +268,7 @@ export function Files({
       <box flexDirection="row" justifyContent="space-between" paddingLeft={1} paddingRight={1}>
         <text>
           <span fg={theme.accent}><b>{workspace}</b></span>
-          <span fg={theme.muted}> · files · {displayRoot(root)}</span>
+          <span fg={theme.muted}> · {layout === "review" ? "changes" : "files"} · {displayRoot(root)}</span>
           {flash ? <span fg={theme.success}>  ● updated</span> : ""}
         </text>
         <text fg={theme.muted}>
@@ -237,12 +284,44 @@ export function Files({
         </text>
       </box>
 
+      {layout === "review" ? (
+        <scrollbox ref={reviewRef} flexGrow={1} flexBasis={0} minHeight={0} marginTop={1} paddingLeft={1} scrollbarOptions={{ visible: false }}>
+          {allDiffs.length === 0 && (
+            <box paddingLeft={1} paddingTop={1}>
+              <text fg={theme.muted}>{git ? "no changes vs HEAD — t to browse files" : "not a git repo — t to browse files"}</text>
+            </box>
+          )}
+          {allDiffs.map(({ change: c, diff: d }, i) => (
+            <box key={c.path} flexDirection="column" marginBottom={1}>
+              <box flexDirection="row" paddingLeft={1} paddingRight={1} backgroundColor={i === reviewIdx ? theme.surfaceRaised : theme.surface}>
+                <text>
+                  <span fg={statusColor(c.status)}><b>{c.status}</b></span>
+                  <span fg={theme.fg}>  {c.path}</span>
+                  <span fg={theme.diffAdded}>  +{c.added}</span>
+                  <span fg={theme.diffRemoved}> −{c.removed}</span>
+                </text>
+              </box>
+              <box paddingLeft={1} paddingTop={1}>
+                {d ? <DiffView diff={d} maxLines={5000} /> : <text fg={theme.muted}>(no diff)</text>}
+              </box>
+            </box>
+          ))}
+        </scrollbox>
+      ) : (
       <box flexDirection="row" flexGrow={1} minHeight={0} marginTop={1}>
         {/* left: tree */}
-        <box flexDirection="column" width={34} flexShrink={0} paddingLeft={1}>
+        <box flexDirection="column" width={open ? 44 : 60} flexShrink={0} paddingLeft={1}>
           <scrollbox flexGrow={1} flexBasis={0} scrollbarOptions={{ visible: false }}>
             {rows.map((row, i) => {
               const active = i === cur && pane === "tree";
+              const rowPath = row.kind === "change" ? row.change.path : row.kind === "node" && !row.node.dir ? row.node.path : null;
+              // inline diff: a compact preview under the opened file when the pane is closed
+              const inline =
+                rowPath && open?.path === rowPath && !showPane && diff ? (
+                  <box key={`d${rowPath}`} flexDirection="column" paddingLeft={3} marginBottom={1}>
+                    <DiffView diff={diff} maxLines={12} />
+                  </box>
+                ) : null;
               if (row.kind === "header")
                 return (
                   <box key={`h${row.label}`} marginTop={i === 0 ? 0 : 1} flexDirection="row" justifyContent="space-between" paddingRight={1}>
@@ -252,28 +331,34 @@ export function Files({
                 );
               if (row.kind === "change")
                 return (
-                  <box key={`c${row.change.path}`} flexDirection="row" height={1} overflow="hidden" backgroundColor={active ? theme.selection : undefined} paddingLeft={1}>
-                    <text fg={active ? theme.bg : statusColor(row.change.status)}>{row.change.status} </text>
-                    <text fg={active ? theme.bg : theme.fg}>{row.change.path}</text>
+                  <box key={`c${row.change.path}`} flexDirection="column">
+                    <box flexDirection="row" height={1} overflow="hidden" backgroundColor={active ? theme.selection : undefined} paddingLeft={1}>
+                      <text fg={active ? theme.bg : statusColor(row.change.status)}>{row.change.status} </text>
+                      <text fg={active ? theme.bg : theme.fg}>{row.change.path}</text>
+                    </box>
+                    {inline}
                   </box>
                 );
               const n = row.node;
               const st = n.dir ? undefined : changeStatus(n.path);
               const glyph = n.dir ? (n.ignored ? "  " : expanded.has(n.path) ? "▾ " : "▸ ") : "  ";
               return (
-                <box key={`n${n.path}`} flexDirection="row" height={1} overflow="hidden" backgroundColor={active ? theme.selection : undefined} paddingLeft={1 + row.depth * 2}>
-                  <text fg={active ? theme.bg : n.ignored ? theme.placeholder : n.dir ? theme.fg : st ? theme.fg : theme.muted}>
-                    {glyph}{n.name}{n.dir ? "/" : ""}
-                  </text>
-                  {st ? <text fg={active ? theme.bg : statusColor(st)}> {st}</text> : null}
-                  {n.ignored ? <text fg={theme.placeholder} attributes={TextAttributes.DIM}> ignored</text> : null}
+                <box key={`n${n.path}`} flexDirection="column">
+                  <box flexDirection="row" height={1} overflow="hidden" backgroundColor={active ? theme.selection : undefined} paddingLeft={1 + row.depth * 2}>
+                    <text fg={active ? theme.bg : n.ignored ? theme.placeholder : n.dir ? theme.fg : st ? theme.fg : theme.muted}>
+                      {glyph}{n.name}{n.dir ? "/" : ""}
+                    </text>
+                    {st ? <text fg={active ? theme.bg : statusColor(st)}> {st}</text> : null}
+                    {n.ignored ? <text fg={theme.placeholder} attributes={TextAttributes.DIM}> ignored</text> : null}
+                  </box>
+                  {inline}
                 </box>
               );
             })}
           </scrollbox>
         </box>
 
-        {/* right: diff pane */}
+        {/* right: full reader (tab to focus); tree shows a compact inline diff otherwise */}
         <box flexDirection="column" flexGrow={1} minHeight={0} {...SplitBorder} border={["left"]} borderColor={pane === "diff" ? theme.accent : theme.border}>
           {!open || !body ? (
             <box paddingLeft={2} paddingTop={1}>
@@ -299,18 +384,33 @@ export function Files({
           )}
         </box>
       </box>
+      )}
 
       {/* footer hints */}
       <box flexDirection="row" gap={2} paddingLeft={1} marginTop={1}>
-        <text fg={theme.muted}>files › {open?.path ?? "—"}</text>
+        <text fg={theme.muted}>
+          {layout === "review" ? `changes › ${changes[reviewIdx]?.path ?? "—"}` : `files › ${open?.path ?? "—"}`}
+        </text>
         <box flexGrow={1} />
-        <text fg={theme.fg}>j k <span fg={theme.muted}>move</span></text>
-        <text fg={theme.fg}>l <span fg={theme.muted}>open</span></text>
-        <text fg={theme.fg}>h <span fg={theme.muted}>up</span></text>
-        <text fg={theme.fg}>tab <span fg={theme.muted}>pane</span></text>
-        <text fg={theme.fg}>n N <span fg={theme.muted}>hunks</span></text>
-        <text fg={theme.fg}>d f <span fg={theme.muted}>diff/full</span></text>
-        <text fg={theme.fg}>/ <span fg={theme.muted}>filter</span></text>
+        {layout === "review" ? (
+          <>
+            <text fg={theme.fg}>j k u d <span fg={theme.muted}>scroll</span></text>
+            <text fg={theme.fg}>n N <span fg={theme.muted}>next/prev file</span></text>
+            <text fg={theme.fg}>l <span fg={theme.muted}>open in tree</span></text>
+            <text fg={theme.fg}>t <span fg={theme.muted}>tree</span></text>
+          </>
+        ) : (
+          <>
+            <text fg={theme.fg}>j k <span fg={theme.muted}>move</span></text>
+            <text fg={theme.fg}>l <span fg={theme.muted}>open</span></text>
+            <text fg={theme.fg}>h <span fg={theme.muted}>up</span></text>
+            <text fg={theme.fg}>tab <span fg={theme.muted}>pane</span></text>
+            <text fg={theme.fg}>n N <span fg={theme.muted}>hunks</span></text>
+            <text fg={theme.fg}>d f <span fg={theme.muted}>diff/full</span></text>
+            <text fg={theme.fg}>/ <span fg={theme.muted}>filter</span></text>
+            <text fg={theme.fg}>t <span fg={theme.muted}>changes</span></text>
+          </>
+        )}
         <text fg={theme.fg}>esc <span fg={theme.muted}>back</span></text>
       </box>
     </box>
