@@ -21,6 +21,7 @@ export function Prompt({
   inputActive = true,
   menu,
   jump = false,
+  command = false,
   normal = false,
   onPick,
 }: {
@@ -36,6 +37,8 @@ export function Prompt({
   menu: MenuItem[];
   /** Jump mode (^p): Enter runs the highlighted item via onPick. */
   jump?: boolean;
+  /** Command overlay (/): filter + pick slash commands from NORMAL mode. */
+  command?: boolean;
   /** NORMAL mode: dimmed card, no cursor, badge row. */
   normal?: boolean;
   onPick?: (insert: string) => void;
@@ -121,11 +124,11 @@ export function Prompt({
           <text> </text>
           <text>
             <span fg={normal ? theme.muted : bar}>
-              <b>{normal ? "NORMAL" : jump ? "Jump" : mode === "shell" ? "Shell" : workspace ? "Agent" : "Orchestrator"}</b>
+              <b>{normal ? "NORMAL" : command ? "Commands" : jump ? "Jump" : mode === "shell" ? "Shell" : workspace ? "Agent" : "Orchestrator"}</b>
             </span>
             {normal ? (
               <span fg={theme.muted}> · i to type · ? for help</span>
-            ) : jump ? (
+            ) : command || jump ? (
               <span fg={theme.muted}> · type to filter, esc to close</span>
             ) : (
               <span>

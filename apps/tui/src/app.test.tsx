@@ -45,7 +45,7 @@ test("slash menu opens and fits the frame", async () => {
   const f = await t.frame();
   expect(f).toContain("/help");
   expect(f.trimEnd().split("\n").length).toBeLessThanOrEqual(ROWS);
-  expect(f).toContain("Orchestrator");
+  expect(f).toContain("Commands"); // "/" opens the top-level command overlay
   t.done();
 });
 
@@ -213,7 +213,7 @@ test("selecting /login from the menu allows typing the sub-option filter", async
   await t.frame();
   await t.mockInput.typeText("codex"); // must append at the end, not at position 0
   const f = await t.frame();
-  expect(f).toContain("/login codex");
+  expect(f).toContain("login codex"); // overlay filter carries the picked prefix
   expect(f).toContain("openai-codex");
   t.done();
 });

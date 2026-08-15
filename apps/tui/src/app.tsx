@@ -63,6 +63,13 @@ export function App({
   // environments are state: /move re-homes a workspace into another one
   const [envs, setEnvs] = useState(MOCK_ENVIRONMENTS);
   const [palette, setPalette] = useState(false);
+  // "/" command overlay (NORMAL mode): filter + pick slash commands top-level
+  const [cmdMode, setCmdMode] = useState(false);
+  const openCmd = (prefill = "") => {
+    setCmdMode(true);
+    setHistIdx(null);
+    setInput(prefill);
+  };
   const [login, setLogin] = useState<{ provider: string; type: "oauth" | "api_key" } | null>(null);
   // provider id → auth status, resolved once on startup
   const [auth, setAuth] = useState<Map<string, { ok: boolean; envKey?: string }>>(new Map());
@@ -125,7 +132,12 @@ export function App({
       setInput("");
       return;
     }
-    const menuOpen = palette || matchCommands(input).length > 0;
+    if (cmdMode && key.name === "escape") {
+      setCmdMode(false);
+      setInput("");
+      return;
+    }
+    const menuOpen = palette || cmdMode;
     // Ctrl+P: jump mode on the input (searchable, menu above the card)
     if (key.ctrl && key.name === "p") {
       setInput("");
@@ -168,7 +180,7 @@ export function App({
           ],
           escapeId: "cancel",
         }).then((id) => {
-          if (id === "new") setInput("/workspace new ");
+          if (id === "new") openCmd("workspace new ");
           if (id === "clone-env") cloneEnvironment();
           if (id === "close") closeTab();
         });
@@ -256,13 +268,9 @@ export function App({
     }
 
     // ---- NORMAL mode: single letters are commands (no modifiers, tmux-safe) ----
-    if (keyMode === "normal" && !palette && !key.ctrl && !key.meta && !key.option) {
+    if (keyMode === "normal" && !palette && !cmdMode && !key.ctrl && !key.meta && !key.option) {
       if (key.name === "i") return setKeyMode("insert");
-      if (key.sequence === "/") {
-        setKeyMode("insert");
-        setInput("/");
-        return;
-      }
+      if (key.sequence === "/") return openCmd();
       if (key.sequence === "!") {
         if (focus > 0) {
           setMode("shell");
@@ -858,7 +866,7 @@ export function App({
       if (rest.startsWith("new")) {
         const name = rest.slice(3).trim();
         if (name) newWorkspace(name);
-        else setInput("/workspace new ");
+        else openCmd("workspace new ");
         return;
       }
       if (rest === "clone") {
@@ -866,13 +874,13 @@ export function App({
         else append(activeKey, { kind: "info", text: "enter a workspace first — /workspace clone copies the current one" });
         return;
       }
-      setInput("/workspace ");
+      openCmd("workspace ");
       return;
     }
     if (trimmed === "/env clone") return cloneEnvironment();
     if (trimmed === "/env close") return closeTab();
     if (trimmed === "/env") {
-      setInput("/env ");
+      openCmd("env ");
       return;
     }
     if (trimmed.startsWith("/settings ")) {
@@ -883,9 +891,9 @@ export function App({
       }
       return;
     }
-    // bare option-commands: open their menu instead of sending to the agent
+    // bare option-commands: reopen the command overlay with the prefix
     if (["/model", "/theme", "/login", "/settings"].includes(trimmed)) {
-      setInput(`${trimmed} `);
+      openCmd(`${trimmed.slice(1)} `);
       return;
     }
 
@@ -999,11 +1007,12 @@ export function App({
         label: it.label,
         hint: it.hint ? `${it.group} · ${it.hint}` : it.group,
       }));
-    return input.startsWith("/") ? menuItems(input, menuCtx) : [];
-  }, [palette, jumpMatches, input, menuCtx]);
+    if (cmdMode) return menuItems(input.startsWith("/") ? input : `/${input}`, menuCtx);
+    return [];
+  }, [palette, cmdMode, jumpMatches, input, menuCtx]);
   const modalOpen = login !== null || asks.length > 0;
   // typing reaches the input only in INSERT (jump mode always types the filter)
-  const inputLive = !modalOpen && (keyMode === "insert" || palette);
+  const inputLive = !modalOpen && (keyMode === "insert" || palette || cmdMode);
 
   return (
     // pinned to the terminal size: without it the tree grows with content
@@ -1038,7 +1047,7 @@ export function App({
             </box>
           ) : (
             <Transcript
-              normalScroll={keyMode === "normal" && !palette}
+              normalScroll={keyMode === "normal" && !palette && !cmdMode}
               entries={
                 prefs.thinking === "hide"
                   ? session.entries.filter((e) => e.kind !== "thinking")
@@ -1076,8 +1085,17 @@ export function App({
             <Prompt
               value={input}
               onChange={changeInput}
-              onSubmit={submit}
+              onSubmit={
+                cmdMode
+                  ? (text) => {
+                      setCmdMode(false);
+                      setInput("");
+                      submit(text.startsWith("/") ? text : `/${text}`);
+                    }
+                  : submit
+              }
               jump={palette}
+              command={cmdMode}
               onPick={
                 palette
                   ? (insert) => {
@@ -1085,19 +1103,30 @@ export function App({
                       setPalette(false);
                       setInput("");
                     }
-                  : undefined
+                  : cmdMode
+                    ? (insert) => {
+                        if (insert.endsWith(" ")) {
+                          // command with options: stay in the overlay, filter them
+                          setInput(insert.slice(1));
+                          return;
+                        }
+                        setCmdMode(false);
+                        setInput("");
+                        submit(insert);
+                      }
+                    : undefined
               }
-              placeholder={palette ? "Jump to…" : session.entries.length === 0 ? placeholders[hint]! : ""}
+              placeholder={palette ? "Jump to…" : cmdMode ? "Type a command…" : session.entries.length === 0 ? placeholders[hint]! : ""}
               mode={mode}
               model={modelLabel(session.model)}
               provider={session.model.provider}
               workspace={focus === 0 ? undefined : workspaces[focus - 1]!.name}
               inputActive={inputLive}
-              normal={keyMode === "normal" && !palette}
+              normal={keyMode === "normal" && !palette && !cmdMode}
               menu={menu}
             />
           <HintBar
-            normal={keyMode === "normal" && !palette}
+            normal={keyMode === "normal" && !palette && !cmdMode}
             busy={busy}
             tokens={session.tokens}
             queued={session.queued}
