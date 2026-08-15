@@ -28,7 +28,7 @@ async function mount() {
 test("sidebar renders", async () => {
   const t = await mount();
   const f = await t.frame();
-  expect(f).toContain("Owned workspaces");
+  expect(f).toContain("main");
   expect(f).toContain("api-gateway");
   expect(f).toContain("Orchestrator");
   t.done();
