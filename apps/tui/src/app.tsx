@@ -6,6 +6,7 @@ import { Prompt } from "./components/Prompt.tsx";
 import { Sidebar } from "./components/Sidebar.tsx";
 import { HintBar } from "./components/HintBar.tsx";
 import { Tabs } from "./components/Tabs.tsx";
+import { Files } from "./components/Files.tsx";
 import { Spinner } from "./components/Spinner.tsx";
 import { menuItems, placeholders } from "./slash.ts";
 import { CURRENT_USER, envLabel, MOCK_ENVIRONMENTS } from "./workspaces.ts";
@@ -63,6 +64,9 @@ export function App({
   // environments are state: /move re-homes a workspace into another one
   const [envs, setEnvs] = useState(MOCK_ENVIRONMENTS);
   const [palette, setPalette] = useState(false);
+  // files view (NORMAL: f) — review surface for the current workspace
+  const [filesOpen, setFilesOpen] = useState(false);
+  const [filesRefresh, setFilesRefresh] = useState(0);
   // "/" command overlay (NORMAL mode): filter + pick slash commands top-level
   const [cmdMode, setCmdMode] = useState(false);
   const openCmd = (prefill = "") => {
@@ -126,7 +130,7 @@ export function App({
 
   useKeyboard((key) => {
     if (key.ctrl && key.name === "c") return exit();
-    if (login || asks.length > 0) return; // modal owns the keyboard
+    if (login || asks.length > 0 || filesOpen) return; // modal / files view owns the keyboard
     if (palette && key.name === "escape") {
       setPalette(false);
       setInput("");
@@ -242,6 +246,11 @@ export function App({
     if (keyMode === "normal" && !palette && !cmdMode && !key.ctrl && !key.meta && !key.option) {
       if (key.name === "i") return setKeyMode("insert");
       if (key.sequence === "/") return openCmd();
+      if (key.name === "f") {
+        if (focus > 0) setFilesOpen(true);
+        else append(activeKey, { kind: "info", text: "enter a workspace first — f browses its files and diffs" });
+        return;
+      }
       if (key.sequence === "!") {
         if (focus > 0) {
           setMode("shell");
@@ -380,6 +389,7 @@ export function App({
         break;
       }
       case "tool_execution_end": {
+        if (event.toolName === "edit" || event.toolName === "write") setFilesRefresh((n) => n + 1);
         const result = (event as any).result;
         const text =
           typeof result === "string"
@@ -494,6 +504,7 @@ export function App({
         "  j k         workspace ring       h l  environments",
         "  1-9 · 0     workspace N · main   p    jump anywhere",
         "  a           actions              m    move workspace",
+        "  f           files & diffs        r    (in files) rescan",
         "  u d         scroll               !    shell (in a workspace)",
         "  esc         interrupt the agent  ?    this help",
         "",
@@ -778,6 +789,11 @@ export function App({
       });
     }
     if (trimmed === "/help") return openHelp();
+    if (trimmed === "/files") {
+      if (focus > 0) setFilesOpen(true);
+      else append(activeKey, { kind: "info", text: "enter a workspace first — /files browses its files and diffs" });
+      return;
+    }
     if (trimmed.startsWith("/theme ")) {
       const name = trimmed.slice(7).trim();
       setTheme(name);
@@ -1015,6 +1031,13 @@ export function App({
                 }}
               />
             </box>
+          ) : filesOpen && focus > 0 ? (
+            <Files
+              root={process.cwd()}
+              workspace={workspaces[focus - 1]!.name}
+              refreshKey={filesRefresh}
+              onClose={() => setFilesOpen(false)}
+            />
           ) : (
             <Transcript
               keys={
@@ -1033,6 +1056,7 @@ export function App({
           )}
           {/* prompt block, opencode structure: card + strip + footer row stack
               tight; question/permission panels replace the whole block */}
+          {!filesOpen && (
           <box flexDirection="column" flexShrink={0}>
           {busy && asks.length === 0 && (
             <box paddingLeft={1} marginBottom={1} flexDirection="row">
@@ -1111,6 +1135,7 @@ export function App({
           </>
           )}
           </box>
+          )}
         </box>
         {prefs.sidebar === "show" && (
         <Sidebar

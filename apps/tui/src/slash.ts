@@ -12,6 +12,7 @@ export const commands: SlashCommand[] = [
   { name: "/model", description: "Set this session's model", hasOptions: true },
   { name: "/theme", description: "Switch theme", hasOptions: true },
   { name: "/login", description: "Log in to a provider", hasOptions: true },
+  { name: "/files", description: "Browse workspace files and diffs" },
   { name: "/attach", description: "Attach this workspace to an environment", hasOptions: true },
   { name: "/intercept", description: "Intercept a service into this workspace", hasOptions: true },
   { name: "/release", description: "Release this workspace's interception" },

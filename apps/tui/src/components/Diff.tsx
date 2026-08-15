@@ -7,8 +7,8 @@ const MAX_LINES = 20;
  * Unified-diff hunk: line-number gutter, +/- signs, added/removed rows on
  * tinted backgrounds (Claude Code's edit rendering).
  */
-export function DiffView({ diff }: { diff: FileDiff }) {
-  const shown = diff.lines.slice(0, MAX_LINES);
+export function DiffView({ diff, maxLines = MAX_LINES }: { diff: FileDiff; maxLines?: number }) {
+  const shown = diff.lines.slice(0, maxLines);
   const hidden = diff.lines.length - shown.length;
   return (
     <box flexDirection="column">
