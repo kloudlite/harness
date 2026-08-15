@@ -201,8 +201,9 @@ export function App({
     };
     if (key.ctrl && key.name === "h") return tabMove(-1);
     if (key.ctrl && key.name === "l") return tabMove(1);
-    // Ctrl+E: attach picker for the current workspace (choose the environment)
-    if (key.ctrl && key.name === "e") {
+    // Ctrl+M (and Ctrl+E): popup selector to move the current workspace to
+    // another environment
+    if (key.ctrl && (key.name === "m" || key.name === "e")) {
       if (focus > 0) askAttach();
       return;
     }

@@ -72,7 +72,9 @@ test("tab cycles focus, shift-tab cycles back", async () => {
   const t = await mount();
   t.mockInput.pressKey("\t"); // main → first workspace
   expect(await t.frame()).toContain("main › api-gateway");
-  t.mockInput.pressKey("[Z"); // shift-tab → previous workspace (wraps)
+  t.mockInput.pressKey("[Z"); // shift-tab → back to main (in the ring)
+  expect(await t.frame()).not.toContain("main ›");
+  t.mockInput.pressKey("[Z"); // again → wraps to the last workspace
   expect(await t.frame()).toContain("main › infra-iac");
   t.done();
 });

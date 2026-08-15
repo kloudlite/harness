@@ -40,7 +40,7 @@ export function HintBar({
         )}
         {inWorkspace && (
           <text fg={theme.fg}>
-            ^e <span fg={theme.muted}>attach</span>
+            ^m <span fg={theme.muted}>move</span>
           </text>
         )}
         <text fg={theme.fg}>
