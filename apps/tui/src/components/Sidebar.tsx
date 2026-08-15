@@ -56,22 +56,17 @@ export function Sidebar({
       {/* the hierarchy: env › main › your workspaces, current level marked */}
       <box flexDirection="column">
         <text>
+          {envOwner ? <span fg={theme.muted}>{envOwner}/</span> : ""}
           <span fg={focus === 0 ? theme.accent : theme.fg}><b>{envName}</b></span>
           {focus === 0 ? <span fg={theme.muted}> ‹ you are here</span> : ""}
         </text>
-        {envOwner && (
-          <text fg={theme.muted}>owned by <span fg={theme.accent}>{envOwner}</span></text>
-        )}
-        {workspaces.filter((w) => w.owner === CURRENT_USER).length === 0 && (
-          <text fg={theme.muted} attributes={TextAttributes.DIM}>{"└ "}no workspaces — ^a to create one</text>
+        {workspaces.length === 0 && (
+          <text fg={theme.muted} attributes={TextAttributes.DIM}>{"└─ "}none attached — a to create one</text>
         )}
         {workspaces.map((w, i) => {
-          if (w.owner !== CURRENT_USER) return null;
-          const ownIdx = workspaces
-            .map((x, j) => (x.owner === CURRENT_USER ? j : -1))
-            .filter((j) => j >= 0);
-          const isLast = i === ownIdx[ownIdx.length - 1];
-          const active = focus === i + 1;
+          const isLast = i === workspaces.length - 1;
+          const mine = w.owner === CURRENT_USER;
+          const active = mine && focus === i + 1;
           return (
             <text key={w.id}>
               <span fg={theme.muted}>{isLast ? "└─ " : "├─ "}</span>
@@ -82,28 +77,17 @@ export function Sidebar({
               >
                 {w.name}
               </span>
+              {!mine ? (
+                <span fg={theme.muted} attributes={TextAttributes.DIM}> · {w.owner}</span>
+              ) : (
+                ""
+              )}
               {running[i] ? <span fg={theme.warning}> ⋯</span> : ""}
               {active ? <span fg={theme.muted}> ‹ here</span> : ""}
             </text>
           );
         })}
       </box>
-      {workspaces.some((w) => w.owner !== CURRENT_USER) && (
-        <Section title="Other workspaces">
-          {workspaces.map((w) =>
-            w.owner === CURRENT_USER ? null : (
-              <text key={w.id}>
-                <span fg={dot(w.status)}>•</span>{" "}
-                <span fg={theme.muted}>{w.name}</span>{" "}
-                <span fg={theme.muted} attributes={TextAttributes.DIM}>
-                  {w.status} · {w.owner}
-                </span>
-              </text>
-            ),
-          )}
-        </Section>
-      )}
-
       <Section title="Services">
         {services.map((svc) => (
           <text key={svc.name}>
