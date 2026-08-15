@@ -55,28 +55,22 @@ export function Sidebar({
       <box flexDirection="column" flexShrink={0} gap={1} paddingRight={1}>
       {/* the hierarchy: env › main › your workspaces, current level marked */}
       <box flexDirection="column">
-        <text fg={theme.fg}><b>{envName}</b></text>
+        <text>
+          <span fg={focus === 0 ? theme.accent : theme.fg}><b>{envName}</b></span>
+          {focus === 0 ? <span fg={theme.muted}> ‹ you are here</span> : ""}
+        </text>
         {envOwner && (
           <text fg={theme.muted}>owned by <span fg={theme.accent}>{envOwner}</span></text>
         )}
-        <text>
-          <span fg={theme.muted}>└ </span>
-          {focus === 0 ? (
-            <span fg={theme.accent}><b>main</b></span>
-          ) : (
-            <span fg={theme.muted}>main</span>
-          )}
-          {focus === 0 ? <span fg={theme.muted}> ‹ you are here</span> : ""}
-        </text>
         {workspaces.filter((w) => w.owner === CURRENT_USER).length === 0 && (
-          <text fg={theme.muted} attributes={TextAttributes.DIM}>{"   └ "}no workspaces — ^a to create one</text>
+          <text fg={theme.muted} attributes={TextAttributes.DIM}>{"└ "}no workspaces — ^a to create one</text>
         )}
         {workspaces.map((w, i) => {
           if (w.owner !== CURRENT_USER) return null;
           const active = focus === i + 1;
           return (
             <text key={w.id}>
-              <span fg={theme.muted}>{"   └ "}</span>
+              <span fg={theme.muted}>{"└ "}</span>
               <span fg={dot(w.status)}>•</span>{" "}
               <span
                 fg={active ? theme.accent : theme.muted}
