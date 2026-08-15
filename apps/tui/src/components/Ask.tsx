@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useKeyboard } from "@opentui/react";
+import { TextAttributes } from "@opentui/core";
 import { theme } from "../theme.ts";
+import { SPECIAL } from "./Input.tsx";
 import { SplitBorder } from "../ui/border.ts";
 import { DiffView } from "./Diff.tsx";
 import type { FileDiff } from "../diff.ts";
@@ -33,18 +35,40 @@ const LIST_MAX = 8;
  */
 export function AskPanel({ ask }: { ask: Ask }) {
   const [sel, setSel] = useState(0);
-  const n = ask.options.length;
+  const [query, setQuery] = useState("");
 
   const list = ask.layout === "list";
+  // list layout is searchable: typing filters the options
+  const options =
+    list && query
+      ? ask.options.filter((o) => o.label.toLowerCase().includes(query.toLowerCase()))
+      : ask.options;
+  const n = options.length;
+  const cur = Math.min(sel, Math.max(0, n - 1));
 
   useKeyboard((key) => {
     const prev = list ? key.name === "up" : key.name === "left" || (key.name === "tab" && key.shift);
     const next = list ? key.name === "down" : key.name === "right" || key.name === "tab";
-    if (prev) return setSel((i) => (i - 1 + n) % n);
-    if (next) return setSel((i) => (i + 1) % n);
-    if (key.name === "return") return ask.resolve(ask.options[sel]!.id);
+    if (prev) return setSel((i) => (i - 1 + Math.max(1, n)) % Math.max(1, n));
+    if (next) return setSel((i) => (i + 1) % Math.max(1, n));
+    if (key.name === "return") {
+      if (options[cur]) ask.resolve(options[cur].id);
+      return;
+    }
     if (key.name === "escape")
-      return ask.resolve(ask.escapeId ?? ask.options[n - 1]!.id);
+      return ask.resolve(ask.escapeId ?? ask.options[ask.options.length - 1]!.id);
+    if (!list || key.ctrl || key.meta || key.option) return;
+    if (key.name === "backspace" || key.name === "delete") {
+      setQuery((q) => q.slice(0, -1));
+      setSel(0);
+      return;
+    }
+    if (SPECIAL.has(key.name)) return;
+    const text = key.sequence;
+    if (text && !text.startsWith("\x1b") && text >= " ") {
+      setQuery((q) => q + text);
+      setSel(0);
+    }
   });
 
   return (
@@ -88,12 +112,19 @@ export function AskPanel({ ask }: { ask: Ask }) {
         )}
         {list && (
           <box flexDirection="column" paddingLeft={1}>
+            <text>
+              <span fg={theme.accent}>› </span>
+              <span fg={theme.fg}>{query}</span>
+              <span attributes={TextAttributes.INVERSE}> </span>
+              {query === "" && <span fg={theme.placeholder}>type to search…</span>}
+            </text>
+            {n === 0 && <text fg={theme.muted}>No matches</text>}
             {(() => {
               // scroll window that follows the selection
-              const start = Math.min(Math.max(0, sel - LIST_MAX + 1), Math.max(0, n - LIST_MAX));
-              return ask.options.slice(start, start + LIST_MAX).map((opt, offset) => {
+              const start = Math.min(Math.max(0, cur - LIST_MAX + 1), Math.max(0, n - LIST_MAX));
+              return options.slice(start, start + LIST_MAX).map((opt, offset) => {
                 const i = start + offset;
-                const active = i === sel;
+                const active = i === cur;
                 return (
                   <box
                     key={opt.id}
@@ -111,7 +142,7 @@ export function AskPanel({ ask }: { ask: Ask }) {
             })()}
             {n > LIST_MAX && (
               <box paddingLeft={1}>
-                <text fg={theme.muted}>{sel + 1}/{n}</text>
+                <text fg={theme.muted}>{cur + 1}/{n}</text>
               </box>
             )}
           </box>
