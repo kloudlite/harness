@@ -9,7 +9,7 @@ export function HintBar({
   queued,
   active,
   inWorkspace,
-  nav,
+  normal,
 }: {
   busy: boolean;
   tokens: number;
@@ -17,7 +17,7 @@ export function HintBar({
   /** Context path: "main" or "main › <workspace>" */
   active: string;
   inWorkspace: boolean;
-  nav: boolean;
+  normal: boolean;
 }) {
   return (
     <box flexDirection="row" flexShrink={0} justifyContent="space-between">
@@ -35,7 +35,7 @@ export function HintBar({
       </box>
       <box flexDirection="row" gap={2}>
         <text fg={theme.muted}>{tokens.toLocaleString()} tok</text>
-        {nav ? (
+        {normal ? (
           <>
             <text fg={theme.fg}>i <span fg={theme.muted}>type</span></text>
             <text fg={theme.fg}>j k <span fg={theme.muted}>workspaces</span></text>
@@ -51,7 +51,7 @@ export function HintBar({
               <text fg={theme.fg}>! <span fg={theme.muted}>shell</span></text>
             )}
             <text fg={theme.fg}>enter <span fg={theme.muted}>send</span></text>
-            <text fg={theme.fg}>esc <span fg={theme.muted}>nav mode</span></text>
+            <text fg={theme.fg}>esc <span fg={theme.muted}>normal mode</span></text>
             <text fg={theme.fg}>/ <span fg={theme.muted}>commands</span></text>
           </>
         )}

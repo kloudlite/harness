@@ -52,8 +52,8 @@ export function App({
   const [sessions, setSessions] = useState<SessionMap>({});
   const [input, setInput] = useState("");
   const [mode, setMode] = useState<"agent" | "shell">("agent");
-  // vim-style modal keyboard: NAV (default) = letter commands, INSERT = typing
-  const [keyMode, setKeyMode] = useState<"nav" | "insert">("nav");
+  // vim-style modal keyboard: NORMAL (default) = letter commands, INSERT = typing
+  const [keyMode, setKeyMode] = useState<"normal" | "insert">("normal");
   const [hint, setHint] = useState(0);
   // 0 = main context (orchestrator); 1..N = inside workspaces[focus - 1]
   const [focus, setFocus] = useState(0);
@@ -133,7 +133,7 @@ export function App({
       return setPalette((p) => !p);
     }
     // Ctrl+A: contextual actions for the current selection
-    if ((key.ctrl && key.name === "a") || (keyMode === "nav" && !palette && key.name === "a" && !key.ctrl)) {
+    if ((key.ctrl && key.name === "a") || (keyMode === "normal" && !palette && key.name === "a" && !key.ctrl)) {
       if (focus > 0) {
         const ws = workspaces[focus - 1]!;
         const intercepting = environment.services.some((s) => s.interceptedBy === ws.name);
@@ -250,13 +250,13 @@ export function App({
       return setFocus(0);
     }
     if (key.name === "escape") {
-      if (keyMode === "insert") return setKeyMode("nav"); // vim: esc leaves typing
-      if (busy) return interrupt(activeKey); // esc in NAV interrupts
+      if (keyMode === "insert") return setKeyMode("normal"); // vim: esc → normal mode
+      if (busy) return interrupt(activeKey); // esc in NORMAL interrupts
       return;
     }
 
-    // ---- NAV mode: single letters are commands (no modifiers, tmux-safe) ----
-    if (keyMode === "nav" && !palette && !key.ctrl && !key.meta && !key.option) {
+    // ---- NORMAL mode: single letters are commands (no modifiers, tmux-safe) ----
+    if (keyMode === "normal" && !palette && !key.ctrl && !key.meta && !key.option) {
       if (key.name === "i") return setKeyMode("insert");
       if (key.sequence === "/") {
         setKeyMode("insert");
@@ -293,7 +293,7 @@ export function App({
         return;
       }
       if (key.sequence === "?") return submit("/help");
-      return; // unbound NAV keys do nothing (never leak into the input)
+      return; // unbound NORMAL-mode keys do nothing (never leak into the input)
     }
   });
 
@@ -1038,7 +1038,7 @@ export function App({
             </box>
           ) : (
             <Transcript
-              navScroll={keyMode === "nav" && !palette}
+              normalScroll={keyMode === "normal" && !palette}
               entries={
                 prefs.thinking === "hide"
                   ? session.entries.filter((e) => e.kind !== "thinking")
@@ -1093,11 +1093,11 @@ export function App({
               provider={session.model.provider}
               workspace={focus === 0 ? undefined : workspaces[focus - 1]!.name}
               inputActive={inputLive}
-              nav={keyMode === "nav" && !palette}
+              normal={keyMode === "normal" && !palette}
               menu={menu}
             />
           <HintBar
-            nav={keyMode === "nav" && !palette}
+            normal={keyMode === "normal" && !palette}
             busy={busy}
             tokens={session.tokens}
             queued={session.queued}

@@ -23,7 +23,7 @@ async function mount() {
     return setup.captureCharFrame();
   };
   const insert = async () => {
-    setup.mockInput.pressKey("i"); // NAV → INSERT
+    setup.mockInput.pressKey("i"); // NORMAL → INSERT
     await tick();
     await setup.renderOnce();
   };
@@ -35,7 +35,7 @@ test("sidebar renders", async () => {
   const f = await t.frame();
   expect(f).toContain("main");
   expect(f).toContain("api-gateway");
-  expect(f).toContain("NAV"); // modal keyboard starts in NAV
+  expect(f).toContain("NORMAL"); // modal keyboard starts in NORMAL
   t.done();
 });
 
@@ -96,7 +96,7 @@ test("ctrl+j / ctrl+b cycle focus without polluting the input", async () => {
   t.done();
 });
 
-test("in INSERT, plain j and k type; in NAV they navigate", async () => {
+test("in INSERT, plain j and k type; in NORMAL they navigate", async () => {
   const t = await mount();
   await t.insert();
   await t.mockInput.typeText("jk");
@@ -106,7 +106,7 @@ test("in INSERT, plain j and k type; in NAV they navigate", async () => {
   t.done();
 });
 
-test("NAV mode: j enters a workspace without typing", async () => {
+test("NORMAL mode: j enters a workspace without typing", async () => {
   const t = await mount();
   t.mockInput.pressKey("j");
   const f = await t.frame();
