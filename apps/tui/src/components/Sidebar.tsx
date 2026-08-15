@@ -53,11 +53,29 @@ export function Sidebar({
     >
       <scrollbox flexGrow={1} flexBasis={0} flexShrink={1} scrollbarOptions={{ visible: false }}>
       <box flexDirection="column" flexShrink={0} gap={1} paddingRight={1}>
-      {envOwner && (
-        <text fg={theme.muted}>
-          owned by <span fg={theme.accent}>{envOwner}</span>
+      {/* where you are: env › main › workspace, current level highlighted */}
+      <box flexDirection="column">
+        <text fg={theme.fg}><b>{envName}</b></text>
+        {envOwner && (
+          <text fg={theme.muted}>owned by <span fg={theme.accent}>{envOwner}</span></text>
+        )}
+        <text>
+          <span fg={theme.muted}>└ </span>
+          {focus === 0 ? (
+            <span fg={theme.accent}><b>main</b></span>
+          ) : (
+            <span fg={theme.muted}>main</span>
+          )}
+          {focus === 0 ? <span fg={theme.muted}> ‹ you are here</span> : ""}
         </text>
-      )}
+        {ws && (
+          <text>
+            <span fg={theme.muted}>{"   └ "}</span>
+            <span fg={theme.accent}><b>{ws.name}</b></span>
+            <span fg={theme.muted}> ‹ you are here</span>
+          </text>
+        )}
+      </box>
       <Section title="Owned workspaces">
         {workspaces.filter((w) => w.owner === CURRENT_USER).length === 0 && (
           <text fg={theme.muted} attributes={TextAttributes.DIM}>none — ^a to create one</text>
