@@ -179,13 +179,14 @@ export function App({
     const own = workspaces
       .map((w, i) => (w.owner === CURRENT_USER ? i + 1 : -1))
       .filter((i) => i > 0);
-    // cycle among your workspaces; entering from main lands on first/last
+    // cycle through the whole hierarchy: main, then your workspaces
+    const ring = [0, ...own];
     const cycle = (delta: number) =>
       setFocus((f) => {
-        if (own.length === 0) return 0;
-        const pos = own.indexOf(f);
-        if (pos === -1) return delta > 0 ? own[0]! : own[own.length - 1]!;
-        return own[(pos + delta + own.length) % own.length]!;
+        const pos = Math.max(0, ring.indexOf(f));
+        const next = ring[(pos + delta + ring.length) % ring.length]!;
+        if (next === 0) setMode("agent"); // shell only exists inside a workspace
+        return next;
       });
     // Ctrl+J/K cycle workspaces (legacy terminals report ctrl+j as a bare linefeed)
     if ((key.ctrl && key.name === "j") || key.name === "linefeed") return cycle(1);
