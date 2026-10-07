@@ -53,6 +53,8 @@ bun test -t "sidebar renders"  # single test by name
 
 **Provider login** (`apps/tui/src/components/Login.tsx`). One generic component drives every provider — pi owns the flow, we only render what it emits, so all 40 providers share these 170 lines and none of them is special-cased. It covers pi's four `AuthPrompt` types (`text`, `secret` masked, `select` with arrow keys, `manual_code`) and all four `AuthEvent` types (`info` with its optional `links`, `auth_url` — printed *and* opened with `open`/`xdg-open`, `device_code`, `progress`). **Both abort signals matter**: the flow-level one from `AuthInteraction`, and `AuthPrompt.signal`, which pi fires when something else answers a step — a `manual_code` prompt raced against the OAuth callback server. Without the per-prompt listener the user keeps typing into a prompt that already resolved.
 
+**Provider env vars** (`envKeysFor` in `packages/agent/src/index.ts`). pi exports no provider-to-env-var mapping, but every provider resolves credentials through `ctx.env(name)` — so passing a context that records the names and returns nothing reports exactly what that provider reads, in preference order. Don't go back to guessing `${ID}_API_KEY`: it was wrong for 13 of 40 providers (Bedrock takes AWS credentials, Hugging Face `HF_TOKEN`, github-copilot `COPILOT_GITHUB_TOKEN`), which strands a user at the moment they are already stuck. An OAuth-only provider returns `[]`, and the model picker shows no hint for it.
+
 ## Terminal keyboard gotcha
 
 The user runs WezTerm with the kitty protocol off. opentui's native setup writes `CSI >4;1m` (modifyOtherKeys mode 1), which keeps ctrl+h/ctrl+j as legacy bytes indistinguishable from Backspace. Both `cli.tsx` and `server.tsx` therefore re-assert mode 2 *after* startup — `cli.tsx` via `writeSync(1, ...)` because opentui patches and buffers `process.stdout`. Don't "clean up" those writes. Verify key fixes by capturing raw bytes (`tmux pipe-pane`).
@@ -64,4 +66,3 @@ The user runs WezTerm with the kitty protocol off. opentui's native setup writes
 ## Known ceilings (marked `ponytail:` in source)
 
 - SSH server accepts any credentials (LAN dev tool); theme/settings are process-global, so concurrent SSH sessions share them.
-- Provider env-var names are convention-derived, not from pi's real mapping.
