@@ -42,7 +42,7 @@ test("schema comes from the pod, only for fixed names, token is sent", async () 
 test("pod not ready falls back to the permissive schema and call says not ready", async () => {
   handler = () => j({ error: "workspace not ready" }, 409);
   const t = await podTools("w1");
-  expect(t.length).toBe(23);
+  expect(t.length).toBe(16);
   expect(t[0]!.inputSchema).toEqual({ type: "object", additionalProperties: true });
   await expect(t[0]!.run({})).rejects.toThrow("workspace not ready");
 });
@@ -117,7 +117,7 @@ test("anyPodTools: schemas from the sample, each call reaches the named workspac
     : u.endsWith(":7788/tools") ? j({ tools: [{ name: "read", description: "Read a file", schema: { type: "object", properties: { path: {} }, required: ["path"] } }] })
     : j({ at: u });
   const t = await anyPodTools("w1");
-  expect(t.length).toBe(23);
+  expect(t.length).toBe(16);
   const read = t.find((x) => x.name === "read")!;
   expect(read.inputSchema).toEqual({ type: "object", properties: { workspace: { type: "string", description: "Workspace id" }, path: {} }, required: ["workspace", "path"] });
   expect(read.description).toBe("Read a file Runs in the workspace named by `workspace`.");

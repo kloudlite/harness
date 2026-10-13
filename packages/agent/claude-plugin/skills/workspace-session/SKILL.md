@@ -29,18 +29,12 @@ The `kloudlite` skill gives the concepts that all sessions use.
 
 A tool with the mark **card** shows a permission card to the person before it runs. Refer to "Permission cards" in the `kloudlite` skill. Code tools work in `~/workspace`. To work in a worktree of the workspace, give the `tree` parameter.
 
-**Find code.** Use graft first. It answers from the code graph. Thus you usually do not have to read files.
+**Find code.** Search first, then read only what the search found.
 
 | Tool | Use it to |
 |---|---|
-| `graft_find_code` | Ask in plain words where an item is or how it works. This usually gives the full answer. |
-| `graft_repo_map` | Get a map of a repo that you do not know. |
-| `graft_file_api` | See the signatures of a file without its function bodies. |
-| `graft_trace_calls` | Find the callers and callees of a symbol before you change it. |
-| `graft_find_all` | Search the graph with a regex, to find each use of a name. |
-| `graft_blast` | See what a diff can break, before you commit or push it. |
-| `graft_build` | Build the graph again if its answers are old, for example after `git pull`. Edits with `write` and `edit` update the graph automatically. |
-| `glob`, `grep` | Find files by name, or find text that graft does not index (configs, docs). The two tools do not look at gitignored files. |
+| `glob` | Find files by name. Use it to get a map of a repo that you do not know. |
+| `grep` | Find text with a regex: where a name is defined, each use of it, its callers. Use `mode: "files"` to get only the file names. The two tools do not look at gitignored files. |
 
 **Read and change files**
 
@@ -230,10 +224,10 @@ Main does parallel work in clones. The ask of main tells you: "You are a clone o
 
 Main asks: `[from main session] add a comments API`.
 
-1. Use `graft_repo_map` and `graft_find_code` to learn the repo. Decide the design.
+1. Use `glob` and `grep` to learn the repo, and `read` the files they find. Decide the design.
 2. Make the change.
 3. Run the tests from `AGENTS.md` with `exec`.
-4. If the change is large, examine it with `graft_blast`.
+4. If the change is large, use `grep` to find each caller of what you changed, and check them.
 5. Commit. Then push your working branch to origin with `git push` through `exec`.
 6. Send `main_tell { kind: "done", text: "comments API: POST /api/comments, payload {...}; branch comments at 3f2a1c9" }`.
 7. End the turn.

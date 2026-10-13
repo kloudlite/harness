@@ -10,7 +10,6 @@ export const POD_TOOLS = [
   "read", "write", "edit", "patch", "glob", "grep", "exec",
   "process_list", "process_output", "process_write", "process_kill",
   "watch", "watch_poll", "watch_stop",
-  "graft_find_code", "graft_find_all", "graft_trace_calls", "graft_file_api", "graft_repo_map", "graft_build", "graft_blast",
   "container_build", "container_push",
 ];
 

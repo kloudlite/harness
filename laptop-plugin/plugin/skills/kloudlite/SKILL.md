@@ -138,7 +138,6 @@ Each role has a different set of tools. Its role text gives its tools. If a tool
 |---|---|
 | Code | `read`, `write`, `edit`, `patch`, `glob`, `grep` |
 | Run | `exec` (with `detach: true` for a process that continues), `process_list`, `process_output`, `process_write`, `process_kill`, `watch`, `watch_poll`, `watch_stop` |
-| Graph (use it first to find code) | `graft_find_code`, `graft_find_all`, `graft_trace_calls`, `graft_file_api`, `graft_repo_map`, `graft_build`, `graft_blast` |
 | Build | `container_build`, `container_push`, `builder_status` |
 | Workspaces | `workspace_list`, `workspace_get`, `workspace_create`, `workspace_clone`, `workspace_restore`, `workspace_start`, `workspace_stop`, `workspace_delete`, `workspace_push`, `worktree_add`, `worktree_drop` |
 | Packages | `packages_list`, `packages_add`, `packages_remove`, `packages_update` |

@@ -31,8 +31,7 @@ Code tools work in `~/workspace`.
 
 | Tool | Use it to |
 |---|---|
-| `graft_find_code`, `graft_repo_map`, `graft_file_api`, `graft_trace_calls`, `graft_find_all`, `graft_blast`, `graft_build` | Find code and see what a change can break. Use graft first. |
-| `glob`, `grep` | Find files by name, or find text that graft does not index. |
+| `glob`, `grep` | Find files by name, and find code by text: definitions, uses, callers. Search first, then read. |
 | `read`, `edit`, `patch`, `write` | Read and change files. |
 | `exec` | Run a job that ends, for example a build, a test or `git`. |
 | `exec` with `detach: true`, `process_list`, `process_output`, `process_write`, `process_kill` | Start and control a process that continues to run, for example a dev server for a test. Stop each process before you end. |
@@ -47,7 +46,7 @@ You do not have these tools: `subagent`, `main_tell`, `workspace_ask`, `workspac
 ## How to do the task
 
 1. Read the Setup section of `AGENTS.md` in the repo. Install the missing packages that it gives.
-2. Learn the code that the task touches with graft.
+2. Learn the code that the task touches with `glob`, `grep` and `read`.
 3. Make the change.
 4. Run the tests. Use the test command in `AGENTS.md`.
 5. Commit your work on the branch that is checked out. Do not make a new branch.

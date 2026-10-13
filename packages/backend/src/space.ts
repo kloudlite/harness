@@ -26,11 +26,12 @@ type Line = { text: string; err?: true };
 
 /** Every tree's processes, each stamped with its tree. `process_list` answers only the tree it
  * is asked about (one worktree never sees another's), so asking with no tree hid
- * every process started in another worktree. The tree names are `/healthz`'s `graphs` keys: a tree the
- * server has served, which any tree that started a process has been. */
+ * every process started in another worktree. The tree names are `/healthz`'s `trees`: every tree the
+ * server has served, which any tree that started a process has been. A pod from before that field
+ * names them as the keys of `graphs` instead. */
 async function processes(ws: string): Promise<SpaceProcess[]> {
-  const h = await capped(podGet<{ graphs?: Record<string, unknown> }>(ws, "/healthz", POD_CAP_MS));
-  const trees = [...new Set(["main", ...Object.keys(h?.graphs ?? {})])];
+  const h = await capped(podGet<{ trees?: string[]; graphs?: Record<string, unknown> }>(ws, "/healthz", POD_CAP_MS));
+  const trees = [...new Set(["main", ...(h?.trees ?? Object.keys(h?.graphs ?? {}))])];
   const lists = await Promise.all(
     trees.map(async (tree) => {
       // main's failure is the pod's and fails the read (the field is left out); a worktree

@@ -162,7 +162,7 @@ test("a worktree's process is listed with its tree, and its logs are read from t
     if (url.startsWith("http://api/v1/environments")) return json([]);
     if (url.endsWith("/v1/me/environments")) return json([]);
     if (url.endsWith("/v1/workspaces/wc/tools")) return json({ address: "10.0.0.2:7788", token: "T" });
-    if (url.endsWith("/healthz")) return json({ graphs: { main: "ready", x: "ready" } });
+    if (url.endsWith("/healthz")) return json({ trees: ["main", "x"] });
     if (url.endsWith("/tools/process_list")) {
       const body = JSON.parse(init.body);
       return json({ processes: body.tree === "x" ? [{ id: "px", cmd: "go run .", state: "running", exit_code: null, failed: false }] : [] });
