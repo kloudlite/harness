@@ -288,7 +288,15 @@ function basePlatformTools(kind: "main" | "workspace" | "all", wsId?: string, ti
     def(name, description, { [key]: key === "env" ? ENV : WS }, [key], async (a) => api(method, `${base}/${seg(a[key])}${suffix}`));
 
   const main: ToolDef[] = [
-    def("workspace_list", "List the workspaces of the person. You can give one team.", { team: S }, [], async (a) => api("GET", `/v1/workspaces${qs({ team: a.team })}`)),
+    def("workspace_list", "List the workspaces of this session. You can give one team.", { team: S }, [], async (a) => {
+      // A bench serves one session (KL_SESSION): it lists that session's workspaces only, as the
+      // sidebar does (backend/src/space.ts); without it a second session saw the first one's.
+      const path = `/v1/workspaces${qs({ team: a.team })}`;
+      const session = process.env.KL_SESSION;
+      if (!session) return api("GET", path);
+      const ws = await apiJson<any[]>("GET", path);
+      return JSON.stringify(ws.filter((w) => w.session === session && w.id !== process.env.KL_BENCH), null, 2);
+    }),
     def("workspace_get", "Read the state of one workspace. Poll this tool after any lifecycle call. The `state` is `creating`, `ready`, `stopped`, `error` or `deleted`. `ready` means up. A workspace is not `running` at any time. Stop the poll when the state is `error` or `deleted`.", { workspace: WS }, ["workspace"], async (a) => api("GET", `/v1/workspaces/${seg(a.workspace)}`)),
     def("workspace_create", "Create a workspace in a region." + ASYNC, { name: S, region: S, quota_gb: N, image: S, repo: S, branch: S, packages: SL, team: S }, ["name", "region", "quota_gb"], async (a) =>
       api("POST", "/v1/workspaces", strip({ team: a.team, name: a.name, region: a.region, quota_gb: a.quota_gb, image: a.image, repo: a.repo, branch: a.branch, packages: a.packages }))),

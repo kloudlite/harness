@@ -227,3 +227,22 @@ test("env_wait returns once every service is ready, at once on failing, and mark
     Date.now = real;
   }
 });
+
+test("workspace_list keeps only the bench's session when KL_SESSION is set", async () => {
+  const t = platformTools("main");
+  routes["GET /v1/workspaces"] = json([
+    { id: "a", session: "ses-1" },
+    { id: "b", session: "ses-2" },
+    { id: "c" },
+    { id: "bench-x", session: "ses-1" },
+  ]);
+  expect(JSON.parse(await tool(t, "workspace_list").run({}))).toHaveLength(4);
+  process.env.KL_SESSION = "ses-1";
+  process.env.KL_BENCH = "bench-x";
+  try {
+    expect(JSON.parse(await tool(t, "workspace_list").run({})).map((w: any) => w.id)).toEqual(["a"]);
+  } finally {
+    delete process.env.KL_SESSION;
+    delete process.env.KL_BENCH;
+  }
+});
