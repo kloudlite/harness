@@ -9,6 +9,7 @@ import { ensureRunning } from "./ensure.ts";
 import { readFileSync } from "node:fs";
 import type { ToolDef } from "./index.ts";
 import { repoTools } from "./repos.ts";
+import { sessionTools } from "./session.ts";
 
 const UNAVAILABLE = "platform tools unavailable: KL_API_URL / KL_TOOL_TOKEN_FILE not set";
 
@@ -147,7 +148,7 @@ async function load(path: string): Promise<{ doc: any } | { err: string }> {
 
 /** The platform table plus the repo and image tools, for every kind. */
 export function platformTools(kind: "main" | "workspace" | "all", wsId?: string, tickMs = 5000): ToolDef[] {
-  return [...basePlatformTools(kind, wsId, tickMs), ...repoTools()];
+  return [...basePlatformTools(kind, wsId, tickMs), ...repoTools(), ...(kind === "workspace" ? [] : sessionTools())];
 }
 
 /** Sessions polled env_get 24-40 times after each deploy; the loop belongs here, not in the model's turns. */
