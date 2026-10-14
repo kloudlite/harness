@@ -10,13 +10,13 @@ import { readFileSync } from "node:fs";
 import type { ToolDef } from "./index.ts";
 import { repoTools } from "./repos.ts";
 
-const UNAVAILABLE = "platform tools unavailable: KL_API_URL / KL_TOOL_TOKEN_FILE not set";
+const UNAVAILABLE = "platform tools unavailable: KL_API_URL / KL_TOOL_KEY_FILE not set";
 
 type Raw = { unavailable: true } | { unavailable?: false; status: number; text: string; data: any };
 
 async function raw(method: string, path: string, body?: unknown, asText = false): Promise<Raw> {
   const base = process.env.KL_API_URL;
-  const file = process.env.KL_TOOL_TOKEN_FILE;
+  const file = process.env.KL_TOOL_KEY_FILE;
   if (!base || !file) return { unavailable: true };
   const token = readFileSync(file, "utf8").trim();
   const res = await fetch(base.replace(/\/$/, "") + path, {

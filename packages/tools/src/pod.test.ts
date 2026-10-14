@@ -13,7 +13,7 @@ beforeEach(() => {
   const f = join(mkdtempSync(join(tmpdir(), "kl-tok-")), "t");
   writeFileSync(f, "bench");
   process.env.KL_API_URL = "http://api.test";
-  process.env.KL_TOOL_TOKEN_FILE = f;
+  process.env.KL_TOOL_KEY_FILE = f;
   globalThis.fetch = (async (url: string, init: any = {}) => {
     log.push({ url: String(url), auth: init.headers?.authorization ?? null });
     return handler(String(url), init);

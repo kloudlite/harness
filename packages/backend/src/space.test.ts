@@ -24,7 +24,7 @@ test("without KL_API_URL the view is unavailable with a reason, never a throw", 
 test("lists the user's workspaces and the team's environments, reads clone parent and task from the doc, survives a dead pod", async () => {
   const dir = mkdtempSync(join(tmpdir(), "kl-space-"));
   writeFileSync(join(dir, "tok"), "SECRET-TOKEN\n");
-  Object.assign(process.env, { KL_API_URL: "http://api", KL_TOOL_TOKEN_FILE: join(dir, "tok"), KL_OWNER: "me", KL_TEAM: "acme", KL_BENCH: "bench", KL_ENVIRONMENT: "e2" });
+  Object.assign(process.env, { KL_API_URL: "http://api", KL_TOOL_KEY_FILE: join(dir, "tok"), KL_OWNER: "me", KL_TEAM: "acme", KL_BENCH: "bench", KL_ENVIRONMENT: "e2" });
   const urls: string[] = [];
   const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status });
   globalThis.fetch = (async (u: any, init: any) => {
@@ -85,7 +85,7 @@ test("lists the user's workspaces and the team's environments, reads clone paren
 test("a running process is read from the cursor the last answer gave, not from 0", async () => {
   const dir = mkdtempSync(join(tmpdir(), "kl-space-"));
   writeFileSync(join(dir, "tok"), "SECRET-TOKEN\n");
-  Object.assign(process.env, { KL_API_URL: "http://api", KL_TOOL_TOKEN_FILE: join(dir, "tok"), KL_OWNER: "me", KL_TEAM: "acme", KL_BENCH: "bench" });
+  Object.assign(process.env, { KL_API_URL: "http://api", KL_TOOL_KEY_FILE: join(dir, "tok"), KL_OWNER: "me", KL_TEAM: "acme", KL_BENCH: "bench" });
   const json = (v: unknown) => new Response(JSON.stringify(v));
   const reads: any[] = [];
   globalThis.fetch = (async (u: any, init: any) => {
@@ -113,7 +113,7 @@ test("a running process is read from the cursor the last answer gave, not from 0
 test("an exited process never seen running is read once; stderr lines are tagged", async () => {
   const dir = mkdtempSync(join(tmpdir(), "kl-space-"));
   writeFileSync(join(dir, "tok"), "SECRET-TOKEN\n");
-  Object.assign(process.env, { KL_API_URL: "http://api", KL_TOOL_TOKEN_FILE: join(dir, "tok"), KL_OWNER: "me", KL_TEAM: "acme", KL_BENCH: "bench" });
+  Object.assign(process.env, { KL_API_URL: "http://api", KL_TOOL_KEY_FILE: join(dir, "tok"), KL_OWNER: "me", KL_TEAM: "acme", KL_BENCH: "bench" });
   const json = (v: unknown) => new Response(JSON.stringify(v));
   let reads = 0;
   globalThis.fetch = (async (u: any) => {
@@ -142,7 +142,7 @@ test("an exited process never seen running is read once; stderr lines are tagged
 test("a failing list call is unavailable, with the API's text and no token", async () => {
   const dir = mkdtempSync(join(tmpdir(), "kl-space-"));
   writeFileSync(join(dir, "tok"), "SECRET-TOKEN\n");
-  Object.assign(process.env, { KL_API_URL: "http://api", KL_TOOL_TOKEN_FILE: join(dir, "tok") });
+  Object.assign(process.env, { KL_API_URL: "http://api", KL_TOOL_KEY_FILE: join(dir, "tok") });
   globalThis.fetch = (async () => new Response("forbidden", { status: 403 })) as any;
   const v = await new LocalBackend().space();
   expect(v.available).toBe(false);
@@ -152,7 +152,7 @@ test("a failing list call is unavailable, with the API's text and no token", asy
 test("a worktree's process is listed with its tree, and its logs are read from that tree", async () => {
   const dir = mkdtempSync(join(tmpdir(), "kl-space-"));
   writeFileSync(join(dir, "tok"), "SECRET-TOKEN\n");
-  Object.assign(process.env, { KL_API_URL: "http://api", KL_TOOL_TOKEN_FILE: join(dir, "tok"), KL_OWNER: "me", KL_TEAM: "acme", KL_BENCH: "bench" });
+  Object.assign(process.env, { KL_API_URL: "http://api", KL_TOOL_KEY_FILE: join(dir, "tok"), KL_OWNER: "me", KL_TEAM: "acme", KL_BENCH: "bench" });
   const json = (v: unknown) => new Response(JSON.stringify(v));
   const outputs: any[] = [];
   globalThis.fetch = (async (u: any, init: any) => {
@@ -201,7 +201,7 @@ test("foreign restore names no record", () => {
 test("space lists only this session's workspaces and connects its environment", async () => {
   const dir = mkdtempSync(join(tmpdir(), "kl-space-"));
   writeFileSync(join(dir, "tok"), "T\n");
-  Object.assign(process.env, { KL_API_URL: "http://api", KL_TOOL_TOKEN_FILE: join(dir, "tok"), KL_OWNER: "alice", KL_TEAM: "acme", KL_SESSION: "ses-1", KL_ENVIRONMENT: "env-1", KL_BENCH: "bench-x" });
+  Object.assign(process.env, { KL_API_URL: "http://api", KL_TOOL_KEY_FILE: join(dir, "tok"), KL_OWNER: "alice", KL_TEAM: "acme", KL_SESSION: "ses-1", KL_ENVIRONMENT: "env-1", KL_BENCH: "bench-x" });
   const routes: Record<string, unknown> = {
     "/v1/workspaces?team=acme": [
       { id: "w1", owner: "alice", session: "ses-1", state: "stopped" },

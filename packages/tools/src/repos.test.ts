@@ -16,7 +16,7 @@ beforeEach(() => {
   const f = join(mkdtempSync(join(tmpdir(), "kl-tok-")), "token");
   writeFileSync(f, "tok\n");
   process.env.KL_API_URL = "http://api.test";
-  process.env.KL_TOOL_TOKEN_FILE = f;
+  process.env.KL_TOOL_KEY_FILE = f;
   globalThis.fetch = (async (url: string, init: any = {}) => {
     const u = String(url).replace("http://api.test", "");
     calls.push({ method: init.method ?? "GET", url: u, type: init.headers?.["content-type"] ?? null, body: init.body });
@@ -27,7 +27,7 @@ beforeEach(() => {
 afterEach(() => {
   globalThis.fetch = realFetch;
   delete process.env.KL_API_URL;
-  delete process.env.KL_TOOL_TOKEN_FILE;
+  delete process.env.KL_TOOL_KEY_FILE;
 });
 
 const run = (n: string, a: any) => repoTools().find((t) => t.name === n)!.run(a);
