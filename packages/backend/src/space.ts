@@ -1,7 +1,7 @@
 //! `Backend.space()`: the sidebar's data, read from the platform with the bench's own tool token.
-//! Workspaces are the CURRENT USER's (`KL_OWNER`; the API already scopes the list to the caller,
-//! the filter is belt and braces) in the space `KL_TEAM`; environments are every environment of
-//! that team whoever made them. A clone's parent and task (`clone_of`, `task`) are on the
+//! The space is the bench's SESSION: workspaces are the current user's (`KL_OWNER`) in the space
+//! `KL_TEAM` whose `session` is `KL_SESSION`; the connected environment is the session's own
+//! (`KL_ENVIRONMENT`); environments listed are every environment of that team. A clone's parent and task (`clone_of`, `task`) are on the
 //! platform's workspace doc, so every row comes from the API; nothing here is kept on the bench's
 //! disk apart from the log cursors below, which die with the process. Processes
 //! and the changed-file count come from each READY workspace's `kl ide serve` (crates/ide), best
@@ -83,20 +83,20 @@ export async function space(): Promise<SpaceView> {
   const user = process.env.KL_OWNER ?? "";
   const team = process.env.KL_TEAM || undefined;
   const bench = process.env.KL_BENCH;
+  const session = process.env.KL_SESSION;
   const q = (k: string) => (team ? `?${k}=${encodeURIComponent(team)}` : "");
-  let ws: any[], envs: any[], mine: any[] | undefined;
+  let ws: any[], envs: any[];
   try {
-    [ws, envs, mine] = await Promise.all([
+    [ws, envs] = await Promise.all([
       apiJson<any[]>("GET", `/v1/workspaces${q("team")}`),
       apiJson<any[]>("GET", `/v1/environments${q("owner")}`),
-      apiJson<any[]>("GET", "/v1/me/environments").catch(() => undefined),
     ]);
   } catch (e: any) {
     return { available: false, error: String(e?.message ?? e).slice(0, 200), user, workspaces: [], environments: [] };
   }
 
   const workspaces: SpaceWorkspace[] = ws
-    .filter((w) => w.id !== bench && (!user || w.owner === user))
+    .filter((w) => w.id !== bench && (!user || w.owner === user) && (!session || w.session === session))
     .map((w) => ({
       id: w.id,
       name: w.name,
@@ -110,8 +110,7 @@ export async function space(): Promise<SpaceView> {
     }));
   await Promise.all(workspaces.filter((w) => w.state === "ready").map(enrich));
 
-  const follows = mine?.find((m) => m.team === team) ?? mine?.[0];
-  const connected: string | undefined = follows?.environment ?? undefined;
+  const connected = process.env.KL_ENVIRONMENT || undefined;
   // Only the connected environment's snapshot: the sidebar shows that one, and each costs two reads.
   // `restored_to` is on the single-environment doc only (read from its Volume); the list leaves it
   // null, so reading it from the list showed the newest record after every in-place restore.

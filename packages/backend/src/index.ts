@@ -64,7 +64,7 @@ export type SpaceView = {
   user: string;
   workspaces: SpaceWorkspace[];
   environments: SpaceEnvironment[];
-  /** The environment the space follows (`GET /v1/me/environments`). */
+  /** The session's environment (`KL_ENVIRONMENT`). */
   connected?: string;
   /** Every session's own board, main first; only the local backend fills it. */
   boards?: { session: string; tasks: BoardTask[] }[];

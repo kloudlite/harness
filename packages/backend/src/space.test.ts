@@ -24,7 +24,7 @@ test("without KL_API_URL the view is unavailable with a reason, never a throw", 
 test("lists the user's workspaces and the team's environments, reads clone parent and task from the doc, survives a dead pod", async () => {
   const dir = mkdtempSync(join(tmpdir(), "kl-space-"));
   writeFileSync(join(dir, "tok"), "SECRET-TOKEN\n");
-  Object.assign(process.env, { KL_API_URL: "http://api", KL_TOOL_TOKEN_FILE: join(dir, "tok"), KL_OWNER: "me", KL_TEAM: "acme", KL_BENCH: "bench" });
+  Object.assign(process.env, { KL_API_URL: "http://api", KL_TOOL_TOKEN_FILE: join(dir, "tok"), KL_OWNER: "me", KL_TEAM: "acme", KL_BENCH: "bench", KL_ENVIRONMENT: "e2" });
   const urls: string[] = [];
   const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status });
   globalThis.fetch = (async (u: any, init: any) => {
@@ -44,7 +44,6 @@ test("lists the user's workspaces and the team's environments, reads clone paren
         { id: "e1", name: "prod", owner: "acme", state: "running", services: [{ name: "api", ports: [8080] }, { name: "db", ports: [5432] }], service_status: [{ name: "api", interceptedBy: "w1" }] },
         { id: "e2", name: "dev", owner: "acme", state: "running", services: [] },
       ]);
-    if (url === "http://api/v1/me/environments") return json([{ team: "acme", environment: "e2" }]);
     // the list carries no `restored_to`; only the single doc does
     if (url === "http://api/v1/environments/e2") return json({ id: "e2", restored_to: "s1", restore_requested_at: "2026-10-11T10:00:00Z" });
     if (url === "http://api/v1/volumes/e2/history")
@@ -197,4 +196,28 @@ test("restored then pushed: the push on top of the restore", () => {
 
 test("foreign restore names no record", () => {
   expect(envCurrent([s("a", "1")], "elsewhere", "2026-10-10T04:00:00Z")).toBeUndefined();
+});
+
+test("space lists only this session's workspaces and connects its environment", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "kl-space-"));
+  writeFileSync(join(dir, "tok"), "T\n");
+  Object.assign(process.env, { KL_API_URL: "http://api", KL_TOOL_TOKEN_FILE: join(dir, "tok"), KL_OWNER: "alice", KL_TEAM: "acme", KL_SESSION: "ses-1", KL_ENVIRONMENT: "env-1", KL_BENCH: "bench-x" });
+  const routes: Record<string, unknown> = {
+    "/v1/workspaces?team=acme": [
+      { id: "w1", owner: "alice", session: "ses-1", state: "stopped" },
+      { id: "w2", owner: "alice", session: "ses-2", state: "stopped" },
+      { id: "bench-x", owner: "alice", session: null, state: "ready" },
+    ],
+    "/v1/environments?owner=acme": [{ id: "env-1", name: "e", owner: "acme", state: "ready", services: [] }],
+  };
+  const calls: string[] = [];
+  globalThis.fetch = (async (u: any) => {
+    const path = String(u).replace("http://api", "");
+    calls.push(path);
+    return new Response(JSON.stringify(routes[path] ?? { error: "nope" }), { status: path in routes ? 200 : 404 });
+  }) as any;
+  const v = await space();
+  expect(v.workspaces.map((w) => w.id)).toEqual(["w1"]);
+  expect(v.connected).toBe("env-1");
+  expect(calls).not.toContain("/v1/me/environments");
 });

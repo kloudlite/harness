@@ -14,7 +14,7 @@ import { createServer, type Server, type Socket } from "node:net";
 import type { Backend } from "./index.ts";
 import { serve } from "./serve.ts";
 import { Peer } from "./wire.ts";
-import { envKeep, followedEnvs, inflight, podHold, touched } from "@kloudlite-tui/tools";
+import { envKeep, inflight, podHold, touched } from "@kloudlite-tui/tools";
 
 export const sockPath = () => process.env.KL_HOST_SOCK ?? join(homedir(), ".kl", "host.sock");
 
@@ -116,7 +116,7 @@ if (import.meta.main) {
       console.error("host.busy", e);
     }
   };
-  const hold = () => void holdBeat({ busy: () => b.busyCount, oldest: () => b.oldestTurnStart(), touched, inflight, podHold, envKeep, listEnvs: followedEnvs });
+  const hold = () => void holdBeat({ busy: () => b.busyCount, oldest: () => b.oldestTurnStart(), touched, inflight, podHold, envKeep, listEnvs: async () => (process.env.KL_ENVIRONMENT ? [process.env.KL_ENVIRONMENT] : []) });
   beat();
   hold(); // the bench coming up wakes its environments now, not a minute later
   // ponytail: fixed 60 s hold beat (every 12th 5 s tick); the tool server idles out far slower
