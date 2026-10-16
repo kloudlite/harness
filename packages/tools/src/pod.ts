@@ -154,22 +154,14 @@ export async function podHold(ws: string): Promise<void> {
   } catch {}
 }
 
-/** The bench is up (owner ruling 2026-10-13: "when bench is active it should keep the environment
- * active and related workspaces should come active when there are intercepts"): keeps environment
- * `id` and the workspaces its intercepts name active. Wakes what idled out (a person's stop has no
- * idle_since and stays stopped), holds what runs. Starts only an idle-stopped one: a start rewrites
- * spec.wakeAt. The api's start_env also wakes the interceptors. Best effort, errors dropped. */
-export async function envKeep(id: string): Promise<void> {
+/** Somebody is using this bench's session (a turn runs, a client is connected): hold it. The API
+ * stamps `held-at` on the Session and wakes it if it idled; an awake session keeps its environment
+ * up and its members running (owner ruling 2026-10-16: a bench never idles, its session does).
+ * Best effort, errors dropped; no `KL_SESSION` means not a bench, nothing to hold. */
+export async function sessionHold(id = process.env.KL_SESSION): Promise<void> {
+  if (!id) return;
   try {
-    const d = await apiJson<any>("GET", `/v1/environments/${seg(id)}`);
-    if (d?.idle_since) await apiJson("POST", `/v1/environments/${seg(id)}/start`);
-    else if (d?.state !== "running") return;
-    else await apiJson("POST", `/v1/environments/${seg(id)}/hold`);
-    for (const ws of new Set<string>((d.intercepts ?? []).map((i: any) => i.workspace))) {
-      const w = await apiJson<any>("GET", `/v1/workspaces/${seg(ws)}`).catch(() => undefined);
-      if (w?.idle_since) await apiJson("POST", `/v1/workspaces/${seg(ws)}/start`).catch(() => {});
-      else await podHold(ws);
-    }
+    await apiJson("POST", `/v1/sessions/${seg(id)}/hold`);
   } catch {}
 }
 

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { anyPodTools, podGet, podHold, inflight, podTools, touched } from "./pod.ts";
+import { anyPodTools, podGet, podHold, sessionHold, inflight, podTools, touched } from "./pod.ts";
 
 const realFetch = globalThis.fetch;
 let log: { url: string; auth: string | null }[] = [];
@@ -162,6 +162,17 @@ test("podHold posts /hold to a ready workspace", async () => {
   handler = (u) => (u.endsWith("/tools") && u.includes("/v1/") ? j({ address: "10.0.0.5:7788" }) : new Response(null, { status: 204 }));
   await podHold("w1");
   expect(log.at(-1)!.url).toBe("http://10.0.0.5:7788/hold");
+});
+
+test("sessionHold posts the session's hold and nothing for a bench-less process", async () => {
+  handler = () => new Response(null, { status: 204 });
+  await sessionHold("ses-1");
+  expect(log.at(-1)!.url).toBe("http://api.test/v1/sessions/ses-1/hold");
+  log = [];
+  await sessionHold(undefined);
+  expect(log).toEqual([]);
+  handler = () => j({ error: "no" }, 500);
+  await sessionHold("ses-1"); // best effort: a failure is dropped, never thrown
 });
 
 test("a second NotReady after the wake throws: one retry only", async () => {

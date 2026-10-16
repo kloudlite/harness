@@ -14,7 +14,7 @@ import { createServer, type Server, type Socket } from "node:net";
 import type { Backend } from "./index.ts";
 import { serve } from "./serve.ts";
 import { Peer } from "./wire.ts";
-import { envKeep, inflight, podHold, touched } from "@kloudlite-tui/tools";
+import { inflight, podHold, sessionHold, touched } from "@kloudlite-tui/tools";
 
 export const sockPath = () => process.env.KL_HOST_SOCK ?? join(homedir(), ".kl", "host.sock");
 
@@ -43,20 +43,20 @@ export type HoldDeps = {
   touched: Map<string, number>;
   inflight: Map<string, number>;
   podHold: (ws: string) => Promise<void>;
-  envKeep: (env: string) => Promise<void>;
-  listEnvs: () => Promise<string[]>;
+  sessionHold: () => Promise<void>;
 };
 
 /** One hold pass: workspaces with a call in flight (Claude Code sessions run no backend turn) plus,
- * while a backend turn runs, those touched since it began; then, always, every followed environment
- * and its intercepting workspaces: the bench being up keeps them active (owner ruling 2026-10-13).
- * Best effort, never throws. */
+ * while a backend turn runs, those touched since it began; and whenever any of that — or a
+ * connected client (`busy` counts them) — is in use, the bench's SESSION, which is what keeps its
+ * environment up and its members running. An idle bench holds nothing: the session idles
+ * (owner ruling 2026-10-16). Best effort, never throws. */
 export async function holdBeat(d: HoldDeps): Promise<void> {
   try {
     const held = new Set(d.inflight.keys());
     if (d.busy() > 0) for (const ws of holdTargets(d.touched, d.oldest())) held.add(ws);
     await Promise.all([...held].map((ws) => d.podHold(ws).catch(() => {})));
-    for (const e of await d.listEnvs()) await d.envKeep(e).catch(() => {});
+    if (d.busy() > 0 || held.size > 0) await d.sessionHold().catch(() => {});
   } catch {}
 }
 
@@ -116,9 +116,9 @@ if (import.meta.main) {
       console.error("host.busy", e);
     }
   };
-  const hold = () => void holdBeat({ busy: () => b.busyCount, oldest: () => b.oldestTurnStart(), touched, inflight, podHold, envKeep, listEnvs: async () => (process.env.KL_ENVIRONMENT ? [process.env.KL_ENVIRONMENT] : []) });
+  // busy counts a connected laptop client too: it runs no turn between calls but is using the session
+  const hold = () => void holdBeat({ busy: () => b.busyCount + tcp(), oldest: () => b.oldestTurnStart(), touched, inflight, podHold, sessionHold });
   beat();
-  hold(); // the bench coming up wakes its environments now, not a minute later
   // ponytail: fixed 60 s hold beat (every 12th 5 s tick); the tool server idles out far slower
   let ticks = 0;
   setInterval(() => {

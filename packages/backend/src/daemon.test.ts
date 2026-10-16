@@ -189,26 +189,30 @@ function holdDeps(o: { busy?: number; touched?: [string, number][]; inflight?: [
       touched: new Map(o.touched ?? []),
       inflight: new Map(o.inflight ?? []),
       podHold: async (w: string) => { held.push(`ws:${w}`); if (o.fail) throw new Error("x"); },
-      envKeep: async (e: string) => { held.push(`env:${e}`); if (o.fail) throw new Error("x"); },
-      listEnvs: async () => { if (o.fail) throw new Error("x"); return ["e1"]; },
+      sessionHold: async () => { held.push("session"); if (o.fail) throw new Error("x"); },
     },
   };
 }
 
-test("holdBeat holds touched workspaces and followed envs while busy", async () => {
+test("holdBeat holds touched workspaces and the session while busy", async () => {
   const h = holdDeps({ busy: 1, oldest: 80, touched: [["w1", 100], ["w2", 50]] });
   await holdBeat(h.deps);
-  expect(h.held).toEqual(["ws:w1", "env:e1"]);
+  expect(h.held).toEqual(["ws:w1", "session"]);
 });
-test("holdBeat holds an in-flight workspace with busy 0", async () => {
+test("holdBeat holds an in-flight workspace and the session with busy 0", async () => {
   const h = holdDeps({ inflight: [["w9", 1]], touched: [["w1", 100]] });
   await holdBeat(h.deps);
-  expect(h.held).toEqual(["ws:w9", "env:e1"]);
+  expect(h.held).toEqual(["ws:w9", "session"]);
 });
-test("holdBeat holds no workspace when idle but keeps followed envs", async () => {
+test("holdBeat holds the session for a connected client that runs no turn", async () => {
+  const h = holdDeps({ busy: 1 });
+  await holdBeat(h.deps);
+  expect(h.held).toEqual(["session"]);
+});
+test("an idle bench holds nothing: it is the session that goes idle", async () => {
   const h = holdDeps({ touched: [["w1", 100]] });
   await holdBeat(h.deps);
-  expect(h.held).toEqual(["env:e1"]);
+  expect(h.held).toEqual([]);
 });
 test("holdBeat swallows errors", async () => {
   await holdBeat(holdDeps({ busy: 1, oldest: 0, touched: [["w1", 1]], fail: true }).deps);
