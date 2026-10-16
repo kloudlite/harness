@@ -293,8 +293,8 @@ function basePlatformTools(kind: "main" | "workspace" | "all", wsId?: string, ti
       return JSON.stringify(ws.filter((w) => w.session === session && w.id !== process.env.KL_BENCH), null, 2);
     }),
     def("workspace_get", "Read the state of one workspace. Poll this tool after any lifecycle call. The `state` is `creating`, `ready`, `stopped`, `error` or `deleted`. `ready` means up. A workspace is not `running` at any time. Stop the poll when the state is `error` or `deleted`.", { workspace: WS }, ["workspace"], async (a) => api("GET", `/v1/workspaces/${seg(a.workspace)}`)),
-    def("workspace_create", "Create a workspace in a region." + ASYNC, { name: S, region: S, quota_gb: N, image: S, repo: S, branch: S, packages: SL, team: S }, ["name", "region", "quota_gb"], async (a) =>
-      api("POST", "/v1/workspaces", strip({ team: a.team, name: a.name, region: a.region, quota_gb: a.quota_gb, image: a.image, repo: a.repo, branch: a.branch, packages: a.packages }))),
+    def("workspace_create", "Create a workspace. It runs in the team's region." + ASYNC, { name: S, quota_gb: N, image: S, repo: S, branch: S, packages: SL, team: S }, ["name", "quota_gb"], async (a) =>
+      api("POST", "/v1/workspaces", strip({ team: a.team, name: a.name, quota_gb: a.quota_gb, image: a.image, repo: a.repo, branch: a.branch, packages: a.packages }))),
     def("workspace_clone", "Clone the current state of a workspace into a new workspace." + ASYNC, { workspace: WS, name: S, task: { type: "string", description: "What the clone is for. Use at most 200 characters." } }, ["workspace", "name"], async (a) => api("POST", `/v1/workspaces/${seg(a.workspace)}/clone`, strip({ name: a.name, task: a.task }))),
     def("workspace_restore", "Create a workspace from a snapshot." + ASYNC, { name: S, snapshot_id: S, image: S, packages: SL, quota_gb: N }, ["name", "snapshot_id"], async (a) =>
       api("POST", "/v1/workspaces/restore", strip({ name: a.name, snapshot_id: a.snapshot_id, image: a.image, packages: a.packages, quota_gb: a.quota_gb }))),
@@ -313,8 +313,8 @@ function basePlatformTools(kind: "main" | "workspace" | "all", wsId?: string, ti
     def("env_delete", "Delete an environment permanently.", { env: ENV }, ["env"], async (a) => api("DELETE", `/v1/environments/${seg(a.env)}`)),
     def("env_start", "Start a stopped environment." + ASYNC, { env: ENV }, ["env"], async (a) => api("POST", `/v1/environments/${seg(a.env)}/start`)),
     def("env_stop", "Stop an environment that is up." + ASYNC, { env: ENV }, ["env"], async (a) => api("POST", `/v1/environments/${seg(a.env)}/stop`)),
-    def("env_create", "Create an environment of services in a region. With `snapshot_id`, grow it from one of your snapshots, also one of a deleted environment: the snapshot's services run unless you pass `services`." + ASYNC, { name: S, region: S, snapshot_id: S, services: { type: "array", items: SERVICE }, team: S, quota_gb: N }, ["name"], async (a) =>
-      api("POST", "/v1/environments", strip({ name: a.name, region: a.region, snapshot_id: a.snapshot_id, services: a.services?.map(withServiceDefaults), owner: a.team, quota_gb: a.quota_gb }))),
+    def("env_create", "Create an environment of services in the team's region. With `snapshot_id`, grow it from one of your snapshots, also one of a deleted environment: the snapshot's services run unless you pass `services`." + ASYNC, { name: S, snapshot_id: S, services: { type: "array", items: SERVICE }, team: S, quota_gb: N }, ["name"], async (a) =>
+      api("POST", "/v1/environments", strip({ name: a.name, snapshot_id: a.snapshot_id, services: a.services?.map(withServiceDefaults), owner: a.team, quota_gb: a.quota_gb }))),
     def("env_clone", "Create a NEW environment from this one: from its live state, or from one of its snapshots when `snapshot_id` is given." + ASYNC, { env: ENV, name: S, snapshot_id: S, team: S, services: { type: "array", items: SERVICE }, region: S, quota_gb: N }, ["env", "name"], async (a) =>
       api("POST", `/v1/environments/${seg(a.env)}/clone`, strip({ name: a.name, snapshot_id: a.snapshot_id, owner: a.team, services: a.services?.map(withServiceDefaults), region: a.region, quota_gb: a.quota_gb }))),
     def("env_push", "Make a snapshot of an environment in its history." + ASYNC, { env: ENV, message: S }, ["env"], async (a) => api("POST", `/v1/environments/${seg(a.env)}/push`, { message: a.message })),
@@ -343,14 +343,14 @@ function basePlatformTools(kind: "main" | "workspace" | "all", wsId?: string, ti
           properties: { workspaces: { type: "integer" }, environments: { type: "integer" }, snapshots: { type: "integer" }, diskGb: { type: "integer" }, cpu: { type: "integer" }, memoryGb: { type: "integer" } },
         },
         access: { type: "object", properties: { team: S, role: { type: "string", enum: ["member", "admin", "owner"] } }, required: ["team", "role"] },
-        region: { type: "string", description: "The region name." },
+        region: { type: "string", description: "The region the team moves to (only while the team has nothing)." },
         title: S,
         body: S,
       },
       ["kind", "reason"],
       async (a) => api("POST", "/v1/requests", strip({ owner: a.owner, kind: a.kind, reason: a.reason, quota: a.quota, access: a.access, region: a.region ? { region: a.region } : undefined, other: a.kind === "other" ? { title: a.title, body: a.body } : undefined })),
     ),
-    def("regions", "List the regions where workspaces and environments can be created.", {}, [], async () => api("GET", "/v1/regions")),
+    def("regions", "List the regions a team can live in. A team has one region, set when it is made.", {}, [], async () => api("GET", "/v1/regions")),
   ];
   if (kind !== "all") return main;
   const have = new Set(main.map((t) => t.name));

@@ -79,7 +79,7 @@ Intercepts are not your work. The workspace that runs the service starts and end
 | `volume_list`, `volume_history`, `volume_refs` | Read the snapshot history. |
 | `snapshot_delete` **card**, `volume_delete` **card** | Remove history. |
 | `builder_status` | See the image builder of the owner. |
-| `quota`, `regions` | See the resources that the owner can still use, and the regions where workspaces can run. |
+| `quota`, `regions` | See the resources that the owner can still use, and the regions (a team has one; everything it makes runs there). |
 | `request_create`, `requests_list`, `request_get` | Ask a superadmin for quota, access or a region. Read the decision. |
 
 **Your own tools**

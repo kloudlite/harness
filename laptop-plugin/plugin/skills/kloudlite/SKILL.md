@@ -118,7 +118,7 @@ To give an image a new tag, use `container_push`. The `kl` command is not on the
 
 - `quota` shows the resources that the owner can still use: workspaces, environments, snapshots, disk, cpu and memory.
 - A call that goes above the quota answers 409.
-- `regions` gives the regions where workspaces can run.
+- `regions` lists the regions. A team has one region and everything it makes runs there; a region request moves an empty team.
 - If a limit or missing access stops the person, use `request_create` to ask a superadmin. The kinds are quota, access, region and other. Only one request of each kind can wait at a time.
 - `requests_list` and `request_get` show the decision.
 - Do not try the stopped call again. It will not pass.
