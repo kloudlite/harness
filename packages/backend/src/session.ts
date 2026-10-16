@@ -104,7 +104,7 @@ export async function space(): Promise<SpaceView> {
       state: w.state,
       repo: w.repo ?? undefined,
       branch: w.branch ?? undefined,
-      attached_environment: w.attached_environment ?? undefined,
+      environment: w.environment ?? undefined,
       parent: w.clone_of ?? undefined,
       task: w.task ?? undefined,
     }));

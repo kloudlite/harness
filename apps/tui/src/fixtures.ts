@@ -136,7 +136,7 @@ export function fixtureSpace(): SpaceView {
       state: w.status === "stopped" ? "stopped" : w.status === "cloning" ? "creating" : "ready",
       repo: w.repo,
       branch: w.branch,
-      attached_environment: w.status === "attached" ? "e1" : undefined,
+      environment: w.status === "attached" ? "e1" : undefined,
       parent: w.parent,
       task: w.task,
       changes: w.changes,

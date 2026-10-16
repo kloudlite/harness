@@ -137,7 +137,7 @@ export function fromSpace(v: SpaceView): { workspaces: Workspace[]; environments
     id: w.id,
     name: w.name,
     owner: w.owner,
-    status: w.attached_environment ? "attached" : w.state === "stopped" || w.state === "error" ? "stopped" : w.state === "creating" ? "cloning" : "running",
+    status: w.environment ? "attached" : w.state === "stopped" || w.state === "error" ? "stopped" : w.state === "creating" ? "cloning" : "running",
     parent: w.parent,
     task: w.task,
     ports: [],

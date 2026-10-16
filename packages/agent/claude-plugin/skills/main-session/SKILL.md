@@ -67,7 +67,7 @@ A tool with the mark **card** shows a permission card to the person before it ru
 | `env_push`, `env_restore` **card** | Make a snapshot of an environment, or put this environment back to a snapshot. To copy a snapshot into a new environment, use `env_clone`. |
 | `service_add`, `service_update` **card**, `service_remove` **card** | Add, change or remove the services of an environment. Use these for standard services, for example a database. A workspace adds and changes its own service. |
 | `service_logs` | Read the logs of a service. |
-| `space_env_current`, `space_env_switch`, `space_env_clear` | Select the environment that the DNS of a workspace follows. |
+| `session_current`, `session_use` | See the session, or pick one (or create one on an environment). |
 
 Intercepts are not your work. The workspace that runs the service starts and ends the intercept. Ask that workspace to do it.
 
@@ -197,9 +197,9 @@ The person asks: "Add a comments feature. Add an API in the backend and a commen
 
 Some work needs two workspaces at the same time. Example: the backend runs its service, and a tests workspace sends requests to it. You control all of the work. Send one ask at a time. Use the facts from the last report in each ask.
 
-1. **Use the same environment.** A workspace can get to the services of an environment only if its space follows that environment.
-   - Use `space_env_current` to see the environment that each workspace follows.
-   - If necessary, use `space_env_switch`.
+1. **Use the same environment.** A workspace can get to the services of an environment only if its session is connected to that environment.
+   - Use `session_current` to see the session and its environment.
+   - If necessary, use `session_use` to pick or create the session that is connected to it.
    - Use `env_get` to see the service names.
 2. **Start the service.** Ask the backend: "Run your service and intercept `<service>` in `<env>`. Keep it running. Send a report when it is ready." The report gives the service, the environment and the port. It also tells you that the intercept is in force. `env_get` also shows the intercept.
 3. **Run the tests.** Ask the tests workspace: "Run the integration tests against `<service>` in `<env>`. This service runs the backend branch `<branch>` at `<commit>`." The report gives the result: passed, or the tests that failed and how they failed.

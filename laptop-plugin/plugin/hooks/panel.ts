@@ -113,7 +113,7 @@ export function environments(text: string, ws: Row[] = []): Env[] {
 export type Snap = { id: string; parent?: string | null; message?: string; createdAt: string | null }
 
 /** Where an environment sits: the web's rule (`web/apps/web/src/lib/env-current.ts`, also
- * `harness/packages/backend/src/space.ts`), kept equal by hand. Never restored: the newest record.
+ * `harness/packages/backend/src/session.ts`), kept equal by hand. Never restored: the newest record.
  * Restored: the newest record pushed AFTER the restore that descends from the restored one, else the
  * restored record. A `restoredTo` naming no record here (a foreign graft) is no record. */
 export function envCurrent(history: Snap[], restoredTo: string | null, restoredAt: string | null): Snap | undefined {

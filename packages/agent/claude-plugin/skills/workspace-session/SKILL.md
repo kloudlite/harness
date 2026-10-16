@@ -64,7 +64,7 @@ A tool with the mark **card** shows a permission card to the person before it ru
 | `service_add`, `service_update` **card**, `service_remove` **card** | Change a service that your component owns in that environment. |
 | `service_logs` | Read the logs of a service in that environment. It can be your service or a service that you call. |
 | `intercept` **card**, `release` | Send the traffic for your service in the environment to the process that you run here. `release` ends this. |
-| `space_env_current`, `space_env_switch`, `space_env_clear` | Select the environment whose services your workspace gets to by DNS name. |
+| `session_current` | See your session and the environment whose services your workspace gets to by DNS name. You cannot join or leave a session. |
 | `workspace_push` | Record a named snapshot. Do this only when the person or main asks. |
 | `workspace_stop` | Stop this workspace when your task is done and main or the person told you to stop. This call does not show a card. It makes a snapshot first. The next start continues from that snapshot. |
 
@@ -167,7 +167,7 @@ Main can give you work together with a different workspace, for example integrat
 **When main asks you to test against a service:**
 
 1. Use `env_get` on the environment that main gave.
-2. Use `space_env_current` to make sure that your space follows that environment.
+2. Use `session_current` to make sure that your session is connected to that environment.
 3. Get to the service by its name in that environment.
 4. Run the tests with `exec`. Do not change the service or its intercept. It belongs to the other workspace.
 5. Send a report with the result: passed, or each failed test with its message and the call that it made. Main gives this report to the other workspace. Thus it must have sufficient data for a fix.

@@ -1,6 +1,6 @@
 //! A workspace's own files for the Files view: its pod's `~/workspace`, read from the pod's ide
 //! server (crates/ide/src/fs: /fs/tree, /fs/changes, /fs/diff, /fs/file) through the platform, the
-//! way the sidebar reads /fs/changes (space.ts). The backend makes the call, so a remote laptop TUI
+//! way the sidebar reads /fs/changes (session.ts). The backend makes the call, so a remote laptop TUI
 //! gets it over the same wire as `fs`. Never falls back to the bench's own files.
 import { podGet, podText } from "@kloudlite-tui/tools";
 import type { Backend } from "./index.ts";

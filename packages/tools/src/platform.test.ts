@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { api, platformTools } from "./platform.ts";
@@ -17,6 +17,8 @@ beforeEach(() => {
   writeFileSync(tokenFile, "tok1\n");
   process.env.KL_API_URL = "http://api.test";
   process.env.KL_TOOL_KEY_FILE = tokenFile;
+  process.env.KL_CONFIG_DIR = mkdtempSync(join(tmpdir(), "kl-cfg-"));
+  delete process.env.KL_SESSION;
   globalThis.fetch = (async (url: string, init: any = {}) => {
     const u = String(url).replace("http://api.test", "");
     calls.push({ method: init.method ?? "GET", url: u, auth: init.headers?.authorization ?? null, body: init.body ? JSON.parse(init.body) : undefined });
@@ -28,6 +30,7 @@ afterEach(() => {
   globalThis.fetch = realFetch;
   delete process.env.KL_API_URL;
   delete process.env.KL_TOOL_KEY_FILE;
+  delete process.env.KL_CONFIG_DIR;
 });
 
 const json = (v: unknown, status = 200) => () => new Response(JSON.stringify(v), { status });
@@ -91,10 +94,9 @@ test("service add/update/remove PATCH the whole list; duplicates and strangers e
   await expect(tool(t, "service_remove").run({ env: "e1", name: "q" })).rejects.toThrow("no such service");
 });
 
-test("workspace sessions default env through /v1/me/environments", async () => {
+test("workspace sessions default env through the workspace's session", async () => {
   const t = platformTools("workspace", "w1");
-  routes["GET /v1/workspaces/w1"] = json({ team: "acme", packages: [] });
-  routes["GET /v1/me/environments"] = json([{ team: "other", environment: "x" }, { team: "acme", environment: "e9" }]);
+  routes["GET /v1/workspaces/w1"] = json({ team: "acme", session: "ses-1", environment: "e9", packages: [] });
   routes["GET /v1/environments/e9"] = json({ services: [] });
   routes["POST /v1/environments/e9/intercepts"] = json({}, 202);
   await tool(t, "env_get").run({});
@@ -105,14 +107,61 @@ test("workspace sessions default env through /v1/me/environments", async () => {
   expect((tool(t, "intercept").inputSchema as any).properties.workspace).toBeUndefined();
   await tool(t, "intercept").run({ service: "web", workspace: "w2" });
   expect(calls.at(-1)!.body).toEqual({ service: "web", workspace: "w1" });
-  routes["GET /v1/me/environments"] = json([{ team: "other", environment: "x" }]);
-  await expect(tool(t, "env_get").run({})).rejects.toThrow("this workspace's space follows no environment");
+  // in a session whose environment is not resolved, or in none
+  routes["GET /v1/workspaces/w1"] = json({ session: "ses-1", packages: [] });
+  await expect(tool(t, "env_get").run({})).rejects.toThrow("this workspace's session has no environment");
+  routes["GET /v1/workspaces/w1"] = json({ packages: [] });
+  await expect(tool(t, "env_get").run({})).rejects.toThrow("this workspace is in no session");
   expect(t.some((x) => x.name === "workspace_create")).toBe(false);
-  // a personal workspace's space is the owner's handle (`crd::space_slug`)
-  routes["GET /v1/workspaces/w1"] = json({ owner: "Kay", team: "", packages: [] });
-  routes["GET /v1/me/environments"] = json([{ team: "kay", environment: "e9" }]);
-  await tool(t, "env_get").run({});
-  expect(calls.at(-1)!.url).toBe("/v1/environments/e9");
+});
+
+test("the session tools replace the space tools: current for all, use for the laptop only", () => {
+  for (const kind of ["main", "all"] as const) {
+    const names = platformTools(kind).map((x) => x.name);
+    expect(names).toContain("session_current");
+    expect(names).toContain("session_use");
+    expect(names.filter((n) => n.startsWith("space_env"))).toEqual([]);
+    expect(names).not.toContain("session_clear");
+  }
+  // a workspace never changes its own membership
+  const ws = platformTools("workspace", "w1").map((x) => x.name);
+  expect(ws).toContain("session_current");
+  expect(ws).not.toContain("session_use");
+  expect(ws.filter((n) => n.startsWith("space_env"))).toEqual([]);
+});
+
+test("session_current shows the workspace's own session; the laptop's reads its picked session", async () => {
+  routes["GET /v1/workspaces/w1"] = json({ session: "ses-1", environment: "e9" });
+  expect(JSON.parse(await tool(platformTools("workspace", "w1"), "session_current").run({}))).toEqual({ session: "ses-1", environment: "e9" });
+  const t = platformTools("main");
+  expect(await tool(t, "session_current").run({})).toContain("session_use");
+  writeFileSync(join(process.env.KL_CONFIG_DIR!, "session.json"), JSON.stringify({ team: "acme", session: "ses-1" }));
+  routes["GET /v1/sessions/ses-1"] = json({ id: "ses-1", name: "main", environment: "e9" });
+  expect(JSON.parse(await tool(t, "session_current").run({}))).toEqual({ team: "acme", id: "ses-1", name: "main", environment: "e9" });
+  routes["GET /v1/sessions/ses-1"] = json({ error: "no such session" }, 404);
+  expect(await tool(t, "session_current").run({})).toContain("ended");
+});
+
+test("session_use picks by name, creates on an environment, or creates the environment first", async () => {
+  const t = platformTools("main");
+  const saved = () => JSON.parse(readFileSync(join(process.env.KL_CONFIG_DIR!, "session.json"), "utf8"));
+  routes["GET /v1/sessions?team=acme"] = json([{ id: "ses-1", name: "main", environment: "e9" }, { id: "ses-2", name: "fix", environment: "e8" }]);
+  await tool(t, "session_use").run({ team: "acme", session: "fix" });
+  expect(saved()).toEqual({ team: "acme", session: "ses-2" });
+  await expect(tool(t, "session_use").run({ team: "acme", session: "nope" })).rejects.toThrow("no session nope");
+  // a session on an existing environment
+  routes["POST /v1/sessions"] = json({ id: "ses-3", name: "main", environment: "e8" }, 201);
+  await tool(t, "session_use").run({ team: "acme", environment: "e8" });
+  expect(calls.at(-1)!.body).toEqual({ name: "main", team: "acme", environment: "e8" });
+  expect(saved()).toEqual({ team: "acme", session: "ses-3" });
+  // a new environment, then a session on it
+  routes["POST /v1/environments"] = json({ id: "e10", name: "api" }, 202);
+  await tool(t, "session_use").run({ team: "acme", new_environment: "api", region: "centralindia" });
+  const created = calls.find((c) => c.url === "/v1/environments")!;
+  expect(created.body).toEqual({ name: "api", region: "centralindia", owner: "acme" });
+  expect(calls.at(-1)!.body).toEqual({ name: "main", team: "acme", environment: "e10" });
+  // nothing given: the choices, not a guess
+  await expect(tool(t, "session_use").run({ team: "acme" })).rejects.toThrow("main (ses-1)");
 });
 
 test("env_get folds service_status readiness into services[]; workspace_clone sends task only when given", async () => {
@@ -173,10 +222,9 @@ test("service_logs reads the build gate's logs port, defaulting env in a workspa
     await tool(m, "service_logs").run({ env: "e1", service: "web", previous: "true" });
     expect(seen.at(-1)).toBe("/logs/e1/web?previous=true");
     expect((tool(m, "service_logs").inputSchema as any).required).toEqual(["env", "service"]);
-    // workspace: env defaults through /v1/me/environments
+    // workspace: env defaults through the workspace's session
     const t = platformTools("workspace", "w1");
-    routes["GET /v1/workspaces/w1"] = json({ team: "acme", packages: [] });
-    routes["GET /v1/me/environments"] = json([{ team: "acme", environment: "e9" }]);
+    routes["GET /v1/workspaces/w1"] = json({ team: "acme", session: "ses-1", environment: "e9", packages: [] });
     await tool(t, "service_logs").run({ service: "web" });
     expect(seen.at(-1)).toBe("/logs/e9/web");
     await expect(tool(t, "service_logs").run({ service: "nope" })).rejects.toThrow('404: {"error":"no such service"}');

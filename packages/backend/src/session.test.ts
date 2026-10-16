@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { envCurrent, space, type Snap } from "./space.ts";
+import { envCurrent, space, type Snap } from "./session.ts";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -37,7 +37,7 @@ test("lists the user's workspaces and the team's environments, reads clone paren
         { id: "c1", name: "sub", owner: "me", state: "ready", clone_of: "w1", task: "probe" },
         { id: "w2", name: "theirs", owner: "other", state: "ready" },
         { id: "bench", name: "bench", owner: "me", state: "ready" },
-        { id: "w3", name: "stopped", owner: "me", state: "stopped", attached_environment: "e1" },
+        { id: "w3", name: "stopped", owner: "me", state: "stopped", environment: "e1" },
       ]);
     if (url === "http://api/v1/environments?owner=acme")
       return json([
@@ -68,7 +68,7 @@ test("lists the user's workspaces and the team's environments, reads clone paren
   expect(c1).toMatchObject({ parent: "w1", task: "probe" });
   expect(c1!.processes).toBeUndefined(); // pod answered 503
   expect(c1!.changes).toBeUndefined();
-  expect(w3).toMatchObject({ attached_environment: "e1" });
+  expect(w3).toMatchObject({ environment: "e1" });
   expect(w3!.processes).toBeUndefined(); // not ready: pod never asked
   expect(w1!.changes).toBe(2);
   expect(w1!.processes!.map((p) => p.id)).toEqual(["p1", "p2"]);

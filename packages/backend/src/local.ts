@@ -36,7 +36,7 @@ import * as git from "./git.ts";
 import { BECAUSE_SCHEMA, TurnWords, consented } from "./consent.ts";
 import { toolDiff } from "./diff.ts";
 import { podfs } from "./podfs.ts";
-import { space as spaceView } from "./space.ts";
+import { space as spaceView } from "./session.ts";
 import { mcpServer } from "./mcp.ts";
 import { boardText, boardTools, readBoards, readTasks, taskTools, tasksFile } from "./tasks.ts";
 import { messagesFile, readMessages } from "./messages.ts";

@@ -63,7 +63,7 @@ Use one workspace for each component, for example frontend, backend, worker or t
 - Do not install a server as a package to run it. Examples of servers: MongoDB, PostgreSQL, MySQL, Redis, Kafka, RabbitMQ, Elasticsearch, MinIO.
 - Do not download a server binary or a container image into a workspace, and do not run it with `exec`.
 - A service that your code needs is a service of the environment. Add it with `service_add` and its public image, for example `mongo:7`. Give it a mount for its data (refer to "Service data").
-- Your workspace gets to the service by its DNS name through the space (refer to "Space"). Use `env_get` to get the service name and its port.
+- Your workspace gets to the service by its DNS name through the session (refer to "Session"). Use `env_get` to get the service name and its port.
 - The only process that you run in a workspace is the code of your own component, for example its dev server, its tests or its service under an intercept.
 - If the service is missing and you cannot add it, report `NEED` with the service, its image and its port. Do not run a copy of it in the workspace.
 
@@ -94,7 +94,7 @@ To give an image a new tag, use `container_push`. The `kl` command is not on the
 - `env_get` shows each intercept and the workspace that holds it.
 - Use an intercept to test a change to a service in the real environment, without a build and without a deploy. This is the short dev loop.
 
-**Space.** A space follows one environment. Then the workspaces of the team can get to the services of that environment by their DNS names. Use `space_env_current`, `space_env_switch` and `space_env_clear`.
+**Session.** A session connects some of your workspaces to one environment, and a connected laptop is always in a session. The workspaces of the session can get to the services of that environment by their DNS names. Use `session_current` to see the session and `session_use` to pick one, or to create one on an existing environment or on a new environment. A workspace cannot join or leave a session; the person or main does that from outside.
 
 **Snapshots.** A snapshot is a read-only copy of the disk of a workspace or environment.
 
@@ -144,7 +144,7 @@ Each role has a different set of tools. Its role text gives its tools. If a tool
 | Workspaces | `workspace_list`, `workspace_get`, `workspace_create`, `workspace_clone`, `workspace_restore`, `workspace_start`, `workspace_stop`, `workspace_delete`, `workspace_push`, `worktree_add`, `worktree_drop` |
 | Packages | `packages_list`, `packages_add`, `packages_remove`, `packages_update` |
 | Environments | `env_list`, `env_get`, `env_create`, `env_clone`, `env_start`, `env_stop`, `env_delete`, `env_push`, `env_restore`, `service_add`, `service_update`, `service_remove`, `service_logs`, `intercept`, `release` |
-| Spaces | `space_env_current`, `space_env_switch`, `space_env_clear` |
+| Sessions | `session_current`, `session_use` |
 | Repos | `repo_list`, `repo_get`, `repo_create`, `repo_update`, `repo_delete`, `protection_get`, `protection_set`, `branch_list`, `branch_delete`, `compare` |
 | Pull requests | `pr_list`, `pr_get`, `pr_create`, `pr_comment`, `pr_merge`, `pr_close` |
 | Images | `image_list`, `image_tags`, `image_visibility`, `image_tag_delete`, `image_delete` |

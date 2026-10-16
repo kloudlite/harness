@@ -20,7 +20,7 @@ test("fromSpace: empty view maps to nothing, env index 0", () => {
 
 test("fromSpace: status follows attachment, then state", () => {
   const { workspaces } = fromSpace(
-    view({ workspaces: [sw("a", { attached_environment: "e1" }), sw("b", { state: "stopped" }), sw("c", { state: "creating" }), sw("d"), sw("e", { state: "error" })] }),
+    view({ workspaces: [sw("a", { environment: "e1" }), sw("b", { state: "stopped" }), sw("c", { state: "creating" }), sw("d"), sw("e", { state: "error" })] }),
   );
   expect(workspaces.map((w) => w.status)).toEqual(["attached", "stopped", "cloning", "running", "stopped"]);
 });

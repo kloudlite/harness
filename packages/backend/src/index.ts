@@ -41,7 +41,8 @@ export type SpaceWorkspace = {
   state: string;
   repo?: string;
   branch?: string;
-  attached_environment?: string;
+  /** The environment the workspace's session connects it to, if any. */
+  environment?: string;
   parent?: string;
   task?: string;
   processes?: SpaceProcess[];

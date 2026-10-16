@@ -1,4 +1,4 @@
-//! Platform API tools: the model's hands on /v1 (workspaces, environments, volumes, space).
+//! Platform API tools: the model's hands on /v1 (workspaces, environments, volumes, sessions).
 //! The bearer is a short-lived tool token (rotates every 900 s) in a file, so it is read on
 //! EVERY call, never cached. Non-2xx comes back as text for the model, never a throw.
 //! Main sessions get the whole table; a workspace session gets the subset its own token's
@@ -6,7 +6,9 @@
 //! `all` (the laptop MCP door, backend/src/mcp.ts) is main's table plus the workspace-only tools,
 //! each aimed by a required `workspace`/`env`.
 import { ensureRunning } from "./ensure.ts";
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import type { ToolDef } from "./index.ts";
 import { repoTools } from "./repos.ts";
 
@@ -60,10 +62,68 @@ export async function apiJson<T>(method: string, path: string, body?: unknown): 
 
 export const seg = encodeURIComponent;
 
-/** Every environment the person's spaces follow, deduped. */
-export async function followedEnvs(): Promise<string[]> {
-  const m = await apiJson<{ environment?: string }[]>("GET", "/v1/me/environments");
-  return [...new Set((Array.isArray(m) ? m : []).map((x) => x.environment).filter((e): e is string => !!e))];
+/** `session.json` `{team, session}`, the pick `kl-connect session use` writes and the env daemon
+ * follows (`bins/kl-connect/src/session.rs`; same directory rules as its `config::dir`). */
+function sessionFile(): string {
+  const dir = process.env.KL_CONFIG_DIR || (process.env.XDG_CONFIG_HOME ? join(process.env.XDG_CONFIG_HOME, "kl-connect") : join(homedir(), ".config", "kl-connect"));
+  return join(dir, "session.json");
+}
+
+function pickedSession(): { team: string; session: string } | undefined {
+  try {
+    const p = JSON.parse(readFileSync(sessionFile(), "utf8"));
+    return p?.session ? { team: String(p.team ?? ""), session: String(p.session) } : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function savePick(team: string, session: string) {
+  const f = sessionFile();
+  mkdirSync(join(f, ".."), { recursive: true });
+  const tmp = `${f}.${process.pid}.tmp`;
+  writeFileSync(tmp, JSON.stringify({ team, session }), { mode: 0o600 });
+  renameSync(tmp, f);
+}
+
+const NO_SESSION = "none picked: call session_use with a session (name or id), an environment to start one on, or new_environment (and region) to create the environment first";
+
+/** The session this laptop is in. A bench serves one session (KL_SESSION), which wins. */
+async function currentSession(): Promise<string> {
+  const p = pickedSession();
+  const id = process.env.KL_SESSION || p?.session;
+  if (!id) return NO_SESSION;
+  const r = await raw("GET", `/v1/sessions/${seg(id)}`);
+  if (r.unavailable) throw new Error(UNAVAILABLE);
+  if (r.status === 404 || r.status === 403) return `session ${id} has ended: ${NO_SESSION}`;
+  if (r.status < 200 || r.status >= 300) throw new Error(`${r.status}: ${r.text}`);
+  const d = r.data as any;
+  return JSON.stringify({ team: p?.team, id: d.id, name: d.name, environment: d.environment });
+}
+
+/** Pick a session of `team`, or start one on an environment, or create the environment first. A
+ * connected laptop is always in a session, so there is no way to clear the pick. */
+async function useSession(a: any): Promise<string> {
+  const team = a.team || process.env.KL_TEAM || (pickedSession()?.team ?? "");
+  if (!team) return "error: team is required";
+  const mk = async (environment: string) => {
+    const r = await apiJson<any>("POST", "/v1/sessions", { name: a.name || "main", team, environment });
+    savePick(team, r.id);
+    return JSON.stringify({ team, id: r.id, name: r.name, environment: r.environment });
+  };
+  if (a.new_environment) {
+    if (!a.region) return "error: region is required to create an environment";
+    const e = await apiJson<any>("POST", "/v1/environments", { name: a.new_environment, region: a.region, owner: team });
+    return mk(e.id);
+  }
+  if (a.environment) return mk(a.environment);
+  const list = await apiJson<any[]>("GET", `/v1/sessions${qs({ team })}`);
+  const choices = list.map((x) => `${x.name} (${x.id})`).join(", ") || "none";
+  if (!a.session) return `error: say which: session (yours: ${choices}), environment, or new_environment`;
+  const hit = list.find((x) => x.id === a.session) ?? list.find((x) => x.name === a.session);
+  if (!hit) return `error: no session ${a.session}; yours: ${choices}`;
+  savePick(team, hit.id);
+  return JSON.stringify({ team, id: hit.id, name: hit.name, environment: hit.environment });
 }
 
 /** Wake an idle-stopped environment before a read that needs it up. Only an idle-stopped one: a
@@ -186,28 +246,15 @@ function basePlatformTools(kind: "main" | "workspace" | "all", wsId?: string, ti
       return api("PATCH", wsPath(a), { packages: next });
     });
 
-  // space tools: in a workspace session `team` defaults to the workspace's own team
-  const teamOf = async (a: any): Promise<{ team: string } | { err: string }> => {
-    if (a.team) return { team: a.team };
-    if (!ws) return { err: "error: team is required" };
-    const g = await load(W);
-    if ("err" in g) return g;
-    // `crd::space_slug`: a personal workspace's space is the owner's own handle, never "no team"
-    const team = String(g.doc?.team || g.doc?.owner || "").toLowerCase();
-    return team ? { team } : { err: "error: workspace has no owner" };
-  };
-  const teamProp: Props = { team: S };
-
-  /** `env` for a workspace session: the environment its space follows. */
+  /** `env` for a workspace session: the environment its session connects it to (the workspace doc
+   * carries it, resolved through the session). */
   const envOf = async (a: any): Promise<{ env: string } | { err: string }> => {
     if (a.env) return { env: a.env };
     if (!ws) return { err: "error: env is required" };
-    const t = await teamOf({});
-    if ("err" in t) return t;
-    const m = await load("/v1/me/environments");
-    if ("err" in m) return m;
-    const hit = (m.doc as any[]).find((e) => e.team === t.team);
-    return hit?.environment ? { env: hit.environment } : { err: "error: this workspace's space follows no environment" };
+    const g = await load(W);
+    if ("err" in g) return g;
+    if (!g.doc?.session) return { err: "error: this workspace is in no session" };
+    return g.doc.environment ? { env: g.doc.environment } : { err: "error: this workspace's session has no environment" };
   };
   const envTool = (name: string, description: string, props: Props, req: string[], run: (env: string, a: any) => Promise<string>) =>
     def(name, description, { env: ENV, ...props }, ws ? req : ["env", ...req], async (a) => {
@@ -256,16 +303,14 @@ function basePlatformTools(kind: "main" | "workspace" | "all", wsId?: string, ti
         return text;
       },
     ),
-    def("space_env_current", "Show the environment that each space (team) of the person follows.", {}, [], async () => api("GET", "/v1/me/environments")),
-    def("space_env_switch", "Make every workspace of a team follow a different environment." + (ws ? " The team defaults to the team of this workspace." : ""), { ...teamProp, env: ENV }, ws ? ["env"] : ["team", "env"], async (a) => {
-      const t = await teamOf(a);
-      return "err" in t ? t.err : api("PUT", `/v1/me/environments/${seg(t.team)}`, { environment: a.env });
+    def("session_current", ws ? "Show the session of this workspace and the environment that the session connects it to. A workspace cannot join or leave a session." : "Show the session that this laptop is in, and its environment. A connected laptop is always in a session. With none picked, the answer says how to pick one.", {}, [], async () => {
+      if (ws) {
+        const g = await load(W);
+        return "err" in g ? g.err : JSON.stringify({ session: g.doc?.session ?? null, environment: g.doc?.environment ?? null }, null, 2);
+      }
+      return currentSession();
     }),
-    def("space_env_clear", "Detach the space of a team from its environment." + (ws ? " The team defaults to the team of this workspace." : ""), teamProp, ws ? [] : ["team"], async (a) => {
-      const t = await teamOf(a);
-      return "err" in t ? t.err : api("DELETE", `/v1/me/environments/${seg(t.team)}`);
-    }),
-    envTool("env_get", "Read the services, state and intercepts of an environment. Each `services[]` entry has `ready` (and `message`) from service_status. Read `ready`, not the spec; to wait after a change call env_wait instead of polling. `failing: true` means the service will not come up by waiting (a crash loop, an image that will not pull, a refused config): read `message` (for a crash, the exit code and its last log lines), fix the cause and redeploy. The `state` is `creating`, `running`, `stopped`, `error` or `deleted`. `running` means up. Stop the poll when the state is `error` or `deleted`." + (ws ? " It defaults to the environment that the space of this workspace follows." : ""), {}, [], async (env) => (await wake(env), withReady(await api("GET", `/v1/environments/${env}`)))),
+    envTool("env_get", "Read the services, state and intercepts of an environment. Each `services[]` entry has `ready` (and `message`) from service_status. Read `ready`, not the spec; to wait after a change call env_wait instead of polling. `failing: true` means the service will not come up by waiting (a crash loop, an image that will not pull, a refused config): read `message` (for a crash, the exit code and its last log lines), fix the cause and redeploy. The `state` is `creating`, `running`, `stopped`, `error` or `deleted`. `running` means up. Stop the poll when the state is `error` or `deleted`." + (ws ? " It defaults to the environment that the session of this workspace connects it to." : ""), {}, [], async (env) => (await wake(env), withReady(await api("GET", `/v1/environments/${env}`)))),
     envTool("env_wait", "Wait until an environment settles after a change: every service ready, a service failing, or the state error/deleted. Use this instead of polling env_get. Returns the env_get view; `timedOut: true` means it was still settling after `timeout` seconds (default 300).", { timeout: N }, [], async (env, a) => (await wake(env), settle(async () => withReady(await api("GET", `/v1/environments/${env}`)), a.timeout, tickMs))),
     services("service_add", "Add one service to an environment. The call fails if a service with this name exists." + ASYNC, { service: SERVICE }, ["service"], (cur, a) =>
       cur.some((s) => s.name === a.service?.name) ? `error: service exists: ${a.service?.name}` : [...cur, withServiceDefaults(a.service)]),
@@ -290,7 +335,7 @@ function basePlatformTools(kind: "main" | "workspace" | "all", wsId?: string, ti
   const main: ToolDef[] = [
     def("workspace_list", "List the workspaces of this session. You can give one team.", { team: S }, [], async (a) => {
       // A bench serves one session (KL_SESSION): it lists that session's workspaces only, as the
-      // sidebar does (backend/src/space.ts); without it a second session saw the first one's.
+      // sidebar does (backend/src/session.ts); without it a second session saw the first one's.
       const path = `/v1/workspaces${qs({ team: a.team })}`;
       const session = process.env.KL_SESSION;
       if (!session) return api("GET", path);
@@ -310,6 +355,8 @@ function basePlatformTools(kind: "main" | "workspace" | "all", wsId?: string, ti
     def("worktree_add", "Make a new worktree in a workspace." + ASYNC, { workspace: WS, name: S }, ["workspace", "name"], async (a) => api("POST", `/v1/workspaces/${seg(a.workspace)}/trees`, { name: a.name })),
     def("worktree_drop", "Remove a worktree from a workspace." + ASYNC, { workspace: WS, name: S }, ["workspace", "name"], async (a) => api("DELETE", `/v1/workspaces/${seg(a.workspace)}/trees/${seg(a.name)}`)),
     of("packages_list"),
+    of("session_current"),
+    def("session_use", "Pick the session this laptop is in. Give `session` (name or id) to pick one of yours, `environment` to start a session on an existing environment, or `new_environment` and `region` to create the environment first and start a session on it. `name` names a session you start (default main). A connected laptop is always in a session, so there is no clear.", { team: S, session: S, environment: ENV, new_environment: S, region: S, name: S }, [], useSession),
     def("env_list", "List the environments. You can give one team.", { team: S }, [], async (a) => api("GET", `/v1/environments${qs({ owner: a.team })}`)),
     def("env_get", "Read the services, state and intercepts of one environment. After an env call, wait with env_wait. Each `services[]` entry has `ready` (and `message`) from service_status. Read `ready`, not the spec; to wait after a change call env_wait instead of polling. `failing: true` means the service will not come up by waiting (a crash loop, an image that will not pull, a refused config): read `message` (for a crash, the exit code and its last log lines), fix the cause and redeploy. The `state` is `creating`, `running`, `stopped`, `error` or `deleted`. `running` means up.", { env: ENV }, ["env"], async (a) => (await wake(seg(a.env)), withReady(await api("GET", `/v1/environments/${seg(a.env)}`)))),
     def("env_wait", "Wait until an environment settles after a change: every service ready, a service failing, or the state error/deleted. Use this instead of polling env_get. Returns the env_get view; `timedOut: true` means it was still settling after `timeout` seconds (default 300).", { env: ENV, timeout: N }, ["env"], async (a) => (await wake(seg(a.env)), settle(async () => withReady(await api("GET", `/v1/environments/${seg(a.env)}`)), a.timeout, tickMs))),
@@ -325,7 +372,6 @@ function basePlatformTools(kind: "main" | "workspace" | "all", wsId?: string, ti
     def("env_restore", "Put this environment back to one of its own snapshots: its services and its data. Data written since the snapshot is lost. If the call returns 409 with `lost`, those services keep data that the snapshot does not have; ask the person, then call again with `discard` naming them." + ASYNC, { env: ENV, snapshot_id: S, discard: SL }, ["env", "snapshot_id"], async (a) =>
       api("POST", `/v1/environments/${seg(a.env)}/restore`, strip({ snapshot_id: a.snapshot_id, discard: a.discard }))),
     ...["service_add", "service_update", "service_remove"].map(of),
-    ...["space_env_current", "space_env_switch", "space_env_clear"].map(of),
     def("volume_list", "List the volumes. You can filter by kind (`workspace` or `environment`) and by owner.", { kind: S, owner: S }, [], async (a) => api("GET", `/v1/volumes${qs({ kind: a.kind, owner: a.owner })}`)),
     def("volume_history", "List the snapshots of a volume. These ids are for env_restore, env_clone and env_create.", { volume: S }, ["volume"], async (a) => api("GET", `/v1/volumes/${seg(a.volume)}/history`)),
     def("volume_refs", "Read the branch tips of a volume.", { volume: S }, ["volume"], async (a) => api("GET", `/v1/volumes/${seg(a.volume)}/refs`)),
