@@ -18,7 +18,7 @@ import { Files } from "./components/Files.tsx";
 import { Processes, isCtrlJ } from "./components/Processes.tsx";
 import { Spinner } from "./components/Spinner.tsx";
 import { menuItems, placeholders } from "./slash.ts";
-import { fromSpace, wsPath } from "./workspaces.ts";
+import { fromTeam, wsPath } from "./workspaces.ts";
 import { setTheme, theme, themeNames } from "./theme.ts";
 import { catalog, findModel, loadProviderAuth, modelLabel, refreshCatalog } from "./models.ts";
 import type {
@@ -32,7 +32,7 @@ import type {
   LiveSessionMeta,
   ThinkingLevel,
 } from "@kloudlite-tui/backend";
-import type { SpaceView } from "@kloudlite-tui/backend";
+import type { TeamView } from "@kloudlite-tui/backend";
 import { backend, hello } from "./hello.ts";
 import { applyState, autoAnswer, grant, keepFocus, transcript, upsertById, userRow } from "./sync.ts";
 
@@ -175,11 +175,11 @@ export function App({
   const [hint, setHint] = useState(0);
   // 0 = main context (orchestrator); 1..N = inside workspaces[focus - 1]
   const [focus, setFocus] = useState(0);
-  // The space's real workspaces and environments, polled from the backend (see `refreshSpace`).
+  // The team view: the session's real workspaces and environments, polled from the backend (see `refreshTeam`).
   // Workspaces belong to the working session, not to an environment.
-  const [space, setSpace] = useState<SpaceView>();
-  const mapped = useMemo(() => (space ? fromSpace(space) : { workspaces: [], environments: [], envIndex: 0 }), [space]);
-  const user = space?.user ?? "";
+  const [teamView, setTeamView] = useState<TeamView>();
+  const mapped = useMemo(() => (teamView ? fromTeam(teamView) : { workspaces: [], environments: [], envIndex: 0 }), [teamView]);
+  const user = teamView?.user ?? "";
   const envs = mapped.environments;
   const env = mapped.envIndex;
   const workspaces = mapped.workspaces;
@@ -253,7 +253,7 @@ export function App({
   // persisted across launches is the one failure worth not having.
   const [permMode, setPermMode] = useState<PermMode>(() => hello().mode);
 
-  const environment = envs[env]; // undefined until the space has an environment
+  const environment = envs[env]; // undefined until the session has an environment
   const mainBase = "main";
   const mainSession = sessionId[mainBase] ?? "main";
   const mainKey = sessionKey(undefined, mainSession);
@@ -276,7 +276,7 @@ export function App({
       off?.();
     };
   }, []);
-  // Everything the daemon says outside a session: cards, mode, settings, logins, files, the space.
+  // Everything the daemon says outside a session: cards, mode, settings, logins, files, the team view.
   useEffect(() => {
     let off: (() => void) | undefined;
     let gone = false;
@@ -337,9 +337,9 @@ export function App({
         if (f > 0 && ws[f - 1]?.id === e.ws) setFilesRefresh((n) => n + 1);
         break;
       }
-      case "space": {
+      case "team": {
         const f = keepFocus({ focus: live.current.focus, ids: live.current.workspaces.map((w) => w.id) }, e.view);
-        setSpace(e.view);
+        setTeamView(e.view);
         setFocus(f);
         break;
       }
@@ -1274,7 +1274,7 @@ export function App({
     const w = workspaces[i]!;
     return asks.some((a) => baseOf(a.key) === key) ? "needs you" : getSession(sessions, key).busy || watched?.some((m) => baseOf(m.key) === key && m.busy) ? "working" : w.status === "stopped" ? "" : "idle";
   };
-  const planAll = (max: number) => planRows(space?.boards ?? [], nameOf, activeBase, stateOf, max);
+  const planAll = (max: number) => planRows(teamView?.boards ?? [], nameOf, activeBase, stateOf, max);
   // main's Jobs screen: every workspace's processes, ids prefixed so two workspaces' "p1" stay apart
   const allJobs = workspaces
     .filter((w) => w.processes?.length)
@@ -1303,7 +1303,7 @@ export function App({
       snapshot={environment?.snapshot}
       envOwner={environment && environment.owner !== user ? environment.owner : undefined}
       user={user}
-      unavailable={space && !space.available ? space.error ?? "unknown error" : undefined}
+      unavailable={teamView && !teamView.available ? teamView.error ?? "unknown error" : undefined}
       focus={focus}
       width={prefs.sidebarWidth}
       running={workspaces.map((w) => getSession(sessions, w.id).busy || !!watched?.some((m) => baseOf(m.key) === w.id && m.busy))}
@@ -1354,7 +1354,7 @@ export function App({
           ) : planView ? (
             <PlanScreen rows={planAll(Infinity)} width={contentWidth} onClose={() => setView("agent")} />
           ) : doneView ? (
-            <DoneScreen tasks={doneTasks(space?.boards ?? [], nameOf, activeBase)} main={focus === 0} onClose={() => setView("agent")} />
+            <DoneScreen tasks={doneTasks(teamView?.boards ?? [], nameOf, activeBase)} main={focus === 0} onClose={() => setView("agent")} />
           ) : filesView ? (
             <Files
               root={hello().cwd}

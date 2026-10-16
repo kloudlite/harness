@@ -43,8 +43,8 @@ function loginHint(type: string, prefix: string): string {
 export function menuItems(input: string, ctx: MenuContext): MenuItem[] {
   if (!input.startsWith("/")) return [];
 
-  const space = input.indexOf(" ");
-  if (space === -1) {
+  const blank = input.indexOf(" ");
+  if (blank === -1) {
     return commands
       .filter((c) => c.name.startsWith(input))
       .map((c) => ({
@@ -54,8 +54,8 @@ export function menuItems(input: string, ctx: MenuContext): MenuItem[] {
       }));
   }
 
-  const cmd = input.slice(0, space);
-  const q = input.slice(space + 1).toLowerCase();
+  const cmd = input.slice(0, blank);
+  const q = input.slice(blank + 1).toLowerCase();
   const filter = (label: string) => label.toLowerCase().includes(q);
 
   if (cmd === "/model") {
@@ -94,7 +94,7 @@ export function menuItems(input: string, ctx: MenuContext): MenuItem[] {
         hint: loginHint(l.type, ""),
       }));
   if (cmd === "/session") {
-    const rest = input.slice(space + 1);
+    const rest = input.slice(blank + 1);
     // "/session name <text>" is free text — no options to pick from
     if (/^name\s/.test(rest)) return [];
     return [
@@ -107,7 +107,7 @@ export function menuItems(input: string, ctx: MenuContext): MenuItem[] {
     ].filter((o) => filter(o.label));
   }
   if (cmd === "/settings") {
-    const rest = input.slice(space + 1);
+    const rest = input.slice(blank + 1);
     // Two levels: one row per setting until a setting is named, then its
     // values. Listing every key/value pair at once ran to 20-odd rows and
     // buried the settings that are not thinkingLevel.
@@ -128,7 +128,7 @@ export function menuItems(input: string, ctx: MenuContext): MenuItem[] {
           (s) => s.key === o.key && s.hint.split(" · ")[0] === "current",
         );
         return {
-          // trailing space so picking the key reopens the menu at its values
+          // trailing blank so picking the key reopens the menu at its values
           insert: `/settings ${o.key} `,
           label: o.key,
           hint: current ? current.value : "",

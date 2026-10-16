@@ -78,7 +78,7 @@ export function Sidebar({
 }: {
   workspaces: Workspace[];
   services: Service[];
-  /** Undefined = the space has no environment: the block renders nothing. */
+  /** Undefined = the session has no environment: the block renders nothing. */
   envName?: string;
   envOwner?: string;
   /** The signed-in user: only their workspaces are focusable. */
@@ -163,7 +163,7 @@ export function Sidebar({
               );
             }
 
-            // one word on the right, and only when it earns the space
+            // one word on the right, and only when it earns the room
             const stateTag = waiting[i]
               ? "needs you"
               : running[i]

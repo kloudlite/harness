@@ -1,5 +1,5 @@
-//! `Backend.space()`: the sidebar's data, read from the platform with the bench's own tool token.
-//! The space is the bench's SESSION: workspaces are the current user's (`KL_OWNER`) in the space
+//! `Backend.teamView()`: the sidebar's data, read from the platform with the bench's own tool token.
+//! The team view is the bench's SESSION: workspaces are the current user's (`KL_OWNER`) in the team
 //! `KL_TEAM` whose `session` is `KL_SESSION`; the connected environment is the session's own
 //! (`KL_ENVIRONMENT`); environments listed are every environment of that team. A clone's parent and task (`clone_of`, `task`) are on the
 //! platform's workspace doc, so every row comes from the API; nothing here is kept on the bench's
@@ -8,7 +8,7 @@
 //! effort under a 5 s cap: a pod that does not answer leaves those fields out, never fails the view.
 //! Nothing here formats a token into a string; errors carry the API's text or ours.
 import { apiJson, podGet, podPost } from "@kloudlite-tui/tools";
-import type { SpaceEnvironment, SpaceProcess, SpaceView, SpaceWorkspace } from "./index.ts";
+import type { TeamEnvironment, TeamProcess, TeamView, TeamWorkspace } from "./index.ts";
 
 const POD_CAP_MS = 5000;
 const LOG_LINES = 500;
@@ -29,14 +29,14 @@ type Line = { text: string; err?: true };
  * every process started in another worktree. The tree names are `/healthz`'s `trees`: every tree the
  * server has served, which any tree that started a process has been. A pod from before that field
  * names them as the keys of `graphs` instead. */
-async function processes(ws: string): Promise<SpaceProcess[]> {
+async function processes(ws: string): Promise<TeamProcess[]> {
   const h = await capped(podGet<{ trees?: string[]; graphs?: Record<string, unknown> }>(ws, "/healthz", POD_CAP_MS));
   const trees = [...new Set(["main", ...(h?.trees ?? Object.keys(h?.graphs ?? {}))])];
   const lists = await Promise.all(
     trees.map(async (tree) => {
       // main's failure is the pod's and fails the read (the field is left out); a worktree
       // that went away since `/healthz` is just empty
-      const list = podPost<{ processes: Omit<SpaceProcess, "logs">[] }>(ws, "process_list", { tree }, POD_CAP_MS);
+      const list = podPost<{ processes: Omit<TeamProcess, "logs">[] }>(ws, "process_list", { tree }, POD_CAP_MS);
       const r = tree === "main" ? await list : await capped(list);
       return (r?.processes ?? []).map((p) => ({ ...p, tree }));
     }),
@@ -70,7 +70,7 @@ async function processes(ws: string): Promise<SpaceProcess[]> {
   );
 }
 
-async function enrich(w: SpaceWorkspace): Promise<void> {
+async function enrich(w: TeamWorkspace): Promise<void> {
   const [procs, ch] = await Promise.all([
     capped(processes(w.id)),
     capped(podGet<{ changes?: unknown[] }>(w.id, "/fs/changes", POD_CAP_MS)),
@@ -79,7 +79,7 @@ async function enrich(w: SpaceWorkspace): Promise<void> {
   if (Array.isArray(ch?.changes)) w.changes = ch.changes.length;
 }
 
-export async function space(): Promise<SpaceView> {
+export async function teamView(): Promise<TeamView> {
   const user = process.env.KL_OWNER ?? "";
   const team = process.env.KL_TEAM || undefined;
   const bench = process.env.KL_BENCH;
@@ -95,7 +95,7 @@ export async function space(): Promise<SpaceView> {
     return { available: false, error: String(e?.message ?? e).slice(0, 200), user, workspaces: [], environments: [] };
   }
 
-  const workspaces: SpaceWorkspace[] = ws
+  const workspaces: TeamWorkspace[] = ws
     .filter((w) => w.id !== bench && (!user || w.owner === user) && (!session || w.session === session))
     .map((w) => ({
       id: w.id,
@@ -121,7 +121,7 @@ export async function space(): Promise<SpaceView> {
     : [];
   const at = doc && history ? envCurrent(history, doc.restored_to ?? null, doc.restore_requested_at ?? null) : undefined;
 
-  const environments: SpaceEnvironment[] = envs.map((e) => {
+  const environments: TeamEnvironment[] = envs.map((e) => {
     const status = new Map<string, any>((e.service_status ?? []).map((s: any) => [s.name, s]));
     return {
       id: e.id,

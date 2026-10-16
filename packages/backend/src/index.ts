@@ -32,9 +32,9 @@ export type LoginType = Parameters<typeof loginProvider>[1];
 /** pi's `AuthInteraction`: `{ signal?, prompt(p): Promise<string>, notify(e): void }`. */
 export type LoginUi = Parameters<typeof loginProvider>[2];
 export type CatalogModel = { provider: string; id: string; name: string; input: string[] };
-/** What the sidebar shows, read by the bench from the platform (./space). JSON-safe: it crosses the websocket. */
-export type SpaceProcess = { id: string; tree?: string; cmd: string; state: string; exit_code?: number | null; failed?: boolean; started_at?: string; logs: { text: string; err?: true }[] };
-export type SpaceWorkspace = {
+/** What the sidebar shows, read by the bench from the platform (./session). JSON-safe: it crosses the websocket. */
+export type TeamProcess = { id: string; tree?: string; cmd: string; state: string; exit_code?: number | null; failed?: boolean; started_at?: string; logs: { text: string; err?: true }[] };
+export type TeamWorkspace = {
   id: string;
   name: string;
   owner: string;
@@ -45,10 +45,10 @@ export type SpaceWorkspace = {
   environment?: string;
   parent?: string;
   task?: string;
-  processes?: SpaceProcess[];
+  processes?: TeamProcess[];
   changes?: number;
 };
-export type SpaceEnvironment = {
+export type TeamEnvironment = {
   id: string;
   name: string;
   owner: string;
@@ -59,12 +59,12 @@ export type SpaceEnvironment = {
 };
 export type TaskState = "queued" | "running" | "blocked" | "done" | "failed";
 export type BoardTask = { id: string; title: string; priority: number; dependsOn: string[]; state: TaskState; note?: string; /** What changed and where; with `verified`, required to mark done (tasks.ts). */ summary?: string; verified?: string; /** Set when the board watcher (watch.ts) moved the task, not the session; any session write clears it. */ by?: "watcher"; created: number };
-export type SpaceView = {
+export type TeamView = {
   available: boolean;
   error?: string;
   user: string;
-  workspaces: SpaceWorkspace[];
-  environments: SpaceEnvironment[];
+  workspaces: TeamWorkspace[];
+  environments: TeamEnvironment[];
   /** The session's environment (`KL_ENVIRONMENT`). */
   connected?: string;
   /** Every session's own board, main first; only the local backend fills it. */
@@ -116,7 +116,7 @@ export type BenchEvent =
   | { type: "settings"; settings: Settings }
   | { type: "auth_changed" }
   | { type: "fs_changed"; ws?: string }
-  | { type: "space"; view: SpaceView };
+  | { type: "team"; view: TeamView };
 
 export type PermissionRequest = {
   name: string;
@@ -209,8 +209,8 @@ export interface Backend {
     clear(key: string): Promise<void>;
   };
   settings: { write(patch: Partial<Settings>): Promise<void> };
-  /** The space's real workspaces and environments; never throws, `available: false` says why. */
-  space(): Promise<SpaceView>;
+  /** The session's real workspaces and environments; never throws, `available: false` says why. */
+  teamView(): Promise<TeamView>;
   /** One JSON-RPC message from the laptop MCP door (mcp.ts); the reply, null for a notification. */
   mcp?(msg: unknown): Promise<unknown>;
   models: { refresh(): Promise<CatalogModel[]> };

@@ -55,7 +55,7 @@ test("/settings lists its keys, with the current value as the hint", () => {
   ]);
 });
 
-// "thinking" is a prefix of "thinkingLevel"; the trailing space separates them
+// "thinking" is a prefix of "thinkingLevel"; the trailing blank separates them
 test("naming a setting lists only its values", () => {
   expect(menuItems("/settings thinkingLevel ", settingsCtx).map((i) => i.insert)).toEqual([
     "/settings thinkingLevel off",

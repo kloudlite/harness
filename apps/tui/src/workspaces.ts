@@ -1,7 +1,7 @@
-//! What the sidebar draws, and `fromSpace`, which maps the backend's `SpaceView` (the platform's
+//! What the sidebar draws, and `fromTeam`, which maps the backend's `TeamView` (the platform's
 //! real workspaces, environments and ide-server processes) onto it. The demo data lives in
 //! ./fixtures.ts for tests only.
-import type { SpaceView } from "@kloudlite-tui/backend";
+import type { TeamView } from "@kloudlite-tui/backend";
 
 export type WorkspaceStatus = "running" | "attached" | "stopped" | "cloning";
 
@@ -131,9 +131,9 @@ export function procName(cmd: string): string {
  * its clones. ponytail: the platform has no clone progress and `error` is shown as stopped; add a
  * state when the sidebar learns to colour failures.
  */
-export function fromSpace(v: SpaceView): { workspaces: Workspace[]; environments: Environment[]; envIndex: number } {
+export function fromTeam(v: TeamView): { workspaces: Workspace[]; environments: Environment[]; envIndex: number } {
   const name = new Map(v.workspaces.map((w) => [w.id, w.name]));
-  const row = (w: SpaceView["workspaces"][number]): Workspace => ({
+  const row = (w: TeamView["workspaces"][number]): Workspace => ({
     id: w.id,
     name: w.name,
     owner: w.owner,
@@ -157,7 +157,7 @@ export function fromSpace(v: SpaceView): { workspaces: Workspace[]; environments
   });
   const by = new Map(v.workspaces.map((w) => [w.id, w]));
   // the tree is three levels (workspace › task), so a clone of a clone hangs off the root
-  const rootOf = (w: SpaceView["workspaces"][number]): string => {
+  const rootOf = (w: TeamView["workspaces"][number]): string => {
     for (let i = 0; w.parent && by.has(w.parent) && i < 16; i++) w = by.get(w.parent)!;
     return w.id;
   };

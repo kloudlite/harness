@@ -1,8 +1,8 @@
 //! What a TUI does with what the daemon pushes. Pure: app.tsx owns React state and calls these.
 //! The daemon holds every session's state; nothing here invents state the daemon did not send.
-import type { Ask, SessionState, SpaceView } from "@kloudlite-tui/backend";
+import type { Ask, SessionState, TeamView } from "@kloudlite-tui/backend";
 import type { Entry } from "./components/Transcript.tsx";
-import { fromSpace } from "./workspaces";
+import { fromTeam } from "./workspaces";
 
 const images = (m: any) => (m.content ?? []).filter((b: any) => b.type === "image").length || undefined;
 const text = (m: any) => (m.content ?? []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n");
@@ -62,10 +62,10 @@ export function applyState(s: SessionState) {
   };
 }
 
-/** Focus after a space push: follows its workspace by id; an errored push never moves it. */
-export function keepFocus(prev: { focus: number; ids: string[] }, view: SpaceView): number {
+/** Focus after a team-view push: follows its workspace by id; an errored push never moves it. */
+export function keepFocus(prev: { focus: number; ids: string[] }, view: TeamView): number {
   if (view.error || prev.focus === 0) return prev.focus;
-  const next = fromSpace(view).workspaces;
+  const next = fromTeam(view).workspaces;
   const at = next.findIndex((w) => w.id === prev.ids[prev.focus - 1]);
   return at >= 0 ? at + 1 : Math.min(prev.focus, next.length);
 }

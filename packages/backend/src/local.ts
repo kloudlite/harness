@@ -31,17 +31,17 @@ import { WORKSPACE_DIR, delegateTools, resumeAsks, type DelegateDeps } from "./d
 import { asksDir, listAsks } from "./asks.ts";
 import { forgetSessions } from "./forget.ts";
 import { boardWatcher } from "./watch.ts";
-import { SpaceWatch } from "./spacewatch.ts";
+import { TeamWatch } from "./teamwatch.ts";
 import * as git from "./git.ts";
 import { BECAUSE_SCHEMA, TurnWords, consented } from "./consent.ts";
 import { toolDiff } from "./diff.ts";
 import { podfs } from "./podfs.ts";
-import { space as spaceView } from "./session.ts";
+import { teamView as readTeam } from "./session.ts";
 import { mcpServer } from "./mcp.ts";
 import { boardText, boardTools, readBoards, readTasks, taskTools, tasksFile } from "./tasks.ts";
 import { messagesFile, readMessages } from "./messages.ts";
 import { PROTOCOL } from "./wire.ts";
-import type { Backend, BenchEvent, CatalogModel, Decision, PermMode, PermissionRequest, Hello, LiveSessionMeta, SessionEvent, SessionHandle, SessionOpts, SessionState, SpaceView, ThinkingLevel } from "./index.ts";
+import type { Backend, BenchEvent, CatalogModel, Decision, PermMode, PermissionRequest, Hello, LiveSessionMeta, SessionEvent, SessionHandle, SessionOpts, SessionState, TeamView, ThinkingLevel } from "./index.ts";
 
 /** Destructive house actions: they throw away what the person owns, so they ask. Everything else
  * runs unasked: sessions work inside a sandboxed workspace, and a stop snapshots, a build or push
@@ -174,7 +174,7 @@ export async function registryFor(k: SessionKind, deps: DelegateDeps, opts: Sess
  * tools and every pod tool, each aimed by a required `workspace`/`env`. No `asking`, no question
  * card: the MCP client's own approvals are the gate. Pod schemas come from one running workspace. */
 export async function mcpTools(deps: DelegateDeps): Promise<ToolDef[]> {
-  const running = (await spaceView()).workspaces.find((w) => w.state === "ready")?.id;
+  const running = (await readTeam()).workspaces.find((w) => w.state === "ready")?.id;
   return new Registry().add(webFetch, webSearch, ...(await anyPodTools(running)),
      ...platformTools("all").map((t) => (t.name === "workspace_delete" ? forgetting(t, deps) : t)), ...delegateTools("main", undefined, deps, { tools: [] } as unknown as SessionOpts, "main"), ...taskTools(tasksFile("main", deps.tasks)), ...boardTools(deps.tasks), // the bench's own scratch folder: renamed, since `read`/`write` here are the pod's
     ...scratchTools(scratchRoot("main")).map((t) => ({ ...t, name: `scratch_${t.name}`, description: `On the bench's scratch folder, not a workspace. ${t.description}` }))).all();
@@ -582,7 +582,7 @@ export class LocalBackend implements Backend {
     return choice === "reject" ? { block: true, reason: "The user rejected this tool call." } : {};
   }
 
-  #space = new SpaceWatch(() => this.space(), (view) => this.#broadcast({ type: "space", view }));
+  #team = new TeamWatch(() => this.teamView(), (view) => this.#broadcast({ type: "team", view }));
   #fsTimers = new Map<string, ReturnType<typeof setTimeout>>();
   /** Coalesce a burst of file-touching tools into one push per workspace. */
   #fsChanged(ws?: string) {
@@ -592,12 +592,12 @@ export class LocalBackend implements Backend {
   }
   async watch(cb: (e: BenchEvent) => void): Promise<() => void> {
     this.#bench.add(cb);
-    this.#space.start();
-    const last = this.#space.last();
-    if (last) cb({ type: "space", view: last });
+    this.#team.start();
+    const last = this.#team.last();
+    if (last) cb({ type: "team", view: last });
     return () => {
       this.#bench.delete(cb);
-      if (this.#bench.size === 0) this.#space.stop();
+      if (this.#bench.size === 0) this.#team.stop();
     };
   }
   asks: Backend["asks"] = { answer: async (id, choice) => this.#cards.answer(id, choice) };
@@ -764,10 +764,10 @@ export class LocalBackend implements Backend {
           if (open.length) handle.notice(`${open.length} ask(s) still open: ${open.map((a) => a.key).join(", ")}. Their replies arrive as messages.`);
         }
         this.#words(key).end();
-        this.#space.poke();
+        this.#team.poke();
       } else if ((e as any).type === "tool_execution_end") {
         const name: string = (e as any).toolName ?? "";
-        if (/^(workspace|environment|service|intercept)_/.test(name)) this.#space.poke();
+        if (/^(workspace|environment|service|intercept)_/.test(name)) this.#team.poke();
         if (["write", "edit", "patch", "bash", "exec"].includes(name)) {
           const base = key.split(":")[0]!;
           this.#fsChanged(base === "main" ? undefined : base);
@@ -807,7 +807,7 @@ export class LocalBackend implements Backend {
   #mcp?: ReturnType<typeof mcpServer>;
   mcp = (msg: unknown) => (this.#mcp ??= mcpServer(() => mcpTools(this.#deps())))(msg as any);
 
-  space = async (): Promise<SpaceView> => ({ ...(await spaceView()), boards: readBoards(), messages: readMessages(messagesFile()) });
+  teamView = async (): Promise<TeamView> => ({ ...(await readTeam()), boards: readBoards(), messages: readMessages(messagesFile()) });
 
   settings = {
     write: async (patch: Parameters<typeof writeSettings>[0]) => {

@@ -1,14 +1,14 @@
-//! One space poller per bench (not one per TUI): every 5 s, after every turn and after a platform
+//! One team-view poller per bench (not one per TUI): every 5 s, after every turn and after a platform
 //! tool. Emits only when the view changes. A failed read re-emits the last good view with `error`
 //! set, so a TUI keeps its list and focus through a slow pod read instead of emptying.
-import type { SpaceView } from "./index";
+import type { TeamView } from "./index";
 
-export class SpaceWatch {
+export class TeamWatch {
   #timer?: ReturnType<typeof setInterval>;
   #inflight = false;
-  #last?: SpaceView;
+  #last?: TeamView;
   #sent = "";
-  constructor(private readonly read: () => Promise<SpaceView>, private readonly emit: (v: SpaceView) => void, private readonly everyMs = 5000) {}
+  constructor(private readonly read: () => Promise<TeamView>, private readonly emit: (v: TeamView) => void, private readonly everyMs = 5000) {}
 
   start(): void {
     if (this.#timer) return;
@@ -19,7 +19,7 @@ export class SpaceWatch {
     clearInterval(this.#timer);
     this.#timer = undefined;
   }
-  last(): SpaceView | undefined {
+  last(): TeamView | undefined {
     return this.#last;
   }
   poke(): void {
@@ -36,7 +36,7 @@ export class SpaceWatch {
       })
       .finally(() => (this.#inflight = false));
   }
-  #send(v: SpaceView): void {
+  #send(v: TeamView): void {
     const s = JSON.stringify(v);
     if (s === this.#sent) return;
     this.#sent = s;

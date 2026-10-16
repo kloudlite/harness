@@ -392,8 +392,8 @@ test("every session has task tools writing its own board", async () => {
   expect(readBoards(tasks).map((b) => [b.session, b.tasks.length])).toEqual([["main", 0], ["w1", 2]]);
 });
 
-test("space() carries the boards (main first) and the message log", async () => {
-  const v = await new LocalBackend().space();
+test("teamView() carries the boards (main first) and the message log", async () => {
+  const v = await new LocalBackend().teamView();
   expect(v.boards![0]!.session).toBe("main");
   expect(Array.isArray(v.messages)).toBe(true);
 });

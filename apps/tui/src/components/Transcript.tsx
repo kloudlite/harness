@@ -59,7 +59,7 @@ function wrap(line: string, width: number): string[] {
   const rows: string[] = [];
   let rest = line;
   while (rest.length > width) {
-    // break on the last space that fits; a word longer than the width is cut
+    // break on the last blank that fits; a word longer than the width is cut
     const cut = rest.lastIndexOf(" ", width);
     const at = cut > 0 ? cut : width;
     rows.push(rest.slice(0, at));

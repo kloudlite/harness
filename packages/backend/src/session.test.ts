@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { envCurrent, space, type Snap } from "./session.ts";
+import { envCurrent, teamView, type Snap } from "./session.ts";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -15,14 +15,14 @@ afterEach(() => {
 test("without KL_API_URL the view is unavailable with a reason, never a throw", async () => {
   delete process.env.KL_API_URL;
   process.env.KL_OWNER = "me";
-  const v = await new LocalBackend().space();
+  const v = await new LocalBackend().teamView();
   expect(v.available).toBe(false);
   expect(v.error).toContain("unavailable");
   expect(v).toMatchObject({ user: "me", workspaces: [], environments: [] });
 });
 
 test("lists the user's workspaces and the team's environments, reads clone parent and task from the doc, survives a dead pod", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "kl-space-"));
+  const dir = mkdtempSync(join(tmpdir(), "kl-team-"));
   writeFileSync(join(dir, "tok"), "SECRET-TOKEN\n");
   Object.assign(process.env, { KL_API_URL: "http://api", KL_TOOL_KEY_FILE: join(dir, "tok"), KL_OWNER: "me", KL_TEAM: "acme", KL_BENCH: "bench", KL_ENVIRONMENT: "e2" });
   const urls: string[] = [];
@@ -60,7 +60,7 @@ test("lists the user's workspaces and the team's environments, reads clone paren
     return json({ error: "nope" }, 404);
   }) as any;
 
-  const v = await space(); // the platform view alone: LocalBackend adds boards and messages from the real ~/.kl
+  const v = await teamView(); // the platform view alone: LocalBackend adds boards and messages from the real ~/.kl
   expect(v.available).toBe(true);
   expect(v.connected).toBe("e2");
   expect(v.workspaces.map((w) => w.id)).toEqual(["w1", "c1", "w3"]); // not the bench, not another person's
@@ -83,7 +83,7 @@ test("lists the user's workspaces and the team's environments, reads clone paren
 });
 
 test("a running process is read from the cursor the last answer gave, not from 0", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "kl-space-"));
+  const dir = mkdtempSync(join(tmpdir(), "kl-team-"));
   writeFileSync(join(dir, "tok"), "SECRET-TOKEN\n");
   Object.assign(process.env, { KL_API_URL: "http://api", KL_TOOL_KEY_FILE: join(dir, "tok"), KL_OWNER: "me", KL_TEAM: "acme", KL_BENCH: "bench" });
   const json = (v: unknown) => new Response(JSON.stringify(v));
@@ -92,7 +92,6 @@ test("a running process is read from the cursor the last answer gave, not from 0
     const url = String(u);
     if (url.startsWith("http://api/v1/workspaces?")) return json([{ id: "wc", name: "cur", owner: "me", state: "ready" }]);
     if (url.startsWith("http://api/v1/environments")) return json([]);
-    if (url.endsWith("/v1/me/environments")) return json([]);
     if (url.endsWith("/v1/workspaces/wc/tools")) return json({ address: "10.0.0.2:7788", token: "T" });
     if (url.endsWith("/tools/process_list")) return json({ processes: [{ id: "px", cmd: "srv", state: "running", exit_code: null, failed: false }] });
     if (url.endsWith("/tools/process_output")) {
@@ -103,15 +102,15 @@ test("a running process is read from the cursor the last answer gave, not from 0
     return json({ error: "nope" });
   }) as any;
   const b = new LocalBackend();
-  const first = await b.space();
+  const first = await b.teamView();
   expect(first.workspaces[0]!.processes![0]!.logs).toEqual([{ text: "a" }, { text: "b" }, { text: "e1", err: true }]);
-  const second = await b.space();
+  const second = await b.teamView();
   expect(reads[1]).toMatchObject({ id: "px", since: 4, since_err: 3 });
   expect(second.workspaces[0]!.processes![0]!.logs).toEqual([{ text: "a" }, { text: "b" }, { text: "e1", err: true }, { text: "c" }]);
 });
 
 test("an exited process never seen running is read once; stderr lines are tagged", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "kl-space-"));
+  const dir = mkdtempSync(join(tmpdir(), "kl-team-"));
   writeFileSync(join(dir, "tok"), "SECRET-TOKEN\n");
   Object.assign(process.env, { KL_API_URL: "http://api", KL_TOOL_KEY_FILE: join(dir, "tok"), KL_OWNER: "me", KL_TEAM: "acme", KL_BENCH: "bench" });
   const json = (v: unknown) => new Response(JSON.stringify(v));
@@ -120,7 +119,6 @@ test("an exited process never seen running is read once; stderr lines are tagged
     const url = String(u);
     if (url.startsWith("http://api/v1/workspaces?")) return json([{ id: "wd", name: "dead", owner: "me", state: "ready" }]);
     if (url.startsWith("http://api/v1/environments")) return json([]);
-    if (url.endsWith("/v1/me/environments")) return json([]);
     if (url.endsWith("/v1/workspaces/wd/tools")) return json({ address: "10.0.0.3:7788", token: "T" });
     if (url.endsWith("/tools/process_list")) return json({ processes: [{ id: "pd", cmd: "boom", state: "exited", exit_code: 1, failed: true, started_at: "2026-10-01T00:00:00Z" }] });
     if (url.endsWith("/tools/process_output")) {
@@ -130,27 +128,27 @@ test("an exited process never seen running is read once; stderr lines are tagged
     return json({ error: "nope" });
   }) as any;
   const b = new LocalBackend();
-  const first = await b.space();
+  const first = await b.teamView();
   const p = first.workspaces[0]!.processes![0]!;
   expect(p.started_at).toBe("2026-10-01T00:00:00Z");
   expect(p.logs).toEqual([{ text: "out" }, { text: "bad", err: true }]);
-  const second = await b.space();
+  const second = await b.teamView();
   expect(reads).toBe(1);
   expect(second.workspaces[0]!.processes![0]!.logs).toEqual(p.logs);
 });
 
 test("a failing list call is unavailable, with the API's text and no token", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "kl-space-"));
+  const dir = mkdtempSync(join(tmpdir(), "kl-team-"));
   writeFileSync(join(dir, "tok"), "SECRET-TOKEN\n");
   Object.assign(process.env, { KL_API_URL: "http://api", KL_TOOL_KEY_FILE: join(dir, "tok") });
   globalThis.fetch = (async () => new Response("forbidden", { status: 403 })) as any;
-  const v = await new LocalBackend().space();
+  const v = await new LocalBackend().teamView();
   expect(v.available).toBe(false);
   expect(v.error).toBe("error 403: forbidden");
 });
 
 test("a worktree's process is listed with its tree, and its logs are read from that tree", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "kl-space-"));
+  const dir = mkdtempSync(join(tmpdir(), "kl-team-"));
   writeFileSync(join(dir, "tok"), "SECRET-TOKEN\n");
   Object.assign(process.env, { KL_API_URL: "http://api", KL_TOOL_KEY_FILE: join(dir, "tok"), KL_OWNER: "me", KL_TEAM: "acme", KL_BENCH: "bench" });
   const json = (v: unknown) => new Response(JSON.stringify(v));
@@ -159,7 +157,6 @@ test("a worktree's process is listed with its tree, and its logs are read from t
     const url = String(u);
     if (url.startsWith("http://api/v1/workspaces?")) return json([{ id: "wc", name: "cur", owner: "me", state: "ready" }]);
     if (url.startsWith("http://api/v1/environments")) return json([]);
-    if (url.endsWith("/v1/me/environments")) return json([]);
     if (url.endsWith("/v1/workspaces/wc/tools")) return json({ address: "10.0.0.2:7788", token: "T" });
     if (url.endsWith("/healthz")) return json({ trees: ["main", "x"] });
     if (url.endsWith("/tools/process_list")) {
@@ -172,7 +169,7 @@ test("a worktree's process is listed with its tree, and its logs are read from t
     }
     return json({ error: "nope" });
   }) as any;
-  const s = await new LocalBackend().space();
+  const s = await new LocalBackend().teamView();
   const p = s.workspaces[0]!.processes![0]!;
   expect(p.tree).toBe("x");
   expect(outputs[0]).toMatchObject({ id: "px", tree: "x" });
@@ -198,8 +195,8 @@ test("foreign restore names no record", () => {
   expect(envCurrent([s("a", "1")], "elsewhere", "2026-10-10T04:00:00Z")).toBeUndefined();
 });
 
-test("space lists only this session's workspaces and connects its environment", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "kl-space-"));
+test("the team view lists only this session's workspaces and connects its environment", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "kl-team-"));
   writeFileSync(join(dir, "tok"), "T\n");
   Object.assign(process.env, { KL_API_URL: "http://api", KL_TOOL_KEY_FILE: join(dir, "tok"), KL_OWNER: "alice", KL_TEAM: "acme", KL_SESSION: "ses-1", KL_ENVIRONMENT: "env-1", KL_BENCH: "bench-x" });
   const routes: Record<string, unknown> = {
@@ -216,8 +213,7 @@ test("space lists only this session's workspaces and connects its environment", 
     calls.push(path);
     return new Response(JSON.stringify(routes[path] ?? { error: "nope" }), { status: path in routes ? 200 : 404 });
   }) as any;
-  const v = await space();
+  const v = await teamView();
   expect(v.workspaces.map((w) => w.id)).toEqual(["w1"]);
   expect(v.connected).toBe("env-1");
-  expect(calls).not.toContain("/v1/me/environments");
 });

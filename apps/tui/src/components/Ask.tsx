@@ -98,7 +98,7 @@ export function AskPanel({ ask }: { ask: Ask }) {
         paddingBottom={1}
       >
         <box flexDirection="column">
-          {/* one text, so a wrapped title keeps the space after △ */}
+          {/* one text, so a wrapped title keeps the gap after △ */}
           <box paddingLeft={1}>
             <text selectable={false} fg={theme.fg}>
               <span fg={theme.warning}>△ </span>

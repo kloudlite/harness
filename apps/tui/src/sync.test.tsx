@@ -9,7 +9,7 @@ const tick = () => new Promise((r) => setTimeout(r, 60));
 /** `watch: "old"` plays a bench without the op; `push` plays the bench pushing a new list. */
 function scripted(opts: { watch?: "answers" | "old" } = {}) {
   const b: any = new LocalBackend();
-  b.space = backend().space; // as app.test.tsx: the real one reaches for the platform
+  b.teamView = backend().teamView; // as app.test.tsx: the real one reaches for the platform
   const listCalls: string[] = [];
   let watcher: ((l: any[]) => void) | undefined;
   b.sessions = {
@@ -99,7 +99,7 @@ test("pushed session_state sets model, context and queue", () => {
   expect(p).toEqual({ model: { provider: "openai", id: "x" }, context: { tokens: 12, window: 100 }, queued: [{ text: "a", kind: "steer" }, { text: "b", kind: "followUp" }] });
 });
 
-test("a space push with error keeps focus; a good push without the workspace clamps", () => {
+test("a team-view push with error keeps focus; a good push without the workspace clamps", () => {
   const v = (ids: string[], error?: string) => ({ available: true, user: "u", workspaces: ids.map((id) => ({ id })), environments: [], error }) as any;
   expect(keepFocus({ focus: 2, ids: ["a", "b"] }, v([], "timed out"))).toBe(2);
   expect(keepFocus({ focus: 2, ids: ["a", "b"] }, v(["b", "a"]))).toBe(1);
@@ -134,7 +134,7 @@ function sessionStub(msgs: any[]) {
 test("an ask_resolved drops the card; an ask for a granted tool is answered without a card", async () => {
   const answered: [string, string][] = [];
   const b: any = new LocalBackend();
-  b.space = backend().space;
+  b.teamView = backend().teamView;
   let push!: (e: any) => void;
   b.watch = async (cb: any) => ((push = cb), () => {});
   b.asks = { answer: async (id: string, c: string) => void answered.push([id, c]) };
@@ -155,7 +155,7 @@ test("/clear in another view empties this view's transcript", async () => {
   ];
   const stub = sessionStub(msgs);
   const b: any = new LocalBackend();
-  b.space = backend().space;
+  b.teamView = backend().teamView;
   b.session = async () => stub.handle;
   const ui = await mount(b);
   expect(await ui.frame()).toContain("old words");

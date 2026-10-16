@@ -11,7 +11,7 @@ import { backend, boot, hello } from "./hello.ts";
 // would otherwise open the next test's session as busy, which the app now honours.
 function writeSettings(patch: Record<string, unknown>) {
   const fresh = new LocalBackend();
-  fresh.space = backend().space;
+  fresh.teamView = backend().teamView;
   boot(fresh, { ...hello(), settings: { ...hello().settings, ...patch } });
 }
 import { App } from "./app.tsx";
@@ -664,12 +664,12 @@ test("a long codemode script's expander counts the script's hidden rows, not jus
 });
 
 // The sidebar is the platform's data, so it has to say so when the platform is
-// down, and an empty space must not crash the environment guards.
+// down, and an empty team view must not crash the environment guards.
 async function sidebarWith(view: Record<string, unknown>) {
   const real = backend();
-  // the space arrives as a push now: the first thing the bench stream says
-  const watch = async (cb: any) => (cb({ type: "space", view }), () => {});
-  boot(new Proxy(real, { get: (o: any, p) => (p === "space" ? async () => view : p === "watch" ? watch : typeof o[p] === "function" ? o[p].bind(o) : o[p]) }) as any, hello());
+  // the team view arrives as a push now: the first thing the bench stream says
+  const watch = async (cb: any) => (cb({ type: "team", view }), () => {});
+  boot(new Proxy(real, { get: (o: any, p) => (p === "teamView" ? async () => view : p === "watch" ? watch : typeof o[p] === "function" ? o[p].bind(o) : o[p]) }) as any, hello());
   const setup = await testRender(<App />, { width: COLS, height: ROWS, kittyKeyboard: true });
   let f = "";
   for (let i = 0; i < 10; i++) {
@@ -688,7 +688,7 @@ test("sidebar: an unreachable platform shows the reason, not demo rows", async (
   expect(f).not.toContain("api-gateway");
 });
 
-test("sidebar: a space without environments renders no Environment block", async () => {
+test("sidebar: a team view without environments renders no Environment block", async () => {
   const f = await sidebarWith({ available: true, user: "me", workspaces: [{ id: "w1", name: "solo", owner: "me", state: "ready" }], environments: [] });
   expect(f).toContain("solo");
   expect(f).not.toContain("Environment");

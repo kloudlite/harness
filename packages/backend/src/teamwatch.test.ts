@@ -1,12 +1,12 @@
 import { test, expect } from "bun:test";
-import { SpaceWatch } from "./spacewatch";
+import { TeamWatch } from "./teamwatch";
 
 const view = (n: number) => ({ available: true, user: "u", workspaces: [{ id: `w${n}` }], environments: [] }) as any;
 
 test("emits on change only; a failing poll emits the last good view with error", async () => {
   let next: () => Promise<any> = async () => view(1);
   const seen: any[] = [];
-  const w = new SpaceWatch(() => next(), (v) => seen.push(v), 1_000_000);
+  const w = new TeamWatch(() => next(), (v) => seen.push(v), 1_000_000);
   w.poke(); await Bun.sleep(5);
   w.poke(); await Bun.sleep(5);
   expect(seen.length).toBe(1);
@@ -25,7 +25,7 @@ test("emits on change only; a failing poll emits the last good view with error",
 test("never stacks polls", async () => {
   let calls = 0;
   let release!: () => void;
-  const w = new SpaceWatch(() => (calls++, new Promise((r) => (release = () => r(view(1))))), () => {}, 1_000_000);
+  const w = new TeamWatch(() => (calls++, new Promise((r) => (release = () => r(view(1))))), () => {}, 1_000_000);
   w.poke(); w.poke(); w.poke();
   expect(calls).toBe(1);
   release(); await Bun.sleep(5);

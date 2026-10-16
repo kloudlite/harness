@@ -146,7 +146,7 @@ export class RemoteBackend implements Backend {
   fs = this.#ops<Backend["fs"]>("fs", ["isGitRepo", "changes", "fileDiff", "fullFile", "listDir", "grep"]);
   podfs = this.#ops<Backend["podfs"]>("podfs", ["isGitRepo", "changes", "fileDiff", "fullFile", "listDir"]);
   settings = { write: (patch: any) => this.peer.request<void>("settings.write", patch) };
-  space = () => this.peer.request<any>("space", null);
+  teamView = () => this.peer.request<any>("team", null);
   models = { refresh: () => this.peer.request<any>("models.refresh", null) };
   auth = {
     providers: () => this.peer.request<any>("auth.providers", null),

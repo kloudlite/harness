@@ -5,11 +5,13 @@ import { join } from "node:path";
 import { mcpTools } from "./local.ts";
 
 const PLUGIN = join(import.meta.dir, "../../../laptop-plugin/plugin");
+// the laptop door (`kl-connect mcp`, mcp.rs) answers these itself; the bench never serves session_use
+const LAPTOP_DOOR = ["session_current", "session_use"];
 const LAPTOP_NEVER = ["workspace_ask", "task_add", "task_update", "task_list", "workspace_tasks"];
 
 const served = async () => {
   const deps = { live: new Map(), busy: new Set<string>(), open: async () => null as never, permit: async () => ({}), tasks: mkdtempSync(join(tmpdir(), "kl-plugin-")) };
-  return new Set((await mcpTools(deps)).map((t) => t.name));
+  return new Set([...(await mcpTools(deps)).map((t) => t.name), ...LAPTOP_DOOR]);
 };
 const skills = () => readdirSync(join(PLUGIN, "skills")).map((d) => readFileSync(join(PLUGIN, "skills", d, "SKILL.md"), "utf8"));
 const agents = () => readdirSync(join(PLUGIN, "agents")).map((f) => readFileSync(join(PLUGIN, "agents", f), "utf8"));

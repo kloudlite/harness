@@ -27,7 +27,7 @@ function fake(): Backend & { seen: string[] } {
         subscribe: (cb: any) => (subs.add(cb), () => subs.delete(cb)),
       };
     },
-    sessions: {}, fs: {}, podfs: {}, settings: {}, models: {}, auth: {}, space: async () => ({ available: false, error: "x", user: "u", workspaces: [], environments: [] }),
+    sessions: {}, fs: {}, podfs: {}, settings: {}, models: {}, auth: {}, teamView: async () => ({ available: false, error: "x", user: "u", workspaces: [], environments: [] }),
   };
   return b;
 }

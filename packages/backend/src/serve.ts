@@ -101,7 +101,7 @@ export function serve(backend: Backend, peer: Peer) {
   peer.handle("mode.set", ({ mode }) => backend.mode.set(mode));
 
   peer.handle("settings.write", (patch) => backend.settings.write(patch));
-  peer.handle("space", () => backend.space());
+  peer.handle("team", () => backend.teamView());
   peer.handle("mcp", (msg) => {
     if (!backend.mcp) throw new Error("this bench serves no MCP");
     return backend.mcp(msg);
