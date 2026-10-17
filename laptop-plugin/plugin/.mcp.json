@@ -1,1 +1,1 @@
-{ "mcpServers": { "kl": { "command": "kl-connect", "args": ["mcp", "${KL_TEAM:-}"] } } }
+{ "mcpServers": { "kl": { "command": "kl-connect", "args": ["mcp", "${KL_TEAM:-}", "--session", "${KL_SESSION:-}"] } } }
