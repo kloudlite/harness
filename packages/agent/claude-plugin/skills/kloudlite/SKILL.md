@@ -79,7 +79,7 @@ To give an image a new tag, use `container_push`. The `kl` command is not on the
 - Only one workspace at a time can intercept a service.
 - If the workspace stops, the platform releases the intercept after a short time. But the request for the intercept stays until `release`.
 
-**Session.** A session connects some of your workspaces to one environment. The workspaces of the session can get to the services of that environment by their DNS names. Use `session_current` to see the session. A workspace cannot join or leave a session.
+**Session.** A session connects some of your workspaces to one environment, or to none; deleting an environment disconnects its sessions and ends none. A bench changes it with `session_connect` and `session_disconnect`. The workspaces of the session can get to the services of that environment by their DNS names. Use `session_current` to see the session. A workspace cannot join or leave a session.
 
 **Snapshots.** A snapshot is a read-only copy of the disk of a workspace or environment.
 

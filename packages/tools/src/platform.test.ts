@@ -135,6 +135,22 @@ test("session_current shows the workspace's own session; the bench's is its KL_S
   expect(await tool(t, "session_current").run({})).toContain("ended");
 });
 
+test("session_connect and session_disconnect are the bench's only; a workspace cannot change its session", async () => {
+  expect(platformTools("workspace", "w1").map((x) => x.name)).not.toContain("session_connect");
+  const t = platformTools("main");
+  expect(t.map((x) => x.name)).toContain("session_connect");
+  expect(t.map((x) => x.name)).toContain("session_disconnect");
+  delete process.env.KL_SESSION;
+  expect(await tool(t, "session_connect").run({ environment: "e2" })).toContain("no session");
+  process.env.KL_SESSION = "ses-1";
+  routes["PUT /v1/sessions/ses-1/environment"] = json({ id: "ses-1", name: "main", environment: "e2" });
+  expect(JSON.parse(await tool(t, "session_connect").run({ environment: "e2" }))).toEqual({ id: "ses-1", name: "main", environment: "e2" });
+  expect(calls.at(-1)!.body).toEqual({ environment: "e2" });
+  routes["PUT /v1/sessions/ses-1/environment"] = json({ id: "ses-1", name: "main", environment: null });
+  expect(JSON.parse(await tool(t, "session_disconnect").run({}))).toEqual({ id: "ses-1", name: "main", environment: null });
+  expect(calls.at(-1)!.body).toEqual({ environment: null });
+});
+
 test("env_get folds service_status readiness into services[]; workspace_clone sends task only when given", async () => {
   const t = platformTools("main");
   routes["GET /v1/environments/e1"] = json({ services: [{ name: "a" }, { name: "b" }], service_status: [{ name: "a", ready: true }, { name: "b", ready: false, message: "pulling" }] });

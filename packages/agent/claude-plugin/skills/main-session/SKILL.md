@@ -67,7 +67,9 @@ A tool with the mark **card** shows a permission card to the person before it ru
 | `env_push`, `env_restore` **card** | Make a snapshot of an environment, or put this environment back to a snapshot. To copy a snapshot into a new environment, use `env_clone`. |
 | `service_add`, `service_update` **card**, `service_remove` **card** | Add, change or remove the services of an environment. Use these for standard services, for example a database. A workspace adds and changes its own service. |
 | `service_logs` | Read the logs of a service. |
-| `session_current` | See the session of this bench and its environment. A bench belongs to its session. |
+| `session_current` | See the session of this bench and its environment (none if it is disconnected). A bench belongs to its session. |
+| `session_connect` | Connect this bench's session to an environment of its team (id or name). Its intercepts in the old environment are released first. |
+| `session_disconnect` | Disconnect this bench's session from its environment; its intercepts there are released. |
 
 Intercepts are not your work. The workspace that runs the service starts and ends the intercept. Ask that workspace to do it.
 

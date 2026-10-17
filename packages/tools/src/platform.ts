@@ -76,6 +76,19 @@ async function currentSession(): Promise<string> {
   return JSON.stringify({ id: d.id, name: d.name, environment: d.environment });
 }
 
+/** Connect the bench's session to an environment, or (`null`) disconnect it: the session moves, the
+ * bench and its members stay. Answers the session as session_current does. */
+async function connectSession(environment: string | null): Promise<string> {
+  const id = process.env.KL_SESSION;
+  if (!id) return NO_SESSION;
+  const r = await raw("PUT", `/v1/sessions/${seg(id)}/environment`, { environment });
+  if (r.unavailable) throw new Error(UNAVAILABLE);
+  if (r.status === 404 || r.status === 403) return `session ${id} has ended`;
+  if (r.status < 200 || r.status >= 300) throw new Error(`${r.status}: ${r.text}`);
+  const d = r.data as any;
+  return JSON.stringify({ id: d.id, name: d.name, environment: d.environment ?? null });
+}
+
 /** Wake an idle-stopped environment before a read that needs it up. Only an idle-stopped one: a
  * creating, errored or person-stopped environment is what env_get exists to show, and a failed
  * lookup is the real call's error to report. */
@@ -260,6 +273,10 @@ function basePlatformTools(kind: "main" | "workspace" | "all", wsId?: string, ti
       }
       return currentSession();
     }),
+    ...(ws ? [] : [
+      def("session_connect", "Connect this bench's session to an environment of its team (id or name). Its intercepts in the old environment are released first.", { environment: S }, ["environment"], (a) => connectSession(a.environment)),
+      def("session_disconnect", "Disconnect this bench's session from its environment; its intercepts there are released.", {}, [], () => connectSession(null)),
+    ]),
     envTool("env_get", "Read the services, state and intercepts of an environment. Each `services[]` entry has `ready` (and `message`) from service_status. Read `ready`, not the spec; to wait after a change call env_wait instead of polling. `failing: true` means the service will not come up by waiting (a crash loop, an image that will not pull, a refused config): read `message` (for a crash, the exit code and its last log lines), fix the cause and redeploy. The `state` is `creating`, `running`, `stopped`, `error` or `deleted`. `running` means up. Stop the poll when the state is `error` or `deleted`." + (ws ? " It defaults to the environment that the session of this workspace connects it to." : ""), {}, [], async (env) => (await wake(env), withReady(await api("GET", `/v1/environments/${env}`)))),
     envTool("env_wait", "Wait until an environment settles after a change: every service ready, a service failing, or the state error/deleted. Use this instead of polling env_get. Returns the env_get view; `timedOut: true` means it was still settling after `timeout` seconds (default 300).", { timeout: N }, [], async (env, a) => (await wake(env), settle(async () => withReady(await api("GET", `/v1/environments/${env}`)), a.timeout, tickMs))),
     services("service_add", "Add one service to an environment. The call fails if a service with this name exists." + ASYNC, { service: SERVICE }, ["service"], (cur, a) =>
@@ -306,6 +323,7 @@ function basePlatformTools(kind: "main" | "workspace" | "all", wsId?: string, ti
     def("worktree_drop", "Remove a worktree from a workspace." + ASYNC, { workspace: WS, name: S }, ["workspace", "name"], async (a) => api("DELETE", `/v1/workspaces/${seg(a.workspace)}/trees/${seg(a.name)}`)),
     of("packages_list"),
     of("session_current"),
+    ...(ws ? [] : [of("session_connect"), of("session_disconnect")]),
     def("env_list", "List the environments. You can give one team.", { team: S }, [], async (a) => api("GET", `/v1/environments${qs({ owner: a.team })}`)),
     def("env_get", "Read the services, state and intercepts of one environment. After an env call, wait with env_wait. Each `services[]` entry has `ready` (and `message`) from service_status. Read `ready`, not the spec; to wait after a change call env_wait instead of polling. `failing: true` means the service will not come up by waiting (a crash loop, an image that will not pull, a refused config): read `message` (for a crash, the exit code and its last log lines), fix the cause and redeploy. The `state` is `creating`, `running`, `stopped`, `error` or `deleted`. `running` means up.", { env: ENV }, ["env"], async (a) => (await wake(seg(a.env)), withReady(await api("GET", `/v1/environments/${seg(a.env)}`)))),
     def("env_wait", "Wait until an environment settles after a change: every service ready, a service failing, or the state error/deleted. Use this instead of polling env_get. Returns the env_get view; `timedOut: true` means it was still settling after `timeout` seconds (default 300).", { env: ENV, timeout: N }, ["env"], async (a) => (await wake(seg(a.env)), settle(async () => withReady(await api("GET", `/v1/environments/${seg(a.env)}`)), a.timeout, tickMs))),
