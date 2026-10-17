@@ -57,12 +57,14 @@ Example: the person writes "stop the backend". `workspace_list` shows the name `
 | Tool | Use it to |
 |---|---|
 | `env_list`, `env_get` | See the environments, their services, and the intercepts. |
+| `env_wait` | Wait until an environment settles after a change. Use it instead of polling `env_get`. |
 | `env_create`, `env_clone`, `env_start` | Make, copy or start an environment. |
 | `env_stop`, `env_delete` | Stop or delete an environment. |
 | `env_push`, `env_restore` | Make a snapshot of an environment, or put this environment back to a snapshot. To copy a snapshot into a new environment, use `env_clone`. |
 | `service_add`, `service_update`, `service_remove` | Add, change or remove the services of an environment. Use these for standard services, for example a database or a queue. Give each one a mount for its data. A workspace adds and changes its own service. |
 | `service_logs` | Read the logs of a service. |
 | `session_current`, `session_use` | See the session this laptop is in, or pick one (or create one on an environment). |
+| `session_connect`, `session_disconnect` | Connect the session to an environment (id or name), switch it, or disconnect it. The session's intercepts in the old environment are released first. |
 
 Intercepts are not your work. The workspace that runs the service starts and ends the intercept. Ask that workspace to do it.
 
