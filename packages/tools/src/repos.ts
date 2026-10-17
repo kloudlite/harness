@@ -20,7 +20,7 @@ export function repoTools(): ToolDef[] {
   const P = (a: any) => `${R(a)}/pulls/${seg(String(a.number))}`;
   const I = (a: any) => `/api/${seg(a.owner)}/${seg(a.image)}`;
   const repo = { owner: OWNER, name: S };
-  const pr = { ...repo, number: N };
+  const pr = { ...repo, number: { type: "integer", description: "The pull request number." } };
   const img = { owner: OWNER, image: S };
   return [
     def("repo_list", "List the repos of an owner.", { owner: OWNER }, ["owner"], async (a) => api("GET", `/v1/repos${qs({ owner: a.owner })}`)),
@@ -44,7 +44,7 @@ export function repoTools(): ToolDef[] {
     }),
     def("compare", "Show what the `head` branch adds to the `base` branch.", { ...repo, base: S, head: S }, ["owner", "name", "base", "head"], async (a) =>
       api("GET", `${R(a)}/compare${qs({ base: a.base, head: a.head })}`)),
-    def("pr_list", "List the pull requests of a repo. `state` is open, merged or closed.", { ...repo, state: S, limit: N }, ["owner", "name"], async (a) =>
+    def("pr_list", "List the pull requests of a repo. `state` is open, merged or closed.", { ...repo, state: { type: "string", enum: ["open", "merged", "closed"] }, limit: { type: "integer", description: "At most this many." } }, ["owner", "name"], async (a) =>
       api("GET", `${R(a)}/pulls${qs({ state: a.state, limit: a.limit === undefined ? undefined : String(a.limit) })}`)),
     def("pr_get", "Get one pull request, with its comments and merge state.", pr, ["owner", "name", "number"], async (a) => api("GET", P(a))),
     def("pr_create", "Open a pull request that merges the `head` branch into the `base` branch.", { ...repo, title: S, base: S, head: S, body: S }, ["owner", "name", "title", "base", "head"], async (a) =>

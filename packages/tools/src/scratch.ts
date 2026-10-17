@@ -6,6 +6,7 @@
 import { spawn } from "node:child_process";
 import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
+import { guarded } from "./args.ts";
 import type { ToolDef } from "./index.ts";
 
 // ponytail: folders live until the bench restarts (/tmp is an emptyDir) and nothing deletes a main
@@ -103,7 +104,7 @@ function runBash(root: string, command: string, seconds: number): Promise<Bash> 
 
 export function scratchTools(root: string): ToolDef[] {
   mkdirSync(root, { recursive: true });
-  return [
+  const tools: ToolDef[] = [
     {
       name: "bash",
       description:
@@ -114,12 +115,13 @@ export function scratchTools(root: string): ToolDef[] {
         properties: {
           command: { type: "string" },
           timeout: { type: "number", description: "In seconds. The default is 120. The maximum is 600." },
+          timeout_ms: { type: "number", description: "The same limit in milliseconds (the other spelling of `timeout`); give one of them." },
         },
         required: ["command"],
       },
-      run: async (a: { command: string; timeout?: number }) => {
-        const secs = Math.min(Math.max(Number(a.timeout) || 120, 1), 600);
-        return JSON.stringify(await runBash(root, String(a.command ?? ""), secs), null, 2);
+      run: async (a: { command: string; timeout?: number; timeout_ms?: number }) => {
+        const secs = Math.min(Math.max((a.timeout ?? (a.timeout_ms === undefined ? 120 : a.timeout_ms / 1000)) || 120, 1), 600);
+        return JSON.stringify(await runBash(root, a.command, secs), null, 2);
       },
     },
     {
@@ -127,7 +129,7 @@ export function scratchTools(root: string): ToolDef[] {
       description: `Read a text file in your scratch folder (${root}). A relative path starts in this folder. The maximum size is 256 KiB. \`offset\` and \`limit\` are in lines.`,
       inputSchema: {
         type: "object",
-        properties: { path: { type: "string" }, offset: { type: "number" }, limit: { type: "number" } },
+        properties: { path: { type: "string" }, offset: { type: "integer" }, limit: { type: "integer" } },
         required: ["path"],
       },
       run: async (a: { path: string; offset?: number; limit?: number }) => {
@@ -170,4 +172,6 @@ export function scratchTools(root: string): ToolDef[] {
       },
     },
   ];
+  // every key checked against the schema first: a missing `command` used to run the empty command
+  return tools.map((t) => ({ ...t, run: guarded(t.inputSchema, (a) => t.run(a)) }));
 }

@@ -7,6 +7,8 @@
 //! each aimed by a required `workspace`/`env`.
 import { ensureRunning } from "./ensure.ts";
 import { readFileSync } from "node:fs";
+import { STATUS_CODES } from "node:http";
+import { checkArgs } from "./args.ts";
 import type { ToolDef } from "./index.ts";
 import { repoTools } from "./repos.ts";
 
@@ -33,9 +35,16 @@ async function raw(method: string, path: string, body?: unknown, asText = false)
   return { status: res.status, text, data };
 }
 
+/** "404: {...}" for a JSON or plain answer; an HTML page (a Cloudflare 404 in front of the api) is "404 Not Found: <200 chars of its text>", never raw markup. */
+export function httpError(status: number, text: string): string {
+  if (!/<\/?(html|body|head|!doctype)\b/i.test(text)) return `${status}: ${text}`;
+  const body = text.replace(/<(script|style)\b[\s\S]*?<\/\1>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 200);
+  return `${status} ${STATUS_CODES[status] ?? ""}${body ? `: ${body}` : ""}`.replace(/ :/, ":").trim();
+}
+
 function show(r: Raw): string {
   if (r.unavailable) throw new Error(UNAVAILABLE);
-  if (r.status < 200 || r.status >= 300) throw new Error(`${r.status}: ${r.text}`);
+  if (r.status < 200 || r.status >= 300) throw new Error(httpError(r.status, r.text));
   if (r.status === 204 || !r.text) return "ok";
   return r.data === undefined ? r.text : JSON.stringify(r.data, null, 2);
 }
@@ -54,7 +63,7 @@ export async function apiJson<T>(method: string, path: string, body?: unknown): 
     throw new Error(`error: ${e?.message ?? e}`);
   }
   if (r.unavailable) throw new Error(UNAVAILABLE);
-  if (r.status < 200 || r.status >= 300) throw new Error(`error ${r.status}: ${r.text}`);
+  if (r.status < 200 || r.status >= 300) throw new Error(`error ${httpError(r.status, r.text)}`);
   return r.data as T;
 }
 
@@ -71,7 +80,7 @@ async function currentSession(): Promise<string> {
   const r = await raw("GET", `/v1/sessions/${seg(id)}`);
   if (r.unavailable) throw new Error(UNAVAILABLE);
   if (r.status === 404 || r.status === 403) return `session ${id} has ended`;
-  if (r.status < 200 || r.status >= 300) throw new Error(`${r.status}: ${r.text}`);
+  if (r.status < 200 || r.status >= 300) throw new Error(httpError(r.status, r.text));
   const d = r.data as any;
   return JSON.stringify({ id: d.id, name: d.name, environment: d.environment });
 }
@@ -84,7 +93,7 @@ async function connectSession(environment: string | null): Promise<string> {
   const r = await raw("PUT", `/v1/sessions/${seg(id)}/environment`, { environment });
   if (r.unavailable) throw new Error(UNAVAILABLE);
   if (r.status === 404 || r.status === 403) return `session ${id} has ended`;
-  if (r.status < 200 || r.status >= 300) throw new Error(`${r.status}: ${r.text}`);
+  if (r.status < 200 || r.status >= 300) throw new Error(httpError(r.status, r.text));
   const d = r.data as any;
   return JSON.stringify({ id: d.id, name: d.name, environment: d.environment ?? null });
 }
@@ -112,6 +121,7 @@ const S = { type: "string" };
 const WS = { type: "string", description: "The workspace id (`ws-…`, the `id` from workspace_list). Do not use the name." };
 const ENV = { type: "string", description: "The environment id (`env-…`, the `id` from env_list). Do not use the name." };
 const N = { type: "number" };
+const I = { type: "integer" };
 const SL = { type: "array", items: S };
 const OBJ = { type: "object" };
 const SERVICE = {
@@ -119,17 +129,22 @@ const SERVICE = {
   properties: {
     name: S,
     image: { type: "string", description: "repo:tag. The platform pins it to the tag's current digest (repo:tag@sha256:…), so redeploying a rebuilt tag runs the new bytes." },
-    command: SL,
-    env: OBJ,
-    mounts: { type: "array", items: { type: "object", properties: { folder: S, path: S }, required: ["folder", "path"] } },
-    ports: { type: "array", items: N },
-    resources: OBJ,
+    command: { type: "array", items: S, description: "The argv of the container; empty runs the image's own entrypoint." },
+    env: { type: "object", additionalProperties: S, description: "Environment variables, name to string value." },
+    mounts: { type: "array", items: { type: "object", properties: { folder: { type: "string", description: "A single name ([A-Za-z0-9._-]) of a folder inside the environment's own volume, created on demand." }, path: { type: "string", description: "Where it appears in the container (absolute)." } }, required: ["folder", "path"] }, description: "Persistent folders of the environment's volume." },
+    ports: { type: "array", items: I, description: "Container ports the service answers on, as integers. Siblings reach it by service name on these." },
+    resources: {
+      type: "object",
+      description: "Override the default size of this service, in Kubernetes quantities. Give all four.",
+      properties: { cpuRequest: { type: "string", description: "e.g. 250m" }, cpuLimit: { type: "string", description: "e.g. 2" }, memoryRequest: { type: "string", description: "e.g. 512Mi" }, memoryLimit: { type: "string", description: "e.g. 2Gi" } },
+    },
   },
   required: ["name", "image"],
   description: "The `command`, `env` and `mounts` fields default to empty.",
 };
 
 /** The API requires command, env and mounts on every service; the schema asks only for name and image. */
+const noName = (a: any): string | undefined => (typeof a.service?.name === "string" && a.service.name && typeof a.service.image === "string" ? undefined : "error: `service` needs `name` and `image` (an object like {name, image, ports?})");
 const withServiceDefaults = (s: any) => ({ command: [], env: {}, mounts: [], ...s });
 
 /** Fold service_status into each services[] entry so a poll reads ready where the spec is. */
@@ -149,12 +164,15 @@ function withReady(out: string): string {
 
 export function def(name: string, description: string, properties: Props, required: string[], run: (a: any) => Promise<string>): ToolDef {
   // the tools' own refusals ("error: service exists") fail like an API error does, never pass as a result
-  const checked = async (a: any) => {
-    const r = await run(a ?? {});
+  const inputSchema = { type: "object", properties, required };
+  const checked = async (input: any) => {
+    const c = checkArgs(inputSchema, input);
+    if ("error" in c) throw new Error(c.error);
+    const r = await run(c.args);
     if (r.startsWith("error: ")) throw new Error(r.slice(7));
     return r;
   };
-  return { name, description, inputSchema: { type: "object", properties, required }, run: checked };
+  return { name, description, inputSchema, run: checked };
 }
 
 const attrOf = (p: string) => p.split("@")[0]!;
@@ -164,7 +182,7 @@ const ASYNC = " It returns 202 immediately. The work continues after the return.
 async function load(path: string): Promise<{ doc: any } | { err: string }> {
   const r = await raw("GET", path);
   if (r.unavailable) throw new Error(UNAVAILABLE);
-  if (r.status < 200 || r.status >= 300) throw new Error(`${r.status}: ${r.text}`);
+  if (r.status < 200 || r.status >= 300) throw new Error(httpError(r.status, r.text));
   return { doc: r.data };
 }
 
@@ -172,6 +190,9 @@ async function load(path: string): Promise<{ doc: any } | { err: string }> {
 export function platformTools(kind: "main" | "workspace" | "all", wsId?: string, tickMs = 5000): ToolDef[] {
   return [...basePlatformTools(kind, wsId, tickMs), ...repoTools()];
 }
+
+/** `timeout` is seconds, `timeout_ms` milliseconds; a model that learnt one spelling on exec sends it here. */
+const waitSecs = (a: any) => (a.timeout !== undefined ? a.timeout : a.timeout_ms !== undefined ? a.timeout_ms / 1000 : undefined);
 
 /** Sessions polled env_get 24-40 times after each deploy; the loop belongs here, not in the model's turns. */
 async function settle(get: () => Promise<string>, timeoutS: unknown, tickMs: number): Promise<string> {
@@ -262,7 +283,7 @@ function basePlatformTools(kind: "main" | "workspace" | "all", wsId?: string, ti
         // no auth header: the gate identifies this pod by its source IP
         const res = await fetch(`${base}/logs/${env}/${seg(a.service)}${q}`, { signal: AbortSignal.timeout(15_000) });
         const text = await res.text();
-        if (res.status < 200 || res.status >= 300) throw new Error(`${res.status}: ${text}`);
+        if (res.status < 200 || res.status >= 300) throw new Error(httpError(res.status, text));
         return text;
       },
     ),
@@ -278,15 +299,15 @@ function basePlatformTools(kind: "main" | "workspace" | "all", wsId?: string, ti
       def("session_disconnect", "Disconnect this bench's session from its environment; its intercepts there are released.", {}, [], () => connectSession(null)),
     ]),
     envTool("env_get", "Read the services, state and intercepts of an environment. Each `services[]` entry has `ready` (and `message`) from service_status. Read `ready`, not the spec; to wait after a change call env_wait instead of polling. `failing: true` means the service will not come up by waiting (a crash loop, an image that will not pull, a refused config): read `message` (for a crash, the exit code and its last log lines), fix the cause and redeploy. The `state` is `creating`, `running`, `stopped`, `error` or `deleted`. `running` means up. Stop the poll when the state is `error` or `deleted`." + (ws ? " It defaults to the environment that the session of this workspace connects it to." : ""), {}, [], async (env) => (await wake(env), withReady(await api("GET", `/v1/environments/${env}`)))),
-    envTool("env_wait", "Wait until an environment settles after a change: every service ready, a service failing, or the state error/deleted. Use this instead of polling env_get. Returns the env_get view; `timedOut: true` means it was still settling after `timeout` seconds (default 300).", { timeout: N }, [], async (env, a) => (await wake(env), settle(async () => withReady(await api("GET", `/v1/environments/${env}`)), a.timeout, tickMs))),
+    envTool("env_wait", "Wait until an environment settles after a change: every service ready, a service failing, or the state error/deleted. Use this instead of polling env_get. Returns the env_get view; `timedOut: true` means it was still settling after `timeout` seconds (default 300, maximum 900). `timeout_ms` is the same wait in milliseconds; give one of them.", { timeout: { ...N, description: "Seconds." }, timeout_ms: { ...N, description: "Milliseconds (the other spelling of `timeout`)." } }, [], async (env, a) => (await wake(env), settle(async () => withReady(await api("GET", `/v1/environments/${env}`)), waitSecs(a), tickMs))),
     services("service_add", "Add one service to an environment. The call fails if a service with this name exists." + ASYNC, { service: SERVICE }, ["service"], (cur, a) =>
-      cur.some((s) => s.name === a.service?.name) ? `error: service exists: ${a.service?.name}` : [...cur, withServiceDefaults(a.service)]),
+      noName(a) ?? (cur.some((s) => s.name === a.service?.name) ? `error: service exists: ${a.service?.name}` : [...cur, withServiceDefaults(a.service)])),
     services("service_update", "Replace one existing service in an environment. The tool matches the service by name." + ASYNC, { service: SERVICE }, ["service"], (cur, a) =>
-      cur.some((s) => s.name === a.service?.name) ? cur.map((s) => (s.name === a.service.name ? withServiceDefaults(a.service) : s)) : `error: no such service: ${a.service?.name}`),
+      noName(a) ?? (cur.some((s) => s.name === a.service?.name) ? cur.map((s) => (s.name === a.service.name ? withServiceDefaults(a.service) : s)) : `error: no such service: ${a.service?.name}`)),
     services("service_remove", "Remove a service from an environment. Give the name of the service." + ASYNC, { name: S }, ["name"], (cur, a) =>
       cur.some((s) => s.name === a.name) ? cur.filter((s) => s.name !== a.name) : `error: no such service: ${a.name}`),
     // a workspace session intercepts for itself only: no `workspace` param to aim it at another workspace
-    envTool("intercept", (ws ? "Send the traffic of an environment service to this workspace." : "Send the traffic of an environment service to a workspace.") + ASYNC, { service: S, ...(ws ? {} : { workspace: WS }), ports: { type: "array", items: { type: "object", properties: { service: N, workspace: N } } } }, ["service", ...(ws ? [] : ["workspace"])], (env, a) =>
+    envTool("intercept", (ws ? "Send the traffic of an environment service to this workspace." : "Send the traffic of an environment service to a workspace.") + ASYNC, { service: S, ...(ws ? {} : { workspace: WS }), ports: { type: "array", description: "Port remaps: `service` is the port callers dial on the environment service, `workspace` the port the workspace listens on. Omit to forward each port to the same number.", items: { type: "object", properties: { service: I, workspace: I }, required: ["service", "workspace"] } } }, ["service", ...(ws ? [] : ["workspace"])], (env, a) =>
       api("POST", `/v1/environments/${env}/intercepts`, strip({ service: a.service, workspace: ws ? wsId : a.workspace, ports: a.ports }))),
     envTool("release", "Release an intercepted service back to its own pod.", { service: S }, ["service"], (env, a) => api("DELETE", `/v1/environments/${env}/intercepts/${seg(a.service)}`)),
   ];
@@ -326,7 +347,7 @@ function basePlatformTools(kind: "main" | "workspace" | "all", wsId?: string, ti
     ...(ws ? [] : [of("session_connect"), of("session_disconnect")]),
     def("env_list", "List the environments. You can give one team.", { team: S }, [], async (a) => api("GET", `/v1/environments${qs({ owner: a.team })}`)),
     def("env_get", "Read the services, state and intercepts of one environment. After an env call, wait with env_wait. Each `services[]` entry has `ready` (and `message`) from service_status. Read `ready`, not the spec; to wait after a change call env_wait instead of polling. `failing: true` means the service will not come up by waiting (a crash loop, an image that will not pull, a refused config): read `message` (for a crash, the exit code and its last log lines), fix the cause and redeploy. The `state` is `creating`, `running`, `stopped`, `error` or `deleted`. `running` means up.", { env: ENV }, ["env"], async (a) => (await wake(seg(a.env)), withReady(await api("GET", `/v1/environments/${seg(a.env)}`)))),
-    def("env_wait", "Wait until an environment settles after a change: every service ready, a service failing, or the state error/deleted. Use this instead of polling env_get. Returns the env_get view; `timedOut: true` means it was still settling after `timeout` seconds (default 300).", { env: ENV, timeout: N }, ["env"], async (a) => (await wake(seg(a.env)), settle(async () => withReady(await api("GET", `/v1/environments/${seg(a.env)}`)), a.timeout, tickMs))),
+    def("env_wait", "Wait until an environment settles after a change: every service ready, a service failing, or the state error/deleted. Use this instead of polling env_get. Returns the env_get view; `timedOut: true` means it was still settling after `timeout` seconds (default 300, maximum 900). `timeout_ms` is the same wait in milliseconds; give one of them.", { env: ENV, timeout: { ...N, description: "Seconds." }, timeout_ms: { ...N, description: "Milliseconds (the other spelling of `timeout`)." } }, ["env"], async (a) => (await wake(seg(a.env)), settle(async () => withReady(await api("GET", `/v1/environments/${seg(a.env)}`)), waitSecs(a), tickMs))),
     of("service_logs"),
     def("env_delete", "Delete an environment permanently.", { env: ENV }, ["env"], async (a) => api("DELETE", `/v1/environments/${seg(a.env)}`)),
     def("env_start", "Start a stopped environment." + ASYNC, { env: ENV }, ["env"], async (a) => api("POST", `/v1/environments/${seg(a.env)}/start`)),
@@ -336,7 +357,7 @@ function basePlatformTools(kind: "main" | "workspace" | "all", wsId?: string, ti
     def("env_clone", "Create a NEW environment from this one: from its live state, or from one of its snapshots when `snapshot_id` is given." + ASYNC, { env: ENV, name: S, snapshot_id: S, team: S, services: { type: "array", items: SERVICE }, region: S, quota_gb: N }, ["env", "name"], async (a) =>
       api("POST", `/v1/environments/${seg(a.env)}/clone`, strip({ name: a.name, snapshot_id: a.snapshot_id, owner: a.team, services: a.services?.map(withServiceDefaults), region: a.region, quota_gb: a.quota_gb }))),
     def("env_push", "Make a snapshot of an environment in its history." + ASYNC, { env: ENV, message: S }, ["env"], async (a) => api("POST", `/v1/environments/${seg(a.env)}/push`, { message: a.message })),
-    def("env_restore", "Put this environment back to one of its own snapshots: its services and its data. Data written since the snapshot is lost. If the call returns 409 with `lost`, those services keep data that the snapshot does not have; ask the person, then call again with `discard` naming them." + ASYNC, { env: ENV, snapshot_id: S, discard: SL }, ["env", "snapshot_id"], async (a) =>
+    def("env_restore", "Put this environment back to one of its own snapshots: its services and its data. Data written since the snapshot is lost. If the call returns 409 with `lost`, those services keep data that the snapshot does not have; ask the person, then call again with `discard` naming them." + ASYNC, { env: ENV, snapshot_id: S, discard: { type: "array", items: S, description: "Names of the services from the 409 `lost` list whose data you accept losing." } }, ["env", "snapshot_id"], async (a) =>
       api("POST", `/v1/environments/${seg(a.env)}/restore`, strip({ snapshot_id: a.snapshot_id, discard: a.discard }))),
     ...["service_add", "service_update", "service_remove"].map(of),
     def("volume_list", "List the volumes. You can filter by kind (`workspace` or `environment`) and by owner.", { kind: S, owner: S }, [], async (a) => api("GET", `/v1/volumes${qs({ kind: a.kind, owner: a.owner })}`)),
