@@ -29,6 +29,14 @@ export const inflight = new Map<string, number>();
 
 class NotReady extends Error {}
 
+/** How long the tool will wait, as the pod reads it: `timeout_ms`, else `timeout` in seconds, else the default. The client waits this plus a margin, never less. */
+export function waitMs(args: any, dflt: number): number {
+  const ms = Number(args?.timeout_ms);
+  if (ms > 0) return ms;
+  const s = Number(args?.timeout);
+  return s > 0 ? s * 1000 : dflt;
+}
+
 async function lookup(ws: string): Promise<Addr> {
   // api throws on a non-2xx answer; for these callers that is "not ready", not a crash
   const out = await api("GET", `/v1/workspaces/${encodeURIComponent(ws)}/tools`).catch((e) => {
@@ -81,13 +89,16 @@ export async function podTools(ws: string, o: { ensure?: typeof ensureRunning } 
       headers: { "content-type": "application/json", ...headers(a) },
       body: JSON.stringify(args ?? {}),
       signal: AbortSignal.timeout(timeout),
-    });
+      // Bun's fetch gives up after 300 s whatever the signal says ("The operation timed out." on every
+      // exec or build with a timeout_ms past ~285000, 2026-10-17); our own signal is the deadline.
+      timeout: false,
+    } as RequestInit);
   }
 
   async function call(name: string, args: any): Promise<string> {
     // A build waits on the builder and the registry: same long leash as a job, its own default.
-    const timeout = name === "exec" ? (Number(args?.timeout_ms) || 120_000) + 15_000
-      : name === "container_build" ? (Number(args?.timeout_ms) || 600_000) + 15_000
+    const timeout = name === "exec" ? waitMs(args, 120_000) + 15_000
+      : name === "container_build" ? waitMs(args, 600_000) + 15_000
       : name === "container_push" ? 180_000 : 60_000;
     try {
       let res: Response | undefined;
@@ -178,7 +189,8 @@ export async function podExec(ws: string, cmd: string, timeoutMs = 120_000): Pro
       headers: { "content-type": "application/json", ...headers(a) },
       body: JSON.stringify({ cmd, timeout_ms: timeoutMs }),
       signal: AbortSignal.timeout(timeoutMs + 15_000),
-    });
+      timeout: false,
+    } as RequestInit);
     const text = await res.text();
     if (!res.ok) return { code: -1, stdout: "", stderr: `exec ${res.status}: ${text}` };
     const j = JSON.parse(text);

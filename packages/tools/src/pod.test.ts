@@ -201,3 +201,11 @@ test("call() is activity: no x-kl-watch header, and inflight returns to empty", 
   expect(seen["x-kl-watch"]).toBeUndefined();
   expect(inflight.has("w1")).toBe(false);
 });
+
+test("the client waits longer than the tool, whichever spelling the timeout has", async () => {
+  const { waitMs } = await import("./pod.ts");
+  expect(waitMs({ timeout_ms: "600000" }, 1)).toBe(600_000);
+  expect(waitMs({ timeout: 300 }, 1)).toBe(300_000);
+  expect(waitMs({ timeout_ms: "2m" }, 120_000)).toBe(120_000);
+  expect(waitMs({}, 120_000)).toBe(120_000);
+});
