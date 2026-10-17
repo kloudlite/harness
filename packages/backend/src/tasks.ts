@@ -6,7 +6,7 @@
 import { mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import type { ToolDef } from "@kloudlite-tui/tools";
+import { guarded, type ToolDef } from "@kloudlite-tui/tools";
 import type { BoardTask, TaskState } from "./index.ts";
 
 export const tasksDir = () => join(homedir(), ".kl", "tasks");
@@ -141,7 +141,7 @@ export function taskTools(file: string): ToolDef[] {
   const add: ToolDef = {
     name: "task_add",
     description: "Add a task to your own board. A lower priority number runs first. The default is 3. `depends_on` lists the ids of tasks that must be done first. Returns the task line.",
-    inputSchema: { type: "object", properties: { title: STR, priority: { type: "number" }, depends_on: DEPS, note: STR }, required: ["title"] },
+    inputSchema: { type: "object", properties: { title: STR, priority: { type: "integer", minimum: 0, description: "Lower runs first." }, depends_on: DEPS, note: STR }, required: ["title"] },
     async run(i: { title: string; priority?: number; depends_on?: string[]; note?: string }) {
       const r = addTask(file, { title: i.title, priority: i.priority, dependsOn: i.depends_on, note: i.note });
       return typeof r === "string" ? r : line(readTasks(file), r);
@@ -150,7 +150,7 @@ export function taskTools(file: string): ToolDef[] {
   const update: ToolDef = {
     name: "task_update",
     description: "Change a task. Set a task running before you start it and done as soon as its check passes, not all at the end: the board is how the person follows your work. You can change the title, the priority, `depends_on`, the state, the note, the summary or the verified check. To set the state to done, give `summary` (what changed and where, at most 2000 characters) and `verified` (the check that passed, with its result). The tool refuses a done task without both. The tool refuses a dependency loop or an unknown id. Then the board does not change. Returns the task line.",
-    inputSchema: { type: "object", properties: { id: STR, title: STR, priority: { type: "number" }, depends_on: DEPS, state: { type: "string", enum: STATES }, note: STR, summary: STR, verified: STR }, required: ["id"] },
+    inputSchema: { type: "object", properties: { id: STR, title: STR, priority: { type: "integer", minimum: 0, description: "Lower runs first." }, depends_on: DEPS, state: { type: "string", enum: STATES }, note: STR, summary: STR, verified: STR }, required: ["id"] },
     async run(i: { id: string; title?: string; priority?: number; depends_on?: string[]; state?: TaskState; note?: string; summary?: string; verified?: string }) {
       const { id, depends_on, ...rest } = i;
       const no = refuseDone(readTasks(file).find((t) => t.id === id), rest);
@@ -167,7 +167,8 @@ export function taskTools(file: string): ToolDef[] {
       return boardText(readTasks(file));
     },
   };
-  return [add, update, list];
+  // a priority of 2.5 or -1 is refused here, not stored
+  return [add, update, list].map((t) => ({ ...t, run: guarded(t.inputSchema, (a) => t.run(a)) }));
 }
 
 /** Main's window onto the workspaces' own boards. Read only: a message never moves a task on another

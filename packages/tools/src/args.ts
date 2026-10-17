@@ -3,7 +3,7 @@
 //! handler as `undefined` and read back "404: not found" or a TypeError; it now reads which key is
 //! wrong and what the tool takes. Top-level keys only: nested shapes are the API's to refuse.
 
-type Schema = { type?: string; oneOf?: Schema[]; anyOf?: Schema[]; enum?: unknown[]; properties?: Record<string, Schema>; required?: string[] };
+type Schema = { type?: string; oneOf?: Schema[]; anyOf?: Schema[]; enum?: unknown[]; minimum?: number; properties?: Record<string, Schema>; required?: string[] };
 
 const jsonType = (v: unknown) => (v === null ? "null" : Array.isArray(v) ? "array" : typeof v);
 
@@ -56,6 +56,7 @@ export function checkArgs(schema: Record<string, unknown>, input: unknown): { ar
     if (given[k] === undefined) continue;
     given[k] = coerce(given[k], p);
     if (!branches(p).some((b) => matches(given[k], b.type))) return { error: `\`${k}\` must be ${label(p)}; got ${jsonType(given[k])}` };
+    if (p.minimum !== undefined && typeof given[k] === "number" && (given[k] as number) < p.minimum) return { error: `\`${k}\` must be at least ${p.minimum}; got ${given[k]}` };
     if (p.enum && !p.enum.includes(given[k])) return { error: `\`${k}\` must be one of ${p.enum.join(", ")}; got ${JSON.stringify(given[k])}` };
   }
   return { args: given };

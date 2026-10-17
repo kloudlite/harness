@@ -78,3 +78,7 @@ test("web_fetch names a missing url and takes max_chars", async () => {
   expect(await webFetch.run({})).toBe("error: `url` is required");
   expect(await webFetch.run({ url: "ftp://x", max_chars: 3 })).toContain("not an http(s) URL");
 });
+
+test("a minimum is held", () => {
+  expect((checkArgs({ type: "object", properties: { p: { type: "integer", minimum: 0 } } }, { p: -1 }) as any).error).toBe("`p` must be at least 0; got -1");
+});
