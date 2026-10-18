@@ -83,7 +83,7 @@ export function listenTcp(backend: Backend, port: number, hostname = "0.0.0.0"):
   });
 }
 
-/** Live count of a server's open connections. A laptop `kl-connect mcp` or kl-tui holds one 7791
+/** Live count of a server's open connections. A laptop `kloudlite mcp` or kl-tui holds one 7791
  * connection for its whole life but runs no turn between calls; without this the idle clock reads
  * it as nobody and the agent deletes the pod under it (2026-10-10: "Connection closed" 12 s after
  * the plugin connected). */

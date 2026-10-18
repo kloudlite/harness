@@ -72,7 +72,7 @@ export const seg = encodeURIComponent;
 const NO_SESSION = "this bench has no session (KL_SESSION is not set)";
 
 /** The bench's own session: a bench belongs to one session and never joins another, so there is
- * no session_use here. The laptop door (`kl-connect mcp`) answers session_current and session_use
+ * no session_use here. The laptop door (`kloudlite mcp`) answers session_current and session_use
  * itself, from the session the laptop picked. */
 async function currentSession(): Promise<string> {
   const id = process.env.KL_SESSION;

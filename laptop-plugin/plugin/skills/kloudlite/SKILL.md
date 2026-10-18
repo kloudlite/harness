@@ -9,7 +9,7 @@ This skill is written in ASD-STE100 Simplified Technical English. Each word has 
 
 Kloudlite gives each person dev machines in the cloud (workspaces) and shared stacks that run (environments). All of them are on one cluster. You control Kloudlite with the kl tools (`mcp__plugin_kloudlite_kl__<name>`). In kl mode, no local tool works. Nothing runs on the laptop.
 
-A bench belongs to one platform session; `session_pick` appears only when kl-connect could not choose one itself.
+A bench belongs to one platform session; `session_pick` appears only when kloudlite could not choose one itself.
 
 The request "delete all workspaces" means Kloudlite workspaces. Only the main session creates and deletes workspaces. To do this, list the workspaces with `workspace_list`. Then delete them, and obey the rule for destructive actions in "Team rules".
 

@@ -1,4 +1,4 @@
-//! The laptop MCP door (`kl-connect mcp`): any MCP client on the laptop gets every tool the bench
+//! The laptop MCP door (`kloudlite mcp`): any MCP client on the laptop gets every tool the bench
 //! can reach, for every workspace and environment, with no workspace chosen up front. The client
 //! sends one JSON-RPC message per `mcp` wire op (serve.ts) and gets the reply back, null for a
 //! notification. Hand-rolled, not the SDK's `Server`: three methods, and the SDK wants a transport

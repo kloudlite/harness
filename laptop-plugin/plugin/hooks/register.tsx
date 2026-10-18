@@ -1,7 +1,7 @@
 // The Kloudlite side pane: workspaces (working / idle / their api state; a clone under the workspace it
 // was cloned from), then environments with their services (ports, state, the intercepting workspace) at the bottom, beside the transcript while kl
 // mode is on. kl mode is the flag file
-// `~/.claude/kl-mode/<session id>` that `kl-connect mode prompt` writes on /kloudlite:on, so the
+// `~/.claude/kl-mode/<session id>` that `kloudlite mode prompt` writes on /kloudlite:on, so the
 // pane follows the same switch as the tool gate: it opens with it and closes with it.
 //
 // Every second (owner ruling 2026-10-11: "every sec") one tick reads the flag and, while on, asks

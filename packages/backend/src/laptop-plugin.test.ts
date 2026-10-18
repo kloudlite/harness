@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { mcpTools } from "./local.ts";
 
 const PLUGIN = join(import.meta.dir, "../../../laptop-plugin/plugin");
-// the laptop door (`kl-connect mcp`, mcp.rs) answers these itself; the bench never serves session_use
+// the laptop door (`kloudlite mcp`, mcp.rs) answers these itself; the bench never serves session_use
 const LAPTOP_DOOR = ["session_current", "session_use"];
 const LAPTOP_NEVER = ["workspace_ask", "task_add", "task_update", "task_list", "workspace_tasks"];
 
