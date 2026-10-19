@@ -103,7 +103,7 @@ export function serve(backend: Backend, peer: Peer) {
   peer.handle("settings.write", (patch) => backend.settings.write(patch));
   peer.handle("team", () => backend.teamView());
   peer.handle("mcp", (msg) => {
-    if (!backend.mcp) throw new Error("this bench serves no MCP");
+    if (!backend.mcp) throw new Error("this session serves no MCP");
     return backend.mcp(msg);
   });
   peer.handle("models.refresh", () => backend.models.refresh());

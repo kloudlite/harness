@@ -22,7 +22,7 @@ function attempt() {
   conn.once("error", () => {
     conn.destroy();
     if (Date.now() - start >= wait) {
-      process.stderr.write("kl-host: the bench backend is not running\n");
+      process.stderr.write("kl-host: the session backend is not running\n");
       process.exit(1);
     }
     setTimeout(attempt, 200);

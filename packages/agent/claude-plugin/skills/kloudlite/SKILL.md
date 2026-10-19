@@ -17,7 +17,7 @@ Each session has one role. One skill tells you what your role does. You have thi
 
 | Role | Where it runs | What it does |
 |---|---|---|
-| **Main** | On the bench. It has no workspace and no source code. | Talks to the person. Creates, clones, starts and deletes workspaces and environments. Keeps the task board. Gives each task to a workspace with `workspace_ask`. |
+| **Main** | In the session. It has no workspace and no source code. | Talks to the person. Creates, clones, starts and deletes workspaces and environments. Keeps the task board. Gives each task to a workspace with `workspace_ask`. |
 | **Workspace** | In the pod of one workspace, in `~/workspace`. | Owns one component: its design, code, service, intercept and working branch. Sends reports to main with `main_tell`. Can stop its own workspace when the task is done. Can give independent parts of its task to subagents with `subagent`. |
 | **Subagent** | In a temporary clone of one workspace, in `~/workspace`. | Does one task that its workspace session gave. Commits, and resolves each conflict with the branch of the workspace. The platform pushes its commits into the working tree of the workspace. Talks only to its workspace session. Its last message is its report. |
 
@@ -79,7 +79,7 @@ To give an image a new tag, use `container_push`. The `kl` command is not on the
 - Only one workspace at a time can intercept a service.
 - If the workspace stops, the platform releases the intercept after a short time. But the request for the intercept stays until `release`.
 
-**Session.** A session connects some of your workspaces to one environment, or to none; deleting an environment disconnects its sessions and ends none. A bench changes it with `session_connect` and `session_disconnect`. The workspaces of the session can get to the services of that environment by their DNS names. Use `session_current` to see the session. A workspace cannot join or leave a session.
+**Session.** A session connects some of your workspaces to one environment, or to none; deleting an environment disconnects its sessions and ends none. The session changes it with `session_connect` and `session_disconnect`. The workspaces of the session can get to the services of that environment by their DNS names. Use `session_current` to see the session. A workspace cannot join or leave a session.
 
 **Snapshots.** A snapshot is a read-only copy of the disk of a workspace or environment.
 

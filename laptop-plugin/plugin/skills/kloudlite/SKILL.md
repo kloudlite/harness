@@ -9,7 +9,7 @@ This skill is written in ASD-STE100 Simplified Technical English. Each word has 
 
 Kloudlite gives each person dev machines in the cloud (workspaces) and shared stacks that run (environments). All of them are on one cluster. You control Kloudlite with the kl tools (`mcp__plugin_kloudlite_kl__<name>`). In kl mode, no local tool works. Nothing runs on the laptop.
 
-A bench belongs to one platform session; `session_pick` appears only when kloudlite could not choose one itself.
+The laptop works in one platform session; `session_pick` appears only when kloudlite could not choose one itself.
 
 The request "delete all workspaces" means Kloudlite workspaces. Only the main session creates and deletes workspaces. To do this, list the workspaces with `workspace_list`. Then delete them, and obey the rule for destructive actions in "Team rules".
 
@@ -152,7 +152,7 @@ Each role has a different set of tools. Its role text gives its tools. If a tool
 | Account | `quota`, `regions`, `requests_list`, `request_get`, `request_create` |
 | Web | `web_fetch`, `web_search` |
 
-These kl tools belong to the bench sessions. Do not use them from the laptop: `workspace_ask`, `main_tell`, `subagent`, `task_add`, `task_update`, `task_list`, `workspace_tasks`. Main uses `scratch_read` and `scratch_write` only for its contract files (`contract-<feature>.md`) and its progress ledgers (`progress-<feature>.md`, refer to the `develop` skill). Main does not use `scratch_bash`.
+These kl tools belong to the session itself. Do not use them from the laptop: `workspace_ask`, `main_tell`, `subagent`, `task_add`, `task_update`, `task_list`, `workspace_tasks`. Main uses `scratch_read` and `scratch_write` only for its contract files (`contract-<feature>.md`) and its progress ledgers (`progress-<feature>.md`, refer to the `develop` skill). Main does not use `scratch_bash`.
 
 ## Repos and images
 

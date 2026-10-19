@@ -145,7 +145,7 @@ The person sees the output of a process that runs in a workspace as a background
 
 ## Subagents
 
-A workspace agent cannot start agents. You start its subagents for it. This takes the place of the `subagent` tool of the bench.
+A workspace agent cannot start agents. You start its subagents for it. This takes the place of the `subagent` tool of the session.
 
 The request comes as `SUBAGENT`, then one block for each part:
 

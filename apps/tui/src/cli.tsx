@@ -17,7 +17,7 @@ boot(c.backend, c.hello);
 // The daemon went away under us (it restarted): leave rather than render a dead session.
 c.exited.then(() => {
   const tail = c.stderr();
-  process.stderr.write(tail || "kl: lost the bench backend\n");
+  process.stderr.write(tail || "kl: lost the session backend\n");
   process.exit(1);
 });
 await start();

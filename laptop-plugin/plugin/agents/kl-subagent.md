@@ -60,7 +60,7 @@ Give a finding only with the line that proves it. Do not give findings about sty
 
 ## Send your commits
 
-The platform of the bench pushes your commits into the workspace. On the laptop, you do this with a transport branch:
+The platform of the session pushes your commits into the workspace. On the laptop, you do this with a transport branch:
 
 1. Push: `git push origin HEAD:refs/heads/kl/sub/<part>`.
 2. Your workspace takes the commits from that branch.

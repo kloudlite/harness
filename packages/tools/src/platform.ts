@@ -69,7 +69,7 @@ export async function apiJson<T>(method: string, path: string, body?: unknown): 
 
 export const seg = encodeURIComponent;
 
-const NO_SESSION = "this bench has no session (KL_SESSION is not set)";
+const NO_SESSION = "no session is set (KL_SESSION is not set)";
 
 /** The bench's own session: a bench belongs to one session and never joins another, so there is
  * no session_use here. The laptop door (`kloudlite mcp`) answers session_current and session_use
@@ -287,7 +287,7 @@ function basePlatformTools(kind: "main" | "workspace" | "all", wsId?: string, ti
         return text;
       },
     ),
-    def("session_current", ws ? "Show the session of this workspace and the environment that the session connects it to. A workspace cannot join or leave a session." : "Show the session of this bench and its environment. A bench belongs to its session.", {}, [], async () => {
+    def("session_current", ws ? "Show the session of this workspace and the environment that the session connects it to. A workspace cannot join or leave a session." : "Show this session and its environment.", {}, [], async () => {
       if (ws) {
         const g = await load(W);
         return "err" in g ? g.err : JSON.stringify({ session: g.doc?.session ?? null, environment: g.doc?.environment ?? null }, null, 2);
@@ -295,8 +295,8 @@ function basePlatformTools(kind: "main" | "workspace" | "all", wsId?: string, ti
       return currentSession();
     }),
     ...(ws ? [] : [
-      def("session_connect", "Connect this bench's session to an environment of its team (id or name). Its intercepts in the old environment are released first.", { environment: S }, ["environment"], (a) => connectSession(a.environment)),
-      def("session_disconnect", "Disconnect this bench's session from its environment; its intercepts there are released.", {}, [], () => connectSession(null)),
+      def("session_connect", "Connect this session to an environment of its team (id or name). Its intercepts in the old environment are released first.", { environment: S }, ["environment"], (a) => connectSession(a.environment)),
+      def("session_disconnect", "Disconnect this session from its environment; its intercepts there are released.", {}, [], () => connectSession(null)),
     ]),
     envTool("env_get", "Read the services, state and intercepts of an environment. Each `services[]` entry has `ready` (and `message`) from service_status. Read `ready`, not the spec; to wait after a change call env_wait instead of polling. `failing: true` means the service will not come up by waiting (a crash loop, an image that will not pull, a refused config): read `message` (for a crash, the exit code and its last log lines), fix the cause and redeploy. The `state` is `creating`, `running`, `stopped`, `error` or `deleted`. `running` means up. Stop the poll when the state is `error` or `deleted`." + (ws ? " It defaults to the environment that the session of this workspace connects it to." : ""), {}, [], async (env) => (await wake(env), withReady(await api("GET", `/v1/environments/${env}`)))),
     envTool("env_wait", "Wait until an environment settles after a change: every service ready, a service failing, or the state error/deleted. Use this instead of polling env_get. Returns the env_get view; `timedOut: true` means it was still settling after `timeout` seconds (default 300, maximum 900). `timeout_ms` is the same wait in milliseconds; give one of them.", { timeout: { ...N, description: "Seconds." }, timeout_ms: { ...N, description: "Milliseconds (the other spelling of `timeout`)." } }, [], async (env, a) => (await wake(env), settle(async () => withReady(await api("GET", `/v1/environments/${env}`)), waitSecs(a), tickMs))),
@@ -322,7 +322,7 @@ function basePlatformTools(kind: "main" | "workspace" | "all", wsId?: string, ti
 
   const main: ToolDef[] = [
     def("workspace_list", "List the workspaces of this session. You can give one team.", { team: S }, [], async (a) => {
-      // A bench serves one session (KL_SESSION): it lists that session's workspaces only, as the
+      // A session serves its own workspaces (KL_SESSION): it lists that session's workspaces only, as the
       // sidebar does (backend/src/session.ts); without it a second session saw the first one's.
       const path = `/v1/workspaces${qs({ team: a.team })}`;
       const session = process.env.KL_SESSION;

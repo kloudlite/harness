@@ -177,7 +177,7 @@ export async function mcpTools(deps: DelegateDeps): Promise<ToolDef[]> {
   const running = (await readTeam()).workspaces.find((w) => w.state === "ready")?.id;
   return new Registry().add(webFetch, webSearch, ...(await anyPodTools(running)),
      ...platformTools("all").map((t) => (t.name === "workspace_delete" ? forgetting(t, deps) : t)), ...delegateTools("main", undefined, deps, { tools: [] } as unknown as SessionOpts, "main"), ...taskTools(tasksFile("main", deps.tasks)), ...boardTools(deps.tasks), // the bench's own scratch folder: renamed, since `read`/`write` here are the pod's
-    ...scratchTools(scratchRoot("main")).map((t) => ({ ...t, name: `scratch_${t.name}`, description: `On the bench's scratch folder, not a workspace. ${t.description}` }))).all();
+    ...scratchTools(scratchRoot("main")).map((t) => ({ ...t, name: `scratch_${t.name}`, description: `On this session's scratch folder, not a workspace. ${t.description}` }))).all();
 }
 
 /** The permission gate, on both doors a call comes through: `agent.beforeToolCall` for a

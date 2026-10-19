@@ -141,7 +141,7 @@ test("resumeAsks resends a fresh ask with a prefix and tries+1; the third restar
   await Promise.all(resumeAsks(D({ asks: dir, open: route(ws, main) })));
   await flush();
   expect(ws.sent).toEqual(["prompt:[resent after restart] q"]);
-  expect(main.sent.some((m) => m.includes("[from w] failed: lost in 3 bench restarts"))).toBe(true);
+  expect(main.sent.some((m) => m.includes("[from w] failed: lost in 3 session restarts"))).toBe(true);
   expect(main.sent.some((m) => m.includes("[from w] r"))).toBe(true);
   expect(existsSync(join(dir, "a.json")) || existsSync(join(dir, "b.json"))).toBe(false);
 });

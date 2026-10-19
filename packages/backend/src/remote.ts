@@ -36,9 +36,9 @@ export class RemoteBackend implements Backend {
     try {
       hello = await this.hello();
     } catch {
-      throw mismatch("the bench does not serve the laptop TUI");
+      throw mismatch("the session does not serve the laptop TUI");
     }
-    if (hello.protocol !== PROTOCOL) throw mismatch(`protocol ${hello.protocol} on the bench, ${PROTOCOL} here`);
+    if (hello.protocol !== PROTOCOL) throw mismatch(`protocol ${hello.protocol} on the session, ${PROTOCOL} here`);
     return hello;
   }
 

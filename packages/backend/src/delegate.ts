@@ -347,7 +347,7 @@ export function resumeAsks(deps: DelegateDeps): Promise<void>[] {
     if (a.tries >= 2) {
       dropAsk(dir, a.id);
       closeAsk(deps, a, "failed");
-      return deliver(deps, a.callerKey, a, `[from ${a.key}] failed: lost in ${a.tries + 1} bench restarts; ask again if it still matters`, a.key);
+      return deliver(deps, a.callerKey, a, `[from ${a.key}] failed: lost in ${a.tries + 1} session restarts; ask again if it still matters`, a.key);
     }
     const text = a.text.startsWith("[resent after restart] ") ? a.text : `[resent after restart] ${a.text}`;
     return dispatchAsk(deps, { ...a, tries: a.tries + 1, text });
