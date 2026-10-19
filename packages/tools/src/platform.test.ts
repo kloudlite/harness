@@ -281,3 +281,28 @@ test("workspace_list keeps only the bench's session when KL_SESSION is set", asy
     delete process.env.KL_BENCH;
   }
 });
+
+test("in a session, workspace_create and workspace_delete go through the session; without one, direct", async () => {
+  const t = platformTools("main");
+  routes["POST /v1/workspaces"] = json({ id: "ws-1" }, 201);
+  routes["DELETE /v1/workspaces/w1"] = () => new Response(null, { status: 204 });
+  routes["POST /v1/sessions/ses-1/workspaces"] = json({ id: "ws-2" }, 201);
+  routes["DELETE /v1/sessions/ses-1/workspaces/w1"] = () => new Response(null, { status: 204 });
+  await tool(t, "workspace_create").run({ name: "backend", quota_gb: 5, team: "acme" });
+  await tool(t, "workspace_delete").run({ workspace: "w1" });
+  process.env.KL_SESSION = "ses-1";
+  try {
+    await tool(t, "workspace_create").run({ name: "backend", quota_gb: 5, team: "acme" });
+    await tool(t, "workspace_delete").run({ workspace: "w1" });
+  } finally {
+    delete process.env.KL_SESSION;
+  }
+  expect(calls.map((c) => `${c.method} ${c.url}`)).toEqual([
+    "POST /v1/workspaces",
+    "DELETE /v1/workspaces/w1",
+    "POST /v1/sessions/ses-1/workspaces",
+    "DELETE /v1/sessions/ses-1/workspaces/w1",
+  ]);
+  // The session already names the owner: a `team` would only contradict it.
+  expect(calls[2].body).toEqual({ name: "backend", quota_gb: 5 });
+});

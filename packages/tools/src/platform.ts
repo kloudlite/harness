@@ -331,14 +331,23 @@ function basePlatformTools(kind: "main" | "workspace" | "all", wsId?: string, ti
       return JSON.stringify(ws.filter((w) => w.session === session && w.id !== process.env.KL_BENCH), null, 2);
     }),
     def("workspace_get", "Read the state of one workspace. Poll this tool after any lifecycle call. The `state` is `creating`, `ready`, `stopped`, `error` or `deleted`. `ready` means up. A workspace is not `running` at any time. Stop the poll when the state is `error` or `deleted`.", { workspace: WS }, ["workspace"], async (a) => api("GET", `/v1/workspaces/${seg(a.workspace)}`)),
-    def("workspace_create", "Create a workspace. It runs in the team's region." + ASYNC, { name: S, quota_gb: N, image: S, repo: S, branch: S, packages: SL, team: S }, ["name", "quota_gb"], async (a) =>
-      api("POST", "/v1/workspaces", strip({ team: a.team, name: a.name, quota_gb: a.quota_gb, image: a.image, repo: a.repo, branch: a.branch, packages: a.packages }))),
+    // In a session (KL_SESSION) a workspace is created and deleted THROUGH it, so it is managed: a
+    // direct create would be standalone and then refused by this session's own tools, and a direct
+    // delete of a managed one is a 409. The session already names the owner, so `team` is dropped.
+    def("workspace_create", "Create a workspace. It runs in the team's region. In a session it is created in the session and is managed by it." + ASYNC, { name: S, quota_gb: N, image: S, repo: S, branch: S, packages: SL, team: S }, ["name", "quota_gb"], async (a) => {
+      const body = { name: a.name, quota_gb: a.quota_gb, image: a.image, repo: a.repo, branch: a.branch, packages: a.packages };
+      const ses = process.env.KL_SESSION;
+      return ses ? api("POST", `/v1/sessions/${seg(ses)}/workspaces`, strip(body)) : api("POST", "/v1/workspaces", strip({ team: a.team, ...body }));
+    }),
     def("workspace_clone", "Clone the current state of a workspace into a new workspace." + ASYNC, { workspace: WS, name: S, task: { type: "string", description: "What the clone is for. Use at most 200 characters." } }, ["workspace", "name"], async (a) => api("POST", `/v1/workspaces/${seg(a.workspace)}/clone`, strip({ name: a.name, task: a.task }))),
     def("workspace_restore", "Create a workspace from a snapshot." + ASYNC, { name: S, snapshot_id: S, image: S, packages: SL, quota_gb: N }, ["name", "snapshot_id"], async (a) =>
       api("POST", "/v1/workspaces/restore", strip({ name: a.name, snapshot_id: a.snapshot_id, image: a.image, packages: a.packages, quota_gb: a.quota_gb }))),
     lifecycle("workspace_start", "Start a stopped workspace." + ASYNC, "POST", "/start"),
     lifecycle("workspace_stop", "Stop a workspace that is up. The tool makes a snapshot first." + ASYNC, "POST", "/stop"),
-    lifecycle("workspace_delete", "Delete a workspace permanently." + ASYNC, "DELETE", ""),
+    def("workspace_delete", "Delete a workspace permanently. In a session it is deleted in the session." + ASYNC, { workspace: WS }, ["workspace"], async (a) => {
+      const ses = process.env.KL_SESSION;
+      return api("DELETE", ses ? `/v1/sessions/${seg(ses)}/workspaces/${seg(a.workspace)}` : `/v1/workspaces/${seg(a.workspace)}`);
+    }),
     of("workspace_push"),
     def("worktree_add", "Make a new worktree in a workspace." + ASYNC, { workspace: WS, name: S }, ["workspace", "name"], async (a) => api("POST", `/v1/workspaces/${seg(a.workspace)}/trees`, { name: a.name })),
     def("worktree_drop", "Remove a worktree from a workspace." + ASYNC, { workspace: WS, name: S }, ["workspace", "name"], async (a) => api("DELETE", `/v1/workspaces/${seg(a.workspace)}/trees/${seg(a.name)}`)),
