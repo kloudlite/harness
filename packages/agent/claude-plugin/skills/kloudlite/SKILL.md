@@ -84,7 +84,7 @@ To give an image a new tag, use `container_push`. The `kl` command is not on the
 **Snapshots.** A snapshot is a read-only copy of the disk of a workspace or environment.
 
 - *Sync points*: The platform makes them automatically while a workspace runs. They are only for recovery after a crash. They do not show in the history.
-- *Push* (`workspace_push`, `env_push`): Records a named snapshot in the history. The platform does not remove pushes. This push is not `git push`.
+- *Snapshot* (`workspace_snapshot`, `env_snapshot`): Records a named snapshot in the history. The platform does not remove snapshots. This is not `git push`.
 - *Restore* (`env_restore`): Puts THIS environment back in time, services and data. Data written since the snapshot is lost. If the reply is 409 with `lost`, ask the person, then repeat with `discard`. `workspace_restore` still makes a new workspace from a snapshot.
 - *Clone* (`workspace_clone`, `env_clone`): Makes a NEW workspace or environment. `env_clone` takes `snapshot_id` to copy a snapshot instead of the live state. The `based_on` field in the reply tells you the age of the copy.
 - `volume_list`, `volume_history` and `volume_refs` read the history. `snapshot_delete` and `volume_delete` remove history.
@@ -179,7 +179,7 @@ The permission card is the confirmation. Do not ask the person again in text.
 
 **No backdoors.** Do not go into a different workspace, pod or session to do work. If a delegation or a push fails, tell the person about the failure as it is. Do not go around it.
 
-**Push a snapshot only when the person asks.** The sync points already give recovery after a crash.
+**Take a snapshot only when the person asks.** The sync points already give recovery after a crash.
 
 **Environments.** Intercept the shared team environment from your workspace. Do not make a private copy of the environment. Release the intercept when you are done.
 

@@ -99,7 +99,7 @@ To give an image a new tag, use `container_push`. The `kl` command is not on the
 **Snapshots.** A snapshot is a read-only copy of the disk of a workspace or environment.
 
 - *Sync points*: The platform makes them automatically while a workspace runs. They are only for recovery after a crash. They do not show in the history.
-- *Push* (`workspace_push`, `env_push`): Records a named snapshot in the history. The platform does not remove pushes. This push is not `git push`.
+- *Snapshot* (`workspace_snapshot`, `env_snapshot`): Records a named snapshot in the history. The platform does not remove snapshots. This is not `git push`.
 - *Restore* (`env_restore`): Puts THIS environment back in time, services and data. Data written since the snapshot is lost. If the reply is 409 with `lost`, ask the person, then repeat with `discard`. `workspace_restore` still makes a new workspace from a snapshot.
 - *Clone* (`workspace_clone`, `env_clone`): Makes a NEW workspace or environment. `env_clone` takes `snapshot_id` to copy a snapshot instead of the live state. The `based_on` field in the reply tells you the age of the copy. To grow a new environment from a snapshot of a deleted environment, call `env_create` (`POST /v1/environments`) with `snapshot_id`.
 - `volume_list`, `volume_history` and `volume_refs` read the history. `snapshot_delete` and `volume_delete` remove history.
@@ -141,9 +141,9 @@ Each role has a different set of tools. Its role text gives its tools. If a tool
 | Code | `read`, `write`, `edit`, `patch`, `glob`, `grep` |
 | Run | `exec` (with `detach: true` for a process that continues), `process_list`, `process_output`, `process_write`, `process_kill`, `watch`, `watch_poll`, `watch_stop` |
 | Build | `container_build`, `container_push`, `builder_status` |
-| Workspaces | `workspace_list`, `workspace_get`, `workspace_create`, `workspace_clone`, `workspace_restore`, `workspace_start`, `workspace_stop`, `workspace_delete`, `workspace_push`, `worktree_add`, `worktree_drop` |
+| Workspaces | `workspace_list`, `workspace_get`, `workspace_create`, `workspace_clone`, `workspace_restore`, `workspace_start`, `workspace_stop`, `workspace_delete`, `workspace_snapshot`, `worktree_add`, `worktree_drop` |
 | Packages | `packages_list`, `packages_add`, `packages_remove`, `packages_update` |
-| Environments | `env_list`, `env_get`, `env_create`, `env_clone`, `env_start`, `env_stop`, `env_delete`, `env_push`, `env_restore`, `service_add`, `service_update`, `service_remove`, `service_logs`, `intercept`, `release` |
+| Environments | `env_list`, `env_get`, `env_create`, `env_clone`, `env_start`, `env_stop`, `env_delete`, `env_snapshot`, `env_restore`, `service_add`, `service_update`, `service_remove`, `service_logs`, `intercept`, `release` |
 | Sessions | `session_current`, `session_use` |
 | Repos | `repo_list`, `repo_get`, `repo_create`, `repo_update`, `repo_delete`, `protection_get`, `protection_set`, `branch_list`, `branch_delete`, `compare` |
 | Pull requests | `pr_list`, `pr_get`, `pr_create`, `pr_comment`, `pr_merge`, `pr_close` |
@@ -193,7 +193,7 @@ These are the rules of the team. Obey them.
 
 **No backdoors.** Do not go into a different workspace, pod or session to do work. If a delegation or a push fails, tell the person about the failure as it is. Do not go around it.
 
-**Push a snapshot only when the person asks.** The sync points already give recovery after a crash.
+**Take a snapshot only when the person asks.** The sync points already give recovery after a crash.
 
 **Environments.** Intercept the shared team environment from your workspace. Do not make a private copy of the environment. Release the intercept when you are done.
 

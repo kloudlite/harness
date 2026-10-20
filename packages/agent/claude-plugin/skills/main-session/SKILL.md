@@ -53,8 +53,8 @@ A tool with the mark **card** shows a permission card to the person before it ru
 | `workspace_start` | Start a stopped workspace. If its node is dead, the answer is 409. Then clone the workspace. |
 | `workspace_stop` **card**, `workspace_delete` **card** | Stop or delete a workspace. First, list the targets by name. Then call the tool with their ids. |
 | `workspace_clone` | Copy a workspace for parallel work, or to recover an interrupted workspace. |
-| `workspace_restore` | Make a new workspace from a pushed snapshot. |
-| `workspace_push` | Record a named snapshot. Do this only when the person asks. |
+| `workspace_restore` | Make a new workspace from a snapshot. |
+| `workspace_snapshot` | Record a named snapshot. Do this only when the person asks. |
 | `worktree_add`, `worktree_drop` **card** | Give a workspace a second branch without a second workspace. |
 
 **Environments and services**
@@ -64,7 +64,7 @@ A tool with the mark **card** shows a permission card to the person before it ru
 | `env_list`, `env_get` | See the environments, their services, and the intercepts. |
 | `env_create`, `env_clone`, `env_start` | Make, copy or start an environment. |
 | `env_stop` **card**, `env_delete` **card** | Stop or delete an environment. |
-| `env_push`, `env_restore` **card** | Make a snapshot of an environment, or put this environment back to a snapshot. To copy a snapshot into a new environment, use `env_clone`. |
+| `env_snapshot`, `env_restore` **card** | Make a snapshot of an environment, or put this environment back to a snapshot. To copy a snapshot into a new environment, use `env_clone`. |
 | `service_add`, `service_update` **card**, `service_remove` **card** | Add, change or remove the services of an environment. Use these for standard services, for example a database. A workspace adds and changes its own service. |
 | `service_logs` | Read the logs of a service. |
 | `session_current` | See this session and its environment (none if it is disconnected). |

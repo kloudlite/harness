@@ -270,7 +270,7 @@ function basePlatformTools(kind: "main" | "workspace" | "all", wsId?: string, ti
       return next.length === cur.length ? `error: not declared: ${(a.packages ?? []).join(", ")}` : next;
     }),
     def("packages_update", "Resolve the package pins of the workspace again, to the newest matching versions.", wp(), wr(), async (a) => api("POST", `${wsPath(a)}/packages/update`)),
-    def("workspace_push", "Make a snapshot of the workspace in its history." + ASYNC, wp({ message: S }), wr(), async (a) => api("POST", `${wsPath(a)}/push`, { message: a.message })),
+    def("workspace_snapshot", "Make a snapshot of the workspace in its history." + ASYNC, wp({ message: S }), wr(), async (a) => api("POST", `${wsPath(a)}/snapshots`, { message: a.message })),
     envTool(
       "service_logs",
       "Read the recent logs of one service of an environment that you own. The tool reads from inside the cluster, not from /v1. It is read-only. `tail` is the number of lines. The default is 200 and the maximum is 2000. `since` is in seconds. The maximum is 86400. `previous` reads the last container that crashed. If an intercept has taken the service, the answer has a note. The note names the workspace that runs the service.",
@@ -348,7 +348,7 @@ function basePlatformTools(kind: "main" | "workspace" | "all", wsId?: string, ti
       const ses = process.env.KL_SESSION;
       return api("DELETE", ses ? `/v1/sessions/${seg(ses)}/workspaces/${seg(a.workspace)}` : `/v1/workspaces/${seg(a.workspace)}`);
     }),
-    of("workspace_push"),
+    of("workspace_snapshot"),
     def("worktree_add", "Make a new worktree in a workspace." + ASYNC, { workspace: WS, name: S }, ["workspace", "name"], async (a) => api("POST", `/v1/workspaces/${seg(a.workspace)}/trees`, { name: a.name })),
     def("worktree_drop", "Remove a worktree from a workspace." + ASYNC, { workspace: WS, name: S }, ["workspace", "name"], async (a) => api("DELETE", `/v1/workspaces/${seg(a.workspace)}/trees/${seg(a.name)}`)),
     of("packages_list"),
@@ -365,7 +365,7 @@ function basePlatformTools(kind: "main" | "workspace" | "all", wsId?: string, ti
       api("POST", "/v1/environments", strip({ name: a.name, snapshot_id: a.snapshot_id, services: a.services?.map(withServiceDefaults), owner: a.team, quota_gb: a.quota_gb }))),
     def("env_clone", "Create a NEW environment from this one: from its live state, or from one of its snapshots when `snapshot_id` is given." + ASYNC, { env: ENV, name: S, snapshot_id: S, team: S, services: { type: "array", items: SERVICE }, region: S, quota_gb: N }, ["env", "name"], async (a) =>
       api("POST", `/v1/environments/${seg(a.env)}/clone`, strip({ name: a.name, snapshot_id: a.snapshot_id, owner: a.team, services: a.services?.map(withServiceDefaults), region: a.region, quota_gb: a.quota_gb }))),
-    def("env_push", "Make a snapshot of an environment in its history." + ASYNC, { env: ENV, message: S }, ["env"], async (a) => api("POST", `/v1/environments/${seg(a.env)}/push`, { message: a.message })),
+    def("env_snapshot", "Make a snapshot of an environment in its history." + ASYNC, { env: ENV, message: S }, ["env"], async (a) => api("POST", `/v1/environments/${seg(a.env)}/snapshots`, { message: a.message })),
     def("env_restore", "Put this environment back to one of its own snapshots: its services and its data. Data written since the snapshot is lost. If the call returns 409 with `lost`, those services keep data that the snapshot does not have; ask the person, then call again with `discard` naming them." + ASYNC, { env: ENV, snapshot_id: S, discard: { type: "array", items: S, description: "Names of the services from the 409 `lost` list whose data you accept losing." } }, ["env", "snapshot_id"], async (a) =>
       api("POST", `/v1/environments/${seg(a.env)}/restore`, strip({ snapshot_id: a.snapshot_id, discard: a.discard }))),
     ...["service_add", "service_update", "service_remove"].map(of),
