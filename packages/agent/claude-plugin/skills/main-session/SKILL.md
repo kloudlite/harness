@@ -49,7 +49,7 @@ A tool with the mark **card** shows a permission card to the person before it ru
 | Tool | Use it to |
 |---|---|
 | `workspace_list`, `workspace_get` | See the workspaces and their states. After a lifecycle call, poll `workspace_get`. |
-| `workspace_create` | Make a workspace for a new component (repo, branch, packages). |
+| `workspace_create` | Make a workspace for a new component (image, packages). |
 | `workspace_start` | Start a stopped workspace. If its node is dead, the answer is 409. Then clone the workspace. |
 | `workspace_stop` **card**, `workspace_delete` **card** | Stop or delete a workspace. First, list the targets by name. Then call the tool with their ids. |
 | `workspace_clone` | Copy a workspace for parallel work, or to recover an interrupted workspace. |

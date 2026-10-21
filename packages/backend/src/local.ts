@@ -49,7 +49,6 @@ import type { Backend, BenchEvent, CatalogModel, Decision, PermMode, PermissionR
 export const DESTRUCTIVE = new Set([
   "workspace_delete", "worktree_drop", "env_delete", "env_restore",
   "service_remove", "volume_delete", "snapshot_delete",
-  "repo_delete", "branch_delete", "image_tag_delete", "image_delete",
 ]);
 
 /** Every tool `mustAsk` can be true for: each carries a required `because` (consent.ts). */

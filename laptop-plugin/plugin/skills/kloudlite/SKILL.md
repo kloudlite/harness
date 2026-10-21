@@ -1,6 +1,6 @@
 ---
 name: kloudlite
-description: You run on Kloudlite from the laptop through the kl tools. In a request, the words "workspace", "environment", "service" and "snapshot" mean Kloudlite workspaces, environments, services and snapshots. Read this skill before any task that creates, changes, stops, deletes or lists a workspace or environment, or that works in a workspace. Also read it before a task about intercept, push, restore, clone, package, service or build. Also read it before a task that downloads, loads, trains or uploads a model or dataset, or that mentions "our hub" or the Kloudlite hub. It gives the concepts, the tools, the team rules and the roles. Your role (main session, kl-workspace or kl-subagent) has its own text. Read the two.
+description: You run on Kloudlite from the laptop through the kl tools. In a request, the words "workspace", "environment", "service" and "snapshot" mean Kloudlite workspaces, environments, services and snapshots. Read this skill before any task that creates, changes, stops, deletes or lists a workspace or environment, or that works in a workspace. Also read it before a task about intercept, push, restore, clone, package, service or build. It gives the concepts, the tools, the team rules and the roles. Your role (main session, kl-workspace or kl-subagent) has its own text. Read the two.
 ---
 
 # Kloudlite
@@ -82,7 +82,7 @@ Use one workspace for each component, for example frontend, backend, worker or t
 
 - Give `tags: ["name:tag"]`.
 - The build context is your working directory.
-- The tool builds on your builder and pushes the image to the Kloudlite registry.
+- The tool builds on your builder and pushes the image to the registry the owner configured. With none, it fails with "no registry is configured".
 
 To give an image a new tag, use `container_push`. The `kl` command is not on the PATH in `exec`. These tools run `kl` for you.
 
@@ -145,47 +145,17 @@ Each role has a different set of tools. Its role text gives its tools. If a tool
 | Packages | `packages_list`, `packages_add`, `packages_remove`, `packages_update` |
 | Environments | `env_list`, `env_get`, `env_create`, `env_clone`, `env_start`, `env_stop`, `env_delete`, `env_snapshot`, `env_restore`, `service_add`, `service_update`, `service_remove`, `service_logs`, `intercept`, `release` |
 | Sessions | `session_current`, `session_use` |
-| Repos | `repo_list`, `repo_get`, `repo_create`, `repo_update`, `repo_delete`, `protection_get`, `protection_set`, `branch_list`, `branch_delete`, `compare` |
-| Pull requests | `pr_list`, `pr_get`, `pr_create`, `pr_comment`, `pr_merge`, `pr_close` |
-| Images | `image_list`, `image_tags`, `image_visibility`, `image_tag_delete`, `image_delete` |
 | Storage | `volume_list`, `volume_history`, `volume_refs`, `volume_delete`, `snapshot_delete` |
 | Account | `quota`, `regions`, `requests_list`, `request_get`, `request_create` |
 | Web | `web_fetch`, `web_search` |
 
 These kl tools belong to the session itself. Do not use them from the laptop: `workspace_ask`, `main_tell`, `subagent`, `task_add`, `task_update`, `task_list`, `workspace_tasks`. Main uses `scratch_read` and `scratch_write` only for its contract files (`contract-<feature>.md`) and its progress ledgers (`progress-<feature>.md`, refer to the `develop` skill). Main does not use `scratch_bash`.
 
-## Repos and images
-
-Every role has the repo, pull request and image tools. Each tool needs `owner`. Read `owner` from `workspace_get` or ask the person.
-
-1. `~/workspace` is the repo root. Write code there directly: `git init` in it, or `git clone kl:<owner>/<repo> .` into it when empty. Never create a `<repo>/` folder inside it.
-2. Before you push code, run `git remote -v`.
-3. If it shows no `origin`, link a repo with `git remote add origin kl:<owner>/<repo>`.
-4. If the repo does not exist, create it first with `repo_create`.
-5. A repo can hold the code of more than one workspace. Each workspace uses its own branch.
-6. To merge work, open a pull request with `pr_create`.
-7. Merge it with `pr_merge` only when the person or the main session tells you to.
-8. `pr_merge` returns 202 at once. Poll `pr_get` until the merge state is final.
-
-The tools `repo_delete`, `branch_delete`, `image_tag_delete` and `image_delete` delete data that cannot be recovered. Before you call one, get a yes from the person. Main asks with `AskUserQuestion`. Name exactly what the call deletes. A `kl-workspace` or `kl-subagent` agent cannot ask the person. It stops and reports `NEED` with the exact target. Main asks the person and passes the answer back.
-
-## Models and datasets
-
-There are two model hubs: Hugging Face and the Kloudlite hub. Hugging Face is the default.
-
-1. A model or dataset name alone (for example `gpt2` or `meta-llama/Llama-3.1-8B`) means Hugging Face. Use the usual tools without a provider.
-2. Use the Kloudlite hub only when the person says "our hub", "Kloudlite hub" or "our model", or names a repo that the person or the team uploaded here.
-3. Do not set `HF_ENDPOINT`. In a shell, use `kl hf --provider kloudlite <hf arguments>`. In Python, use `from kloudlite import hub` and `hub.download(<repo>, provider="kloudlite")`.
-4. To load a model from the Kloudlite hub, download it first. Then give the local path to `from_pretrained` or `load_dataset`. A repo name in `from_pretrained` always goes to Hugging Face.
-5. Upload trained models to the Kloudlite hub, under the name of the person or the team. Use `hub.api("kloudlite").upload_folder(...)` or `kl hf --provider kloudlite upload ...`. Do not upload to Hugging Face unless the person tells you to.
-6. Do not put a Hugging Face token in a file, a commit or a message. The Kloudlite hub needs no token in a workspace.
-7. If `hf` is not found, add it with `kl pkg add python3Packages.huggingface-hub`. If `kloudlite` is not installed in Python, install it with `pip install kloudlite`.
-
 ## Team rules
 
 These are the rules of the team. Obey them.
 
-**Destructive actions** (delete, stop, restore in place, and `repo_delete`, `branch_delete`, `image_tag_delete`, `image_delete`):
+**Destructive actions** (delete, stop, restore in place):
 
 1. List the exact targets by name.
 2. Ask the person in one line, unless the person asked for this action and gave the target in this turn.

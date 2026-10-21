@@ -10,7 +10,6 @@ import { readFileSync } from "node:fs";
 import { STATUS_CODES } from "node:http";
 import { checkArgs } from "./args.ts";
 import type { ToolDef } from "./index.ts";
-import { repoTools } from "./repos.ts";
 
 const UNAVAILABLE = "platform tools unavailable: KL_API_URL / KL_TOOL_KEY_FILE not set";
 
@@ -186,9 +185,9 @@ async function load(path: string): Promise<{ doc: any } | { err: string }> {
   return { doc: r.data };
 }
 
-/** The platform table plus the repo and image tools, for every kind. */
+/** The platform table, for every kind. */
 export function platformTools(kind: "main" | "workspace" | "all", wsId?: string, tickMs = 5000): ToolDef[] {
-  return [...basePlatformTools(kind, wsId, tickMs), ...repoTools()];
+  return basePlatformTools(kind, wsId, tickMs);
 }
 
 /** `timeout` is seconds, `timeout_ms` milliseconds; a model that learnt one spelling on exec sends it here. */
@@ -334,8 +333,8 @@ function basePlatformTools(kind: "main" | "workspace" | "all", wsId?: string, ti
     // In a session (KL_SESSION) a workspace is created and deleted THROUGH it, so it is managed: a
     // direct create would be standalone and then refused by this session's own tools, and a direct
     // delete of a managed one is a 409. The session already names the owner, so `team` is dropped.
-    def("workspace_create", "Create a workspace. It runs in the team's region. In a session it is created in the session and is managed by it." + ASYNC, { name: S, quota_gb: N, image: S, repo: S, branch: S, packages: SL, team: S }, ["name", "quota_gb"], async (a) => {
-      const body = { name: a.name, quota_gb: a.quota_gb, image: a.image, repo: a.repo, branch: a.branch, packages: a.packages };
+    def("workspace_create", "Create a workspace. It runs in the team's region. In a session it is created in the session and is managed by it." + ASYNC, { name: S, quota_gb: N, image: S, packages: SL, team: S }, ["name", "quota_gb"], async (a) => {
+      const body = { name: a.name, quota_gb: a.quota_gb, image: a.image, packages: a.packages };
       const ses = process.env.KL_SESSION;
       return ses ? api("POST", `/v1/sessions/${seg(ses)}/workspaces`, strip(body)) : api("POST", "/v1/workspaces", strip({ team: a.team, ...body }));
     }),

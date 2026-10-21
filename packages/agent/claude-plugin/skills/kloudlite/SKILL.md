@@ -1,6 +1,6 @@
 ---
 name: kloudlite
-description: You run on Kloudlite. In a request, the words "workspace", "environment", "service" and "snapshot" mean Kloudlite workspaces, environments, services and snapshots. You control them with the workspace_*, env_*, service_*, intercept and packages_* tools. Example: "delete all workspaces" means list them with workspace_list, then call workspace_delete for each. Read this skill before a task that creates, changes, stops, deletes or lists a workspace or environment, or that works in a workspace. Also read it before a task about intercept, push, restore, clone, package or build. Also read it before a task that downloads, loads, trains or uploads a model or dataset, or that mentions "our hub" or the Kloudlite hub. It gives the concepts, the permission cards and the team rules. Your role (main session, workspace session or subagent session) has its own skill next to this skill. Read the two skills.
+description: You run on Kloudlite. In a request, the words "workspace", "environment", "service" and "snapshot" mean Kloudlite workspaces, environments, services and snapshots. You control them with the workspace_*, env_*, service_*, intercept and packages_* tools. Example: "delete all workspaces" means list them with workspace_list, then call workspace_delete for each. Read this skill before a task that creates, changes, stops, deletes or lists a workspace or environment, or that works in a workspace. Also read it before a task about intercept, push, restore, clone, package or build. It gives the concepts, the permission cards and the team rules. Your role (main session, workspace session or subagent session) has its own skill next to this skill. Read the two skills.
 ---
 
 # Kloudlite
@@ -69,7 +69,7 @@ Use one workspace for each component, for example frontend, backend, worker or t
 
 - Give `tags: ["name:tag"]`.
 - The build context is your working directory.
-- The tool builds on your builder and pushes the image to the Kloudlite registry.
+- The tool builds on your builder and pushes the image to the registry the owner configured. With none, it fails with "no registry is configured".
 
 To give an image a new tag, use `container_push`. The `kl` command is not on the PATH in `exec`. These tools run `kl` for you.
 
@@ -125,7 +125,7 @@ Each role has a different set of tools. Your role skill gives your tools and whe
 
 **Permission cards.** Some calls stop and show a card to the person. The person accepts or refuses the call.
 
-- These calls always show a card: `workspace_stop`, `workspace_delete`, `worktree_drop`, `env_stop`, `env_delete`, `env_restore`, `service_update`, `service_remove`, `volume_delete`, `snapshot_delete`, `repo_delete`, `branch_delete`, `image_tag_delete`, `image_delete`, `packages_remove`, `intercept`, `container_build`, `container_push`.
+- These calls always show a card: `workspace_stop`, `workspace_delete`, `worktree_drop`, `env_stop`, `env_delete`, `env_restore`, `service_update`, `service_remove`, `volume_delete`, `snapshot_delete`, `packages_remove`, `intercept`, `container_build`, `container_push`.
 - One exception: a workspace session that stops its own workspace does not get a card.
 - These calls show a card if the sandbox and the network fence are not in force: `exec`, `bash`, `web_fetch`.
 
@@ -138,33 +138,6 @@ These calls have a `because` field. Fill it in this way:
 2. In all other conditions, write one sentence in `reason`. Tell why the task needs this call.
 
 If the person refuses a card, that is their answer. Do not try the call again. Do not get the same result in a different way.
-
-## Repos and images
-
-Every role has the repo, pull request and image tools. Each tool needs `owner`. Read `owner` from `workspace_get` or ask the person.
-
-1. `~/workspace` is the repo root. Write code there directly: `git init` in it, or `git clone kl:<owner>/<repo> .` into it when empty. Never create a `<repo>/` folder inside it.
-2. Before you push code, run `git remote -v`.
-3. If it shows no `origin`, link a repo with `git remote add origin kl:<owner>/<repo>`.
-4. If the repo does not exist, create it first with `repo_create`.
-5. A repo can hold the code of more than one workspace. Each workspace uses its own branch.
-6. To merge work, open a pull request with `pr_create`.
-7. Merge it with `pr_merge` only when the person or the main session tells you to.
-8. `pr_merge` returns 202 at once. Poll `pr_get` until the merge state is final.
-
-The tools `repo_delete`, `branch_delete`, `image_tag_delete` and `image_delete` delete data that cannot be recovered. Each of these calls shows a card to the person. The card is the confirmation. Fill in `because`. Name exactly what the call deletes.
-
-## Models and datasets
-
-There are two model hubs: Hugging Face and the Kloudlite hub. Hugging Face is the default.
-
-1. A model or dataset name alone (for example `gpt2` or `meta-llama/Llama-3.1-8B`) means Hugging Face. Use the usual tools without a provider.
-2. Use the Kloudlite hub only when the person says "our hub", "Kloudlite hub" or "our model", or names a repo that the person or the team uploaded here.
-3. Do not set `HF_ENDPOINT`. In a shell, use `kl hf --provider kloudlite <hf arguments>`. In Python, use `from kloudlite import hub` and `hub.download(<repo>, provider="kloudlite")`.
-4. To load a model from the Kloudlite hub, download it first. Then give the local path to `from_pretrained` or `load_dataset`. A repo name in `from_pretrained` always goes to Hugging Face.
-5. Upload trained models to the Kloudlite hub, under the name of the person or the team. Use `hub.api("kloudlite").upload_folder(...)` or `kl hf --provider kloudlite upload ...`. Do not upload to Hugging Face unless the person tells you to.
-6. Do not put a Hugging Face token in a file, a commit or a message. The Kloudlite hub needs no token in a workspace.
-7. If `hf` is not found, add it with `kl pkg add python3Packages.huggingface-hub`. If `kloudlite` is not installed in Python, install it with `pip install kloudlite`.
 
 ## Team rules
 

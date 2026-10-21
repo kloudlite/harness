@@ -53,7 +53,7 @@ A tool with the mark **card** shows a permission card to the person before it ru
 | `exec` with `detach: true` | Start a process that continues to run, for example the service, a dev server or a watcher. The tool returns a process id. |
 | `process_list`, `process_output`, `process_write`, `process_kill` | List the processes that run, read their output (the last 4 MiB), write to their stdin, or stop them. |
 | `watch`, `watch_poll`, `watch_stop` | Wait for a change to files or events. Use these tools, not a poll loop with `exec`. |
-| `container_build` **card**, `container_push` **card** | Build an image of your service on the builder of the owner, and push it to the Kloudlite registry (`tags: ["name:tag"]`). Or give an image a new tag. Use these tools only when the person tells you to publish an image. While you develop, use `intercept`. The `kl` command is not on the PATH in `exec`. Use these tools. |
+| `container_build` **card**, `container_push` **card** | Build an image of your service on the builder of the owner, and push it to the owner's registry (`tags: ["name:tag"]`; with none configured it fails with "no registry is configured"). Or give an image a new tag. Use these tools only when the person tells you to publish an image. While you develop, use `intercept`. The `kl` command is not on the PATH in `exec`. Use these tools. |
 
 **Your workspace on the platform.** These tools work on your workspace and its default environment. You cannot give a different workspace.
 
@@ -75,12 +75,6 @@ A tool with the mark **card** shows a permission card to the person before it ru
 | `main_tell` | Send main a report: `done`, `blocked` or `need`. Refer to "Reports to main". |
 | `question` | Ask the person a question with choices. Do this only when the person is in your view. |
 | `subagent` | Give one independent task to a subagent. Refer to "Give a task to a subagent". |
-| `repo_list`, `repo_get`, `repo_create`, `repo_update`, `protection_get`, `protection_set`, `branch_list`, `compare` | Read and manage the repos of an owner. Give `owner` on each call. |
-| `pr_list`, `pr_get`, `pr_create`, `pr_comment`, `pr_close` | Work with pull requests. |
-| `pr_merge` | Merge a pull request. Do this only when main or the person tells you to. |
-| `repo_delete` **card**, `branch_delete` **card** | Delete a repo or a branch. The card is the confirmation. |
-| `image_list`, `image_tags`, `image_visibility` | Read and manage images. |
-| `image_tag_delete` **card**, `image_delete` **card** | Delete a tag or an image. The card is the confirmation. |
 | `web_fetch`, `web_search` | Read docs and the web. |
 
 You do not have tools for other workspaces, worktrees, quota or requests. These are the work of main. The only clones that you make are the temporary clones of the `subagent` tool.

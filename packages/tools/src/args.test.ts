@@ -51,8 +51,6 @@ test("service tools say what a flat call lacked, and take a JSON-string array", 
   const add = tools.find((t) => t.name === "packages_add")!;
   // past the check (a string became an array) the call fails only on the missing api url
   await expect(add.run({ workspace: "ws-1", packages: '["git"]' })).rejects.toThrow("platform tools unavailable");
-  const pr = tools.find((t) => t.name === "pr_list")!;
-  await expect(pr.run({ owner: "o", name: "n", state: "all" })).rejects.toThrow("must be one of open, merged, closed");
 });
 
 test("env_wait takes seconds or milliseconds", () => {
