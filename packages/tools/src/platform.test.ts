@@ -306,3 +306,15 @@ test("in a session, workspace_create and workspace_delete go through the session
   // The session already names the owner: a `team` would only contradict it.
   expect(calls[2].body).toEqual({ name: "backend", quota_gb: 5 });
 });
+
+test("the push tools pass the volume name and the restore tool the team", async () => {
+  routes["POST /v1/workspaces/w1/snapshots"] = json({});
+  routes["POST /v1/environments/e1/snapshots"] = json({});
+  routes["POST /v1/workspaces/restore"] = json({});
+  await tool(platformTools("workspace", "w1"), "workspace_snapshot").run({ message: "m", volume: "pg" });
+  expect(calls[0].body).toEqual({ message: "m", volume: "pg" });
+  await tool(platformTools("main"), "env_snapshot").run({ env: "e1", volume: "pg" });
+  expect(calls[1].body).toEqual({ volume: "pg" });
+  await tool(platformTools("main"), "workspace_restore").run({ name: "w2", snapshot_id: "pg@2", team: "acme" });
+  expect(calls[2].body).toEqual({ name: "w2", snapshot_id: "pg@2", team: "acme" });
+});
