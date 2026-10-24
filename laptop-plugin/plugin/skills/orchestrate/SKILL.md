@@ -44,12 +44,12 @@ Example: the person writes "stop the backend". `workspace_list` shows the name `
 | Tool | Use it to |
 |---|---|
 | `workspace_list`, `workspace_get` | See the workspaces and their states. After a lifecycle call, poll `workspace_get`. |
-| `workspace_create` | Make a workspace for a new component (repo, branch, packages). |
+| `workspace_create` | Make a workspace for a new component (name, disk size, image, packages). In a session it is created in the session. |
 | `workspace_start` | Start a stopped workspace. If its node is dead, the answer is 409. Then clone the workspace. |
-| `workspace_stop`, `workspace_delete` | Stop or delete a workspace. First, list the targets by name. Then call the tool with their ids. |
+| `workspace_stop`, `workspace_delete` | Stop or delete a workspace. In a session it is deleted in the session. First, list the targets by name. Then call the tool with their ids. |
 | `workspace_clone` | Copy a workspace for parallel work, for a subagent, or to recover an interrupted workspace. |
 | `workspace_restore` | Make a new workspace from a snapshot. |
-| `workspace_snapshot` | Record a named snapshot. Do this only when the person asks. |
+| `workspace_snapshot` | Record a snapshot in a volume. Do this only when the person asks. |
 | `worktree_add`, `worktree_drop` | Give a workspace a second branch without a second workspace. |
 
 **Environments and services**
@@ -63,7 +63,7 @@ Example: the person writes "stop the backend". `workspace_list` shows the name `
 | `env_snapshot`, `env_restore` | Make a snapshot of an environment, or put this environment back to a snapshot. To copy a snapshot into a new environment, use `env_clone`. |
 | `service_add`, `service_update`, `service_remove` | Add, change or remove the services of an environment. Use these for standard services, for example a database or a queue. Give each one a mount for its data. A workspace adds and changes its own service. |
 | `service_logs` | Read the logs of a service. |
-| `session_current`, `session_use` | See the session this laptop is in, or pick one (or create one on an environment). |
+| `session_current`, `session_use` | See the session this laptop is in, or pick one (`name`, optional `environment`). |
 | `session_connect`, `session_disconnect` | Connect the session to an environment (id or name), switch it, or disconnect it. The session's intercepts in the old environment are released first. |
 
 Intercepts are not your work. The workspace that runs the service starts and ends the intercept. Ask that workspace to do it.
@@ -73,8 +73,8 @@ Intercepts are not your work. The workspace that runs the service starts and end
 | Tool | Use it to |
 |---|---|
 | `packages_list` | Read the packages of a workspace. To change packages, give an ask to the workspace. Then the workspace also updates its `AGENTS.md`. |
-| `volume_list`, `volume_history`, `volume_refs` | Read the snapshot history. |
-| `snapshot_delete`, `volume_delete` | Remove history. |
+| `volume_list`, `volume_history`, `volume_refs` | Read volumes and their snapshot lineage. |
+| `snapshot_delete`, `volume_delete` | Remove a snapshot or a volume that has no working copy. |
 | `builder_status` | See the image builder of the owner. |
 | `quota`, `regions` | See the resources that the owner can still use, and the regions (a team has one; everything it makes runs there). |
 | `request_create`, `requests_list`, `request_get` | Ask a superadmin for quota, access or a region. Read the decision. |
@@ -227,7 +227,7 @@ Some work needs two workspaces at the same time. Example: the backend runs its s
 
 1. **Use the same environment.** A workspace can get to the services of an environment only if its session is connected to that environment.
    - Use `session_current` to see the session and its environment.
-   - If necessary, use `session_use` to pick or create the session that is connected to it.
+   - If necessary, use `session_connect` to connect the session to it, or `session_use` to pick a session that is connected to it.
    - Use `env_get` to see the service names.
 2. **Start the service.** Ask the backend: "Run your service and intercept `<service>` in `<env>`. Keep it running. Send a report when it is ready." The report gives the service, the environment and the port. It also tells you that the intercept is in force. `env_get` also shows the intercept.
 3. **Run the tests.** Ask the tests workspace: "Run the integration tests against `<service>` in `<env>`. This service runs the backend branch `<branch>` at `<commit>`." The report gives the result: passed, or the tests that failed and how they failed.

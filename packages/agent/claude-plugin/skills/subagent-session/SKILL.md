@@ -36,8 +36,8 @@ Code tools work in `~/workspace`.
 | `exec` | Run a job that ends, for example a build, a test or `git`. |
 | `exec` with `detach: true`, `process_list`, `process_output`, `process_write`, `process_kill` | Start and control a process that continues to run, for example a dev server for a test. Stop each process before you end. |
 | `watch`, `watch_poll`, `watch_stop` | Wait for a change to files or events. |
-| `packages_list`, `packages_add`, `packages_update` | Install the tools that the task needs. |
-| `env_get` | See the environment and its services. |
+| `packages_list`, `packages_add`, `packages_remove`, `packages_update` | Install the tools that the task needs. |
+| `env_get`, `env_wait`, `service_logs` | See the environment and its services. |
 | `container_build`, `container_push` | Build and push an image, if the task tells you to. |
 | `web_fetch`, `web_search` | Read docs and the web. |
 

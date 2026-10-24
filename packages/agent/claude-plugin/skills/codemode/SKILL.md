@@ -57,10 +57,11 @@ A lifecycle call returns before the work is done. To wait for the result, write 
    | Workspace | `ready`. A workspace is not `running` at any time. |
    | Environment | `running` |
 
-5. For a service, examine `services[].ready` or `service_status[].ready`. Do not use a regex on the spec.
-6. Use the id (`ws-…` or `env-…`) in the call. Do not use the name.
-7. Before the loop, make sure that the write call passed. A failed tool call throws.
-8. Wait with `await tools.sleep({ seconds })` (at most 30). Do not run `sleep` in a shell.
+5. For an environment, `tools.env_wait({ env })` replaces the loop: it returns when every service is ready, one fails, or the state is `error` or `deleted`.
+6. For a service, examine `services[].ready` or `service_status[].ready`. Do not use a regex on the spec.
+7. Use the id (`ws-…` or `env-…`) in the call. Do not use the name.
+8. Before the loop, make sure that the write call passed. A failed tool call throws.
+9. Wait with `await tools.sleep({ seconds })` (at most 30). Do not run `sleep` in a shell.
 
 ```js
 // Wait until a workspace is up

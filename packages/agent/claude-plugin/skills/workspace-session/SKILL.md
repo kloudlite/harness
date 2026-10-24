@@ -13,7 +13,6 @@ You run in the pod of one workspace, in `~/workspace`. Your workspace holds one 
 - Its code.
 - Its service, when the service runs.
 - Its intercept.
-- Its working branch.
 
 The `kloudlite` skill gives the concepts that all sessions use.
 
@@ -49,24 +48,24 @@ A tool with the mark **card** shows a permission card to the person before it ru
 
 | Tool | Use it to |
 |---|---|
-| `exec` (card if not fenced) | Run a job that ends, for example a build, a test or `git`. `git push` works with the key of the owner. The tool waits for the job, with a timeout. |
+| `exec` | Run a job that ends, for example a build, a test or `git`. `git push` works with the key of the owner. The tool waits for the job, with a timeout. |
 | `exec` with `detach: true` | Start a process that continues to run, for example the service, a dev server or a watcher. The tool returns a process id. |
 | `process_list`, `process_output`, `process_write`, `process_kill` | List the processes that run, read their output (the last 4 MiB), write to their stdin, or stop them. |
 | `watch`, `watch_poll`, `watch_stop` | Wait for a change to files or events. Use these tools, not a poll loop with `exec`. |
-| `container_build` **card**, `container_push` **card** | Build an image of your service on the builder of the owner, and push it to the owner's registry (`tags: ["name:tag"]`; with none configured it fails with "no registry is configured"). Or give an image a new tag. Use these tools only when the person tells you to publish an image. While you develop, use `intercept`. The `kl` command is not on the PATH in `exec`. Use these tools. |
+| `container_build`, `container_push` | Build an image of your service on the builder of the owner, and push it to the owner's registry (`tags: ["name:tag"]`; with none configured it fails with "no registry is configured"). Or give an image a new tag. Use these tools only when the person tells you to publish an image. While you develop, use `intercept`. The `kl` command is not on the PATH in `exec`. Use these tools. |
 
 **Your workspace on the platform.** These tools work on your workspace and its default environment. You cannot give a different workspace.
 
 | Tool | Use it to |
 |---|---|
-| `packages_list`, `packages_add`, `packages_remove` **card**, `packages_update` | Install the tools that your component needs. Then add them to `AGENTS.md`. |
-| `env_get` | See your environment, its services and the intercepts. |
-| `service_add`, `service_update` **card**, `service_remove` **card** | Change a service that your component owns in that environment. |
+| `packages_list`, `packages_add`, `packages_remove`, `packages_update` | Install the tools that your component needs. Then add them to `AGENTS.md`. |
+| `env_get`, `env_wait` | See your environment, its services and the intercepts. After a change, `env_wait` waits until the services are ready or one fails. |
+| `service_add`, `service_update`, `service_remove` | Change a service that your component owns in that environment. Only `service_remove` shows a card. |
 | `service_logs` | Read the logs of a service in that environment. It can be your service or a service that you call. |
-| `intercept` **card**, `release` | Send the traffic for your service in the environment to the process that you run here. `release` ends this. |
+| `intercept`, `release` | Send the traffic for your service in the environment to the process that you run here. `release` ends this. |
 | `session_current` | See your session and the environment whose services your workspace gets to by DNS name. You cannot join or leave a session. |
-| `workspace_snapshot` | Record a named snapshot. Do this only when the person or main asks. |
-| `workspace_stop` | Stop this workspace when your task is done and main or the person told you to stop. This call does not show a card. It makes a snapshot first. The next start continues from that snapshot. |
+| `workspace_snapshot` | Record a snapshot in the volume lineage. Do this only when the person or main asks. |
+| `workspace_stop` | Stop this workspace when your task is done and main or the person told you to stop. It makes a snapshot first. The next start continues from that snapshot. |
 
 **Talk to main and the person**
 

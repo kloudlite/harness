@@ -94,15 +94,15 @@ To give an image a new tag, use `container_push`. The `kl` command is not on the
 - `env_get` shows each intercept and the workspace that holds it.
 - Use an intercept to test a change to a service in the real environment, without a build and without a deploy. This is the short dev loop.
 
-**Session.** A session connects some of your workspaces to one environment, and a connected laptop is always in a session. The workspaces of the session can get to the services of that environment by their DNS names. Use `session_current` to see the session and `session_use` to pick one, or to create one on an existing environment or on a new environment. A workspace cannot join or leave a session; the person or main does that from outside.
+**Session.** A session is the gateway to the workspaces of a team and to one optional environment. A connected laptop is always in a session. Workspaces are created and deleted through the session; there is no attach or detach. The workspaces of the session can get to the services of its environment by their DNS names. Use `session_current` to see the session and `session_use` (`name`, optional `environment`) to pick one. Main uses `session_connect` and `session_disconnect` to connect the session to an environment or to disconnect it. A workspace cannot join, leave or connect a session.
 
-**Snapshots.** A snapshot is a read-only copy of the disk of a workspace or environment.
+**Snapshots and volumes.** A snapshot is a read-only copy of the disk of a workspace or environment. Snapshots are kept in a volume. A volume holds a lineage of snapshots: a parent chain, newest first, whose tip is `main`. A named volume also has numbered versions, `name@N`.
 
 - *Sync points*: The platform makes them automatically while a workspace runs. They are only for recovery after a crash. They do not show in the history.
-- *Snapshot* (`workspace_snapshot`, `env_snapshot`): Records a named snapshot in the history. The platform does not remove snapshots. This is not `git push`.
+- *Snapshot* (`workspace_snapshot`, `env_snapshot`): Records a snapshot in the lineage of the volume. `volume` names the volume; the first snapshot of an unnamed volume must name it. The platform does not remove snapshots. This is not `git push`.
 - *Restore* (`env_restore`): Puts THIS environment back in time, services and data. Data written since the snapshot is lost. If the reply is 409 with `lost`, ask the person, then repeat with `discard`. `workspace_restore` still makes a new workspace from a snapshot.
 - *Clone* (`workspace_clone`, `env_clone`): Makes a NEW workspace or environment. `env_clone` takes `snapshot_id` to copy a snapshot instead of the live state. The `based_on` field in the reply tells you the age of the copy. To grow a new environment from a snapshot of a deleted environment, call `env_create` (`POST /v1/environments`) with `snapshot_id`.
-- `volume_list`, `volume_history` and `volume_refs` read the history. `snapshot_delete` and `volume_delete` remove history.
+- `volume_list`, `volume_history` and `volume_refs` read volumes and their lineage. `snapshot_delete` (`volume`, `snapshot`) and `volume_delete` (`volume`) remove them; `volume_delete` takes only a volume with no working copy.
 
 **Interrupted workspace.** If the node of a workspace stops, `workspace_start` answers 409. Then clone the workspace. The clone starts from the last sync point.
 
@@ -143,8 +143,8 @@ Each role has a different set of tools. Its role text gives its tools. If a tool
 | Build | `container_build`, `container_push`, `builder_status` |
 | Workspaces | `workspace_list`, `workspace_get`, `workspace_create`, `workspace_clone`, `workspace_restore`, `workspace_start`, `workspace_stop`, `workspace_delete`, `workspace_snapshot`, `worktree_add`, `worktree_drop` |
 | Packages | `packages_list`, `packages_add`, `packages_remove`, `packages_update` |
-| Environments | `env_list`, `env_get`, `env_create`, `env_clone`, `env_start`, `env_stop`, `env_delete`, `env_snapshot`, `env_restore`, `service_add`, `service_update`, `service_remove`, `service_logs`, `intercept`, `release` |
-| Sessions | `session_current`, `session_use` |
+| Environments | `env_list`, `env_get`, `env_create`, `env_clone`, `env_start`, `env_stop`, `env_delete`, `env_snapshot`, `env_restore`, `env_wait`, `service_add`, `service_update`, `service_remove`, `service_logs`, `intercept`, `release` |
+| Sessions | `session_current`, `session_use`, `session_connect`, `session_disconnect` |
 | Storage | `volume_list`, `volume_history`, `volume_refs`, `volume_delete`, `snapshot_delete` |
 | Account | `quota`, `regions`, `requests_list`, `request_get`, `request_create` |
 | Web | `web_fetch`, `web_search` |
