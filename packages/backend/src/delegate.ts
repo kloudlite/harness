@@ -359,7 +359,7 @@ export function delegateTools(kind: "main" | "workspace", ws: string | undefined
     const tell: ToolDef = {
       name: "main_tell",
       description:
-        "Tell the main session something. Use `done` when the task is finished (tests pass, branch pushed). Use `blocked` when you cannot go on. Say what would unblock you. Use `need` when you need a fact or an action from another workspace or the person. Then keep working on what you can. After `done` or `blocked`, end your turn. Your report is the answer.",
+        "Tell the main session something. Use `done` when the task is finished (tests pass, changes saved). Use `blocked` when you cannot go on. Say what would unblock you. Use `need` when you need a fact or an action from another workspace or the person. Then keep working on what you can. After `done` or `blocked`, end your turn. Your report is the answer.",
       inputSchema: {
         type: "object",
         properties: { kind: { type: "string", enum: ["done", "blocked", "need"] }, text: { type: "string" } },
