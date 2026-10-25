@@ -18,7 +18,7 @@ export type Session = {
    */
   restored?: boolean;
   busy: boolean;
-  tokens: number;
+  context?: { tokens: number | null; window: number };
   /** Prompts submitted in this session, oldest first (↑/↓ recall). */
   history: string[];
   model: ModelRef;
@@ -31,25 +31,36 @@ export type Session = {
 
 export type QueuedMessage = { text: string; kind: "steer" | "followUp" };
 
-const emptySession: Session = { entries: [], busy: false, tokens: 0, history: [], model: DEFAULT_MODEL, queued: [] };
+const emptySession: Session = { entries: [], busy: false, history: [], model: DEFAULT_MODEL, queued: [] };
 
-/**
- * Where a context's sessions live: the working session's main sessions, or one
- * workspace's. `sessionKey` hangs a session id off it — "main" is the default,
- * always-there session, other ids are the named ones.
- */
-export function sessionBase(workspaceId?: string): string {
-  return workspaceId ?? "main";
+/** The workspace a session key belongs to: `main`, `ws-…`; `ws-…:agent-<hex>` belongs to `ws-…`. */
+export function baseOf(key: string): string {
+  return key.split(":")[0]!;
+}
+
+/** First pending ask for the workspace the user is looking at; asks keep arrival order. */
+export function askFor<T extends { key: string }>(asks: T[], activeKey: string): T | undefined {
+  const base = baseOf(activeKey);
+  return asks.find((a) => baseOf(a.key) === base);
 }
 
 export function sessionKey(workspaceId?: string, id = "main"): string {
-  const base = sessionBase(workspaceId);
+  const base = workspaceId ?? "main";
   return id === "main" ? base : `${base}:${id}`;
 }
 
 /** The session id inside a key, i.e. the inverse of `sessionKey`. */
 export function sessionIdOf(base: string, key: string): string {
   return key === base ? "main" : key.slice(base.length + 1);
+}
+
+/** A clone's row has no session of its own, only its subagent's (`<clone>:agent-<hex>`): the id of
+ * the newest one, or undefined when the base has a regular session or no agent one. */
+export function pickAgentSession(base: string, sessions: { key: string; updated: number }[]): string | undefined {
+  const mine = sessions.filter((s) => s.key === base || s.key.startsWith(`${base}:`));
+  if (mine.some((s) => !s.key.includes(":agent-"))) return undefined;
+  const newest = mine.reduce<{ key: string; updated: number } | undefined>((a, s) => (!a || s.updated > a.updated ? s : a), undefined);
+  return newest && sessionIdOf(base, newest.key);
 }
 
 export type SessionMap = Record<string, Session>;

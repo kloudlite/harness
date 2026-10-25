@@ -1,4 +1,4 @@
-export type SlashCommand = {
+type SlashCommand = {
   name: string;
   description: string;
   /** Command takes an argument — typing "/cmd " opens its option list. */
@@ -9,24 +9,21 @@ export const commands: SlashCommand[] = [
   { name: "/help", description: "Keyboard shortcuts and commands" },
   { name: "/tools", description: "List registered tools" },
   { name: "/clear", description: "Clear the transcript" },
+  { name: "/compact", description: "Compact the context now; text after it says what to keep" },
   { name: "/session", description: "Name or continue a main session", hasOptions: true },
   { name: "/model", description: "Set this session's model", hasOptions: true },
   { name: "/theme", description: "Switch theme", hasOptions: true },
   { name: "/login", description: "Log in to a provider", hasOptions: true },
+  { name: "/btw", description: "Ask a side question; the answer is not saved" },
   { name: "/files", description: "Browse workspace files and diffs" },
   { name: "/settings", description: "Adjust settings", hasOptions: true },
   { name: "/exit", description: "Quit" },
 ];
 
-export function matchCommands(input: string): SlashCommand[] {
-  if (!input.startsWith("/")) return [];
-  return commands.filter((c) => c.name.startsWith(input));
-}
-
 /** One row in the slash menu: `insert` is submitted, `label`/`hint` rendered. */
 export type MenuItem = { insert: string; label: string; hint: string };
 
-export type MenuContext = {
+type MenuContext = {
   models: { provider: string; id: string; hint: string }[];
   themes: string[];
   logins: { provider: string; type: string; label: string }[];
@@ -39,20 +36,26 @@ export type MenuContext = {
 export const MENU_MAX = 8;
 
 /** Menu for the current input: command list, or the typed command's options. */
+function loginHint(type: string, prefix: string): string {
+  return prefix + (type === "oauth" ? "oauth" : "api key");
+}
+
 export function menuItems(input: string, ctx: MenuContext): MenuItem[] {
   if (!input.startsWith("/")) return [];
 
-  const space = input.indexOf(" ");
-  if (space === -1) {
-    return matchCommands(input).map((c) => ({
-      insert: c.hasOptions ? `${c.name} ` : c.name,
-      label: c.name,
-      hint: c.description,
-    }));
+  const blank = input.indexOf(" ");
+  if (blank === -1) {
+    return commands
+      .filter((c) => c.name.startsWith(input))
+      .map((c) => ({
+        insert: c.hasOptions ? `${c.name} ` : c.name,
+        label: c.name,
+        hint: c.description,
+      }));
   }
 
-  const cmd = input.slice(0, space);
-  const q = input.slice(space + 1).toLowerCase();
+  const cmd = input.slice(0, blank);
+  const q = input.slice(blank + 1).toLowerCase();
   const filter = (label: string) => label.toLowerCase().includes(q);
 
   if (cmd === "/model") {
@@ -66,7 +69,7 @@ export function menuItems(input: string, ctx: MenuContext): MenuItem[] {
         .map((l) => ({
           insert: `/login ${l.provider} ${l.type}`,
           label: `${l.provider} · ${l.label}`,
-          hint: l.type === "oauth" ? "connect · oauth" : "connect · api key",
+          hint: loginHint(l.type, "connect · "),
         }));
     return ctx.models
       .filter((m) => filter(`${m.provider}/${m.id}`))
@@ -88,10 +91,10 @@ export function menuItems(input: string, ctx: MenuContext): MenuItem[] {
       .map((l) => ({
         insert: `/login ${l.provider} ${l.type}`,
         label: `${l.provider} · ${l.label}`,
-        hint: l.type === "oauth" ? "oauth" : "api key",
+        hint: loginHint(l.type, ""),
       }));
   if (cmd === "/session") {
-    const rest = input.slice(space + 1);
+    const rest = input.slice(blank + 1);
     // "/session name <text>" is free text — no options to pick from
     if (/^name\s/.test(rest)) return [];
     return [
@@ -104,7 +107,7 @@ export function menuItems(input: string, ctx: MenuContext): MenuItem[] {
     ].filter((o) => filter(o.label));
   }
   if (cmd === "/settings") {
-    const rest = input.slice(space + 1);
+    const rest = input.slice(blank + 1);
     // Two levels: one row per setting until a setting is named, then its
     // values. Listing every key/value pair at once ran to 20-odd rows and
     // buried the settings that are not thinkingLevel.
@@ -125,7 +128,7 @@ export function menuItems(input: string, ctx: MenuContext): MenuItem[] {
           (s) => s.key === o.key && s.hint.split(" · ")[0] === "current",
         );
         return {
-          // trailing space so picking the key reopens the menu at its values
+          // trailing blank so picking the key reopens the menu at its values
           insert: `/settings ${o.key} `,
           label: o.key,
           hint: current ? current.value : "",
@@ -138,7 +141,7 @@ export function menuItems(input: string, ctx: MenuContext): MenuItem[] {
 /** Rotating input hints. */
 export const placeholders = [
   "Ask anything, or / for commands",
-  "^j/^k workspaces · ^1-9 jump",
+  "^k workspaces · ^f files · ^j jobs · ^1-9 jump",
   "Esc to interrupt",
   "\\ + Enter for a new line",
 ];

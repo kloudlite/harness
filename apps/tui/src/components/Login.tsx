@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import { useKeyboard } from "@opentui/react";
 import { TextAttributes } from "@opentui/core";
 import type { AuthEvent, AuthPrompt } from "@kloudlite-tui/agent";
-import { loginProvider } from "@kloudlite-tui/agent";
+import { backend } from "../hello.ts";
 import { theme } from "../theme.ts";
 import { Input } from "./Input.tsx";
 
@@ -17,13 +17,23 @@ type Pending = {
  * Drives a pi-ai login flow: renders notify events (auth URLs, device codes,
  * progress) and answers prompts (text/secret/select/manual_code). Esc cancels.
  */
-export function Login({
+export function Login(props: {
+  provider: string;
+  type: LoginType;
+  onDone: (ok: boolean) => void;
+}) {
+  return <PiLogin {...props} />;
+}
+
+export type LoginType = "oauth" | "api_key";
+
+function PiLogin({
   provider,
   type,
   onDone,
 }: {
   provider: string;
-  type: "oauth" | "api_key";
+  type: LoginType;
   onDone: (ok: boolean) => void;
 }) {
   const [events, setEvents] = useState<AuthEvent[]>([]);
@@ -33,16 +43,22 @@ export function Login({
   const abort = useRef(new AbortController());
 
   useEffect(() => {
-    loginProvider(provider, type, {
+    backend().auth.login(provider, type as "oauth" | "api_key", {
       signal: abort.current.signal,
       notify: (event) => {
         setEvents((prev) => [...prev, event]);
         if (event.type === "auth_url") {
-          // best effort: open the browser (macOS/Linux)
-          spawn(process.platform === "darwin" ? "open" : "xdg-open", [event.url], {
-            stdio: "ignore",
-            detached: true,
-          }).unref();
+          // best effort: open the browser (macOS/Linux). A headless box (the
+          // bench) has no xdg-open: Bun throws on spawn, node emits "error";
+          // either way the URL on screen is the way in.
+          try {
+            spawn(process.platform === "darwin" ? "open" : "xdg-open", [event.url], {
+              stdio: "ignore",
+              detached: true,
+            })
+              .on("error", () => {})
+              .unref();
+          } catch {}
         }
       },
       prompt: (prompt) =>

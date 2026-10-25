@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { useState } from "react";
 import { testRender } from "@opentui/react/test-utils";
 import { Transcript, type Entry } from "./components/Transcript.tsx";
 
@@ -30,6 +31,25 @@ test("scrolling up offers a jump back to the bottom, end takes it", async () => 
   t.renderer.destroy();
 });
 
+test("a click in the transcript does not make up/down scroll it", async () => {
+  // an open ask owns up/down; a focused scrollbox scrolled underneath it
+  const t = await testRender(<Transcript entries={entries} />, { width: 80, height: 16, kittyKeyboard: true });
+  const frame = async () => {
+    await new Promise((r) => setTimeout(r, 30));
+    await t.renderOnce();
+    return t.captureCharFrame();
+  };
+  await frame();
+  t.mockInput.pressKey("\x1b[5~"); // PageUp, so up/down would have room to move
+  const before = await frame();
+  await t.mockMouse.click(10, 5);
+  t.mockInput.pressArrow("down");
+  t.mockInput.pressArrow("down");
+  t.mockInput.pressArrow("up");
+  expect(await frame()).toBe(before);
+  t.renderer.destroy();
+});
+
 test("a long block collapses to its head and a click toggles it both ways", async () => {
   const long: Entry[] = [
     { id: "a", kind: "agent", text: Array.from({ length: 25 }, (_, i) => `line ${i + 1}`).join("\n") },
@@ -52,13 +72,41 @@ test("a long block collapses to its head and a click toggles it both ways", asyn
   expect(first).toContain("to expand");
 
   // click only — opencode has no expand key, so neither do we
-  await t.mockMouse.click(10, 3);
+  const moreRow = async (text: string) =>
+    (await frame()).split("\n").findIndex((l) => l.includes(text));
+  await t.mockMouse.click(10, await moreRow("Click to expand"));
   const open = await frame();
   expect(open).toContain("line 25");
   expect(open).toContain("Click to collapse"); // the row stays, offering the way back
 
-  await t.mockMouse.click(10, 3); // and it really collapses again
+  // a click on the body is not a toggle, open or closed
+  await t.mockMouse.click(10, (await frame()).split("\n").findIndex((l) => l.includes("line 2")));
+  expect(await frame()).toContain("line 25");
+
+  await t.mockMouse.click(10, await moreRow("Click to collapse")); // and it really collapses again
+  const shut = await frame();
+  expect(shut).not.toContain("line 25");
+  await t.mockMouse.click(10, (await frame()).split("\n").findIndex((l) => l.includes("line 2")));
   expect(await frame()).not.toContain("line 25");
+  t.renderer.destroy();
+});
+
+test("clicking the expand row itself toggles once", async () => {
+  const long: Entry[] = [
+    { id: "a", kind: "agent", text: Array.from({ length: 25 }, (_, i) => `line ${i + 1}`).join("\n") },
+  ];
+  const t = await testRender(<Transcript entries={long} keys="page" />, { width: 70, height: 24 });
+  const frame = async () => {
+    await new Promise((r) => setTimeout(r, 30));
+    await t.renderOnce();
+    return t.captureCharFrame();
+  };
+  const row = (await frame()).split("\n").findIndex((l) => l.includes("Click to expand"));
+  expect(row).toBeGreaterThan(0);
+  await t.mockMouse.click(10, row);
+  const open = await frame();
+  expect(open).toContain("line 25");
+  expect(open).toContain("Click to collapse");
   t.renderer.destroy();
 });
 
@@ -89,9 +137,22 @@ test("thinking tickers while streaming and opens up when done", async () => {
   expect(frame).not.toContain("reasoning line 11");
 }, 20000);
 
-// Reaching the "… +N lines" row meant scrolling past the whole block first,
-// so the block itself is the toggle — but a drag over it still selects text.
-test("clicking a long block toggles it, dragging over it does not", async () => {
+test("a streaming thinking line wider than the screen stays one clean row", async () => {
+  const line = "I should read the codemode skill first, since instructions indicate it needs to be reviewed before making the first codemode call.";
+  const t = await testRender(<Transcript entries={[{ kind: "thinking", id: "a", text: line }]} />, { width: 60, height: 10 });
+  await new Promise((r) => setTimeout(r, 100));
+  await t.renderOnce();
+  const rows = t.captureCharFrame().split("\n").filter((l) => l.trim());
+  expect(rows).toHaveLength(1);
+  expect(rows[0]).toContain("I should read");
+  // opentui cuts the middle, so the newest words stay in view
+  expect(rows[0]).toContain("...");
+  expect(rows[0]).toContain("codemode call.");
+  t.renderer.destroy();
+});
+
+// Only the "… +N lines" row toggles; a drag over the body still selects text.
+test("clicking the expand row toggles a long block, dragging over it does not", async () => {
   const para =
     "Long unbroken reasoning paragraph that the terminal soft wraps across many visual rows and therefore collapses to a ten row head. ";
   const t = await testRender(
@@ -106,7 +167,8 @@ test("clicking a long block toggles it, dragging over it does not", async () => 
   expect(t.captureCharFrame()).toContain("Click to expand");
 
 
-  await t.mockMouse.click(10, 5);
+  const row = t.captureCharFrame().split("\n").findIndex((l) => l.includes("Click to expand"));
+  await t.mockMouse.click(10, row);
   await new Promise((r) => setTimeout(r, 80));
   await t.renderOnce();
   expect(t.captureCharFrame()).toContain("Click to collapse");
@@ -144,6 +206,56 @@ test("a codemode call renders its script above its output", async () => {
   expect(frame).toContain("tools.read");
   expect(frame).toContain("return f.length;");
   expect(frame).toContain("Script completed");
+}, 15000);
+
+// script and output collapse separately: 7 + 4 rows passes the cap together
+// but cuts nothing, so there is no "+0 lines" expander (2026-10-09)
+test("a codemode block that cuts nothing offers no expander", async () => {
+  const t = await testRender(
+    <Transcript
+      width={100}
+      entries={[
+        {
+          kind: "tool",
+          id: "c0",
+          name: "codemode",
+          status: "ok",
+          summary: "a\nb\nc\nd\ne\nf\ng",
+          output: "Script completed\nWall time 5.5 seconds\nOutput:\nstate: ready",
+        },
+      ]}
+    />,
+    { width: 100, height: 30 },
+  );
+  await new Promise((r) => setTimeout(r, 200));
+  await t.renderOnce();
+  const frame = t.captureCharFrame();
+  expect(frame).toContain("state: ready");
+  expect(frame).not.toContain("Click to expand");
+}, 15000);
+
+test("a codemode card shows what the script displayed, collapsed", async () => {
+  const t = await testRender(
+    <Transcript
+      width={100}
+      entries={[
+        {
+          kind: "tool",
+          id: "c2",
+          name: "codemode",
+          status: "ok",
+          summary: "await tools.display({ markdown });",
+          output: "shown",
+          display: ["| colA | colB |\n|---|---|\n| cell1 | cell2 |"],
+        },
+      ]}
+    />,
+    { width: 100, height: 30 },
+  );
+  await new Promise((r) => setTimeout(r, 200));
+  await t.renderOnce();
+  const frame = t.captureCharFrame();
+  for (const w of ["colA", "colB", "cell1", "cell2"]) expect(frame).toContain(w);
 }, 15000);
 
 // A bash command is text in the block and wraps like any other text, so it has
@@ -188,3 +300,41 @@ test("an empty session that has been read shows the welcome screen", async () =>
   expect(t.captureCharFrame()).toContain("Orchestrate agents");
   t.renderer.destroy();
 }, 15000);
+
+test("a thinking block that finishes streaming remounts with its header on its own row", async () => {
+  const text = "I should load the config first and then check every caller before editing anything at all here";
+  let finish = () => {};
+  const App = () => {
+    const [done, setDone] = useState(false);
+    finish = () => setDone(true);
+    return <Transcript entries={[{ id: "t", kind: "thinking", text, done }]} />;
+  };
+  const t = await testRender(<App />, { width: 60, height: 12 });
+  const frame = async () => {
+    await new Promise((r) => setTimeout(r, 30));
+    await t.renderOnce();
+    return t.captureCharFrame();
+  };
+  await frame();
+  finish(); // same entry id, done flips: the host box must not be reused (it kept height 1)
+  const out = await frame();
+  expect(out.split("\n").some((l) => l.includes("Thinking") && !l.includes("should"))).toBe(true);
+  expect(out).toContain("I should load");
+  t.renderer.destroy();
+});
+
+test("a message from another session renders as a card with names, kind and no board line", async () => {
+  const names = (k: string) => (k === "w1" ? "todo-demo" : k);
+  const t = await testRender(
+    <Transcript entries={[{ kind: "user", text: "[from w1] done: **Todo app** built\nboard: T1 done" }]} names={names} to="main" />,
+    { width: 80, height: 12 },
+  );
+  await new Promise((r) => setTimeout(r, 30));
+  await t.renderOnce();
+  const f = t.captureCharFrame();
+  expect(f).toContain("◆ todo-demo → main · done");
+  expect(f).toContain("Todo app built");
+  expect(f).not.toContain("board:");
+  expect(f).not.toContain("[from");
+  t.renderer.destroy();
+});

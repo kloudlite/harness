@@ -10,7 +10,8 @@ import { catalog, modelLabel, refreshCatalog } from "./models.ts";
 // never-refreshed catalog is pinned to whatever shipped in dist. This is the
 // bug that stranded us on `deepseek-v4-flash`, an id DeepSeek stopped serving.
 test("every provider is dynamic, so the seed is never the whole story", () => {
-  const providers = models.getProviders();
+  // claude-bridge is ours, registered when any test mounts the app first (file order is not fixed)
+  const providers = models.getProviders().filter((p) => p.id !== "claude-bridge");
   expect(providers.length).toBeGreaterThan(0);
   // if pi ever ships a static provider, refresh silently skips it
   const dynamic = providers.filter(
@@ -19,20 +20,19 @@ test("every provider is dynamic, so the seed is never the whole story", () => {
   expect(dynamic.length).toBe(providers.length);
 });
 
-// refresh must return the catalog, not mutate the import-time snapshot:
-// `catalog` is a frozen const, which is why the picker needs the result
-test("refreshCatalog returns a list without mutating the seed", async () => {
+// refresh returns the live list and the exported `catalog` binding follows it
+test("refreshCatalog returns the live list and updates the binding", async () => {
   const seeded = catalog.length;
   const live = await refreshCatalog();
   expect(Array.isArray(live)).toBe(true);
   expect(live.length).toBeGreaterThanOrEqual(seeded);
-  expect(catalog.length).toBe(seeded);
+  expect(catalog).toBe(live);
 });
 
 // A cold start knows only pi's bundled seed, so validating a saved model
 // against the catalog at import time threw away any choice the seed predates:
 // `deepseek-flash` (the one DeepSeek model that accepts images) became an
-// anthropic fallback on first launch. DEFAULT_MODEL is computed at import, and
+// default-model fallback on first launch. DEFAULT_MODEL is computed at import, and
 // bun caches modules for the process — so this needs a real fresh process.
 test("a saved default model survives a cold start", () => {
   const dir = mkdtempSync(join(tmpdir(), "kl-cold-"));
@@ -44,7 +44,7 @@ test("a saved default model survives a cold start", () => {
     [
       "bun",
       "-e",
-      'const m = await import("./src/models.ts"); console.log(m.DEFAULT_MODEL.provider + "/" + m.DEFAULT_MODEL.id);',
+      'const { LocalBackend } = await import("@kloudlite-tui/backend/local"); const { boot } = await import("./src/hello.ts"); const l = new LocalBackend(); boot(l, await l.hello()); const m = await import("./src/models.ts"); console.log(m.DEFAULT_MODEL.provider + "/" + m.DEFAULT_MODEL.id);',
     ],
     { cwd: import.meta.dir + "/..", env: { ...process.env, KLOUDLITE_CONFIG_DIR: dir } },
   );

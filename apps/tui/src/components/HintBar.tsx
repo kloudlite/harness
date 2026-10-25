@@ -1,21 +1,25 @@
 import { TextAttributes } from "@opentui/core";
 import { theme } from "../theme.ts";
 
+const k = (n: number) => (n < 1000 ? String(n) : n < 500_000 ? `${Math.round(n / 1000)}k` : `${Math.round(n / 100_000) / 10}M`);
+/** `84k ctx`; `?` while pi has no count (right after compaction). The window is left out: it depends on the model. */
+export const formatContext = (c: { tokens: number | null }) => `${c.tokens === null ? "?" : k(c.tokens)} ctx`;
+
 /** Bottom bar: connected environment left; tokens, hints right. */
 export function HintBar({
   busy,
-  tokens,
+  context,
   queued,
   permMode,
   active,
   inWorkspace,
   normal,
-  vim = true,
-  compact = false,
+  vim,
+  compact,
   onHint,
 }: {
   busy: boolean;
-  tokens: number;
+  context?: { tokens: number | null; window: number };
   queued: number;
   /** Permission mode; only shown when it is not "default". */
   permMode?: string;
@@ -24,11 +28,11 @@ export function HintBar({
   inWorkspace: boolean;
   normal: boolean;
   /** vim keys on: esc leads to NORMAL mode. Off: ctrl+<letter> commands. */
-  vim?: boolean;
+  vim: boolean;
   /** Narrow terminal: show only the essential hints so the row can't wrap. */
-  compact?: boolean;
+  compact: boolean;
   /** Hints are clickable: the id matches the key they stand for. */
-  onHint?: (id: "type" | "jump" | "files" | "commands" | "help" | "queue") => void;
+  onHint?: (id: "type" | "jump" | "files" | "jobs" | "plan" | "done" | "commands" | "help" | "queue") => void;
 }) {
   const click = (id: Parameters<NonNullable<typeof onHint>>[0]) =>
     onHint ? () => onHint(id) : undefined;
@@ -44,7 +48,7 @@ export function HintBar({
         {queued > 0 && (
           <box onMouseDown={click("queue")}>
             <text selectable={false} fg={theme.warning}>
-              {queued} queued <span attributes={TextAttributes.DIM}>q edit</span>
+              {queued} queued <span attributes={TextAttributes.DIM}>↑ edit</span>
             </text>
           </box>
         )}
@@ -57,13 +61,16 @@ export function HintBar({
         )}
       </box>
       <box flexDirection="row" gap={2} flexShrink={1} overflow="hidden">
-        <text selectable={false} fg={theme.muted}>{tokens.toLocaleString()} tok</text>
+        {context && <text selectable={false} fg={theme.muted}>{formatContext(context)}</text>}
         {normal ? (
           <>
             <box onMouseDown={click("type")}><text selectable={false} fg={theme.fg}>i <span fg={theme.muted}>type</span></text></box>
             {!compact && <text selectable={false} fg={theme.fg}>j k <span fg={theme.muted}>workspaces</span></text>}
             {!compact && <box onMouseDown={click("jump")}><text selectable={false} fg={theme.fg}>p <span fg={theme.muted}>jump</span></text></box>}
-            {inWorkspace && <box onMouseDown={click("files")}><text selectable={false} fg={theme.fg}>f <span fg={theme.muted}>view</span></text></box>}
+            {inWorkspace && <box onMouseDown={click("files")}><text selectable={false} fg={theme.fg}>f <span fg={theme.muted}>files</span></text></box>}
+            <box onMouseDown={click("plan")}><text selectable={false} fg={theme.fg}>^g <span fg={theme.muted}>plan</span></text></box>
+            {!compact && <box onMouseDown={click("done")}><text selectable={false} fg={theme.fg}>^q <span fg={theme.muted}>done</span></text></box>}
+            <box onMouseDown={click("jobs")}><text selectable={false} fg={theme.fg}>^j <span fg={theme.muted}>jobs</span></text></box>
             <box onMouseDown={click("commands")}><text selectable={false} fg={theme.fg}>/ <span fg={theme.muted}>commands</span></text></box>
             <box onMouseDown={click("help")}><text selectable={false} fg={theme.fg}>? <span fg={theme.muted}>help</span></text></box>
           </>
@@ -76,7 +83,10 @@ export function HintBar({
           <>
             <text selectable={false} fg={theme.fg}>enter <span fg={theme.muted}>send</span></text>
             {!compact && <box onMouseDown={click("jump")}><text selectable={false} fg={theme.fg}>^p <span fg={theme.muted}>jump</span></text></box>}
-            {inWorkspace && <box onMouseDown={click("files")}><text selectable={false} fg={theme.fg}>^f <span fg={theme.muted}>view</span></text></box>}
+            {inWorkspace && <box onMouseDown={click("files")}><text selectable={false} fg={theme.fg}>^f <span fg={theme.muted}>files</span></text></box>}
+            <box onMouseDown={click("plan")}><text selectable={false} fg={theme.fg}>^g <span fg={theme.muted}>plan</span></text></box>
+            {!compact && <box onMouseDown={click("done")}><text selectable={false} fg={theme.fg}>^q <span fg={theme.muted}>done</span></text></box>}
+            <box onMouseDown={click("jobs")}><text selectable={false} fg={theme.fg}>^j <span fg={theme.muted}>jobs</span></text></box>
             <box onMouseDown={click("commands")}><text selectable={false} fg={theme.fg}>/ <span fg={theme.muted}>commands</span></text></box>
           </>
         )}

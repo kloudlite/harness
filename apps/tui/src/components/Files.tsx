@@ -7,18 +7,9 @@ import { DiffView } from "./Diff.tsx";
 import { SPECIAL } from "./Input.tsx";
 import type { FileDiff } from "../diff.ts";
 import { useWheelAccel } from "../wheel.ts";
-import {
-  changes as scanChanges,
-  displayRoot,
-  fileDiff,
-  fullFile,
-  grep,
-  isGitRepo,
-  listDir,
-  type Change,
-  type Match,
-  type TreeNode,
-} from "../git.ts";
+import { backend } from "../hello.ts";
+import { filesApi, NO_SEARCH, unreachable } from "../filesApi.ts";
+import { displayRoot, type Change, type Match, type TreeNode } from "../git.ts";
 
 /** One selectable row in the left pane. */
 type Row =
@@ -40,14 +31,18 @@ export function Files({
   onCycle,
 }: {
   root: string;
-  workspace: string;
+  /** A workspace view reads that workspace's `~/workspace` from its pod, never the bench's files. */
+  workspace?: string;
   /** bump to re-scan (agent finished an edit/write) */
   refreshKey: number;
   onClose: () => void;
-  /** `f` moves on to the next view, same as outside. */
+  /** `f` / ^f returns to the chat. */
   onCycle: () => void;
 }) {
   const wheel = useWheelAccel();
+  const fs = filesApi(workspace, backend());
+  const [podError, setPodError] = useState<string | null>(null);
+  const down = (e: unknown) => workspace && setPodError(unreachable(e));
   const [changes, setChanges] = useState<Change[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [dirCache, setDirCache] = useState<Record<string, TreeNode[]>>({});
@@ -62,10 +57,13 @@ export function Files({
   const [matchIdx, setMatchIdx] = useState(0);
   const [flash, setFlash] = useState(false);
   const scrollRef = useRef<ScrollBoxRenderable>(null);
-  const git = useMemo(() => isGitRepo(root), [root]);
+  const [git, setGit] = useState(false);
+  useEffect(() => {
+    fs.isGitRepo(root).then((g) => (setGit(g), setPodError(null))).catch(down);
+  }, [root]);
 
   const rescan = () => {
-    setChanges(scanChanges(root));
+    fs.changes(root).then((c) => (setChanges(c), setPodError(null))).catch((e) => (setChanges([]), down(e)));
     setDirCache({});
   };
   useEffect(rescan, [root]);
@@ -79,11 +77,13 @@ export function Files({
   }, [refreshKey]);
 
   const dir = (rel: string): TreeNode[] => {
-    if (dirCache[rel]) return dirCache[rel];
-    const nodes = listDir(root, rel);
-    // cache lazily; setState during render is avoided by deferring
-    queueMicrotask(() => setDirCache((c) => (c[rel] ? c : { ...c, [rel]: nodes })));
-    return nodes;
+    if (!(rel in dirCache)) {
+      dirCache[rel] = []; // mark in flight; never re-request while it loads
+      fs.listDir(root, rel)
+        .then((nodes) => setDirCache((c) => ({ ...c, [rel]: nodes })))
+        .catch(down);
+    }
+    return dirCache[rel]!;
   };
 
   const changeStatus = (path: string) => changes.find((c) => c.path === path)?.status;
@@ -138,17 +138,35 @@ export function Files({
     () => changes.filter((c) => !filter || c.path.toLowerCase().includes(filter.toLowerCase())),
     [changes, filter],
   );
-  const diff: FileDiff | null = useMemo(() => {
-    if (!open?.status) return null;
-    return fileDiff(root, open.path, open.status);
+  const [diff, setDiff] = useState<FileDiff | null>(null);
+  useEffect(() => {
+    if (!open?.status) return setDiff(null);
+    let live = true;
+    fs.fileDiff(root, open.path, open.status)
+      .then((d) => live && setDiff(d))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, changes, refreshKey]);
+  const [full, setFull] = useState<FileDiff | null>(null);
+  useEffect(() => {
+    if (!open) return setFull(null);
+    let live = true;
+    fs.fullFile(root, open.path, open.status)
+      .then((lines) => live && setFull({ path: open.path, lines, added: 0, removed: 0 }))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, refreshKey]);
   const body: FileDiff | null = useMemo(() => {
     if (!open) return null;
     if (view === "diff" && diff) return diff;
-    return { path: open.path, lines: fullFile(root, open.path, open.status), added: diff?.added ?? 0, removed: diff?.removed ?? 0 };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, view, diff, refreshKey]);
+    return full && { ...full, added: diff?.added ?? 0, removed: diff?.removed ?? 0 };
+  }, [open, view, diff, full]);
   // hunk starts: rows where a change run begins (in full view, tinted runs)
   const hunks = useMemo(() => {
     if (!body) return [] as number[];
@@ -173,6 +191,8 @@ export function Files({
   }
 
   useKeyboard((key) => {
+    // ^f is the files toggle when vim is off (app.tsx command()); the app's own handler is parked while this view is up
+    if (key.ctrl && key.name === "f" && !key.meta) return onCycle();
     if (key.ctrl || key.meta || key.option) return;
     // "/" filter and "s" search share one typing prompt
     if (prompt) {
@@ -184,7 +204,11 @@ export function Files({
         setPrompt((p) => {
           if (p?.kind === "search") {
             const query = p.text.trim();
-            setSearch(query ? { query, matches: grep(root, query) } : null);
+            if (!query) setSearch(null);
+            else
+              fs.grep(root, query)
+                .then((matches) => setSearch({ query, matches }))
+                .catch(() => setSearch({ query, matches: [] }));
             setMatchIdx(0);
           }
           return null;
@@ -218,6 +242,7 @@ export function Files({
       return onClose();
     }
     if (key.sequence === "/") return setPrompt({ kind: "filter", text: filter });
+    if (key.name === "s" && workspace) return setPodError(NO_SEARCH);
     if (key.name === "s") return setPrompt({ kind: "search", text: search?.query ?? "" });
     if (key.name === "f") return onCycle();
     if (key.name === "r") return rescan();
@@ -295,7 +320,8 @@ export function Files({
       {/* header */}
       <box flexDirection="row" justifyContent="space-between" paddingLeft={1} paddingRight={1}>
         <text>
-          <span fg={theme.muted}>{displayRoot(root)}</span>
+          <span fg={theme.muted}>{workspace ? "~/workspace" : displayRoot(root)}</span>
+          {podError ? <span fg={theme.error}>  {podError}</span> : ""}
           {flash ? <span fg={theme.success}>  ● updated</span> : ""}
         </text>
         <text fg={theme.muted}>
@@ -499,6 +525,7 @@ export function Files({
             <text fg={theme.fg}>s <span fg={theme.muted}>search</span></text>
           </>
         )}
+        <text fg={theme.fg}>^f <span fg={theme.muted}>chat</span></text>
         <text fg={theme.fg}>esc <span fg={theme.muted}>back</span></text>
       </box>
     </box>

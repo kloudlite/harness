@@ -1,8 +1,10 @@
-import { defineTool } from "./index.ts";
+import { guarded } from "./args.ts";
+import type { ToolDef } from "./index.ts";
 
 /** Guard every outbound call: a hung host must not hang the turn. */
-async function get(url: string, headers: Record<string, string> = {}): Promise<Response> {
+async function get(url: string, headers: Record<string, string> = {}, body?: unknown): Promise<Response> {
   const res = await fetch(url, {
+    ...(body === undefined ? {} : { method: "POST", body: JSON.stringify(body) }),
     headers: { "user-agent": "kloudlite-tui", ...headers },
     redirect: "follow",
     signal: AbortSignal.timeout(20_000),
@@ -39,22 +41,24 @@ function clip(text: string, max: number): string {
   return text.length <= max ? text : `${text.slice(0, max)}\n\n… truncated at ${max} characters`;
 }
 
-export const webFetch = defineTool<{ url: string; maxChars?: number }>({
+const fetchTool = {
   name: "web_fetch",
   description:
-    "Fetch a URL and return its readable text. Use for documentation, changelogs, issues, or any page whose contents you need to read. JSON comes back verbatim; HTML is stripped to text. Not a search engine — you need the exact URL.",
+    "Fetch a URL and return its readable text. Use it for documentation, changelogs, issues, or any page that you must read. JSON comes back unchanged. The tool removes the markup from HTML. It is not a search engine. You need the exact URL.",
   inputSchema: {
     type: "object",
     properties: {
-      url: { type: "string", description: "Absolute http(s) URL." },
-      maxChars: {
+      url: { type: "string", description: "An absolute http(s) URL." },
+      max_chars: {
         type: "number",
-        description: "Truncate the result at this many characters. Default 50000.",
+        description: "Truncate the result at this number of characters. The default is 50000.",
       },
+      maxChars: { type: "number", description: "The other spelling of `max_chars`." },
     },
     required: ["url"],
   },
-  async run({ url, maxChars = 50_000 }) {
+  async run({ url, max_chars, maxChars }) {
+    const max = max_chars ?? maxChars ?? 50_000;
     if (!/^https?:\/\//i.test(url)) return `error: ${url} is not an http(s) URL`;
     try {
       const res = await get(url);
@@ -62,12 +66,15 @@ export const webFetch = defineTool<{ url: string; maxChars?: number }>({
       const body = await res.text();
       // JSON and plain text are already readable; only markup needs stripping
       const text = /json|text\/plain|xml/i.test(type) ? body : toText(body);
-      return clip(text, maxChars) || "(the page had no readable text)";
+      return clip(text, max) || "(the page had no readable text)";
     } catch (e) {
       return `error fetching ${url}: ${(e as Error).message}`;
     }
   },
-});
+} satisfies ToolDef<{ url: string; max_chars?: number; maxChars?: number }>;
+
+/** Arguments are checked against the schema first: a missing `url` reads "`url` is required", not "undefined is not an http(s) URL". */
+export const webFetch: ToolDef = { ...fetchTool, run: guarded(fetchTool.inputSchema, (a) => fetchTool.run(a)) };
 
 /**
  * Search providers, in the order we try them. Each is a key in auth.json or the
@@ -110,15 +117,15 @@ export function searchProvider(): { name: string; key: string } | undefined {
   return undefined;
 }
 
-export const webSearch = defineTool<{ query: string; count?: number }>({
+const searchTool = {
   name: "web_search",
   description:
-    "Search the web and return titles, URLs and snippets. Use when you need to find a page rather than read one you already have the URL for; follow up with web_fetch to read a result.",
+    "Search the web and return titles, URLs and snippets. Use it to find a page. Do not use it to read a page when you have the URL. After a search, use web_fetch to read a result.",
   inputSchema: {
     type: "object",
     properties: {
       query: { type: "string", description: "What to search for." },
-      count: { type: "number", description: "How many results. Default 5, max 10." },
+      count: { type: "integer", description: "The number of results. The default is 5. The maximum is 10." },
     },
     required: ["query"],
   },
@@ -132,16 +139,8 @@ export const webSearch = defineTool<{ query: string; count?: number }>({
     const p = SEARCH[provider.name]!;
     const n = Math.min(Math.max(count, 1), 10);
     try {
-      const res =
-        provider.name === "tavily"
-          ? await fetch(p.url(query, n), {
-              method: "POST",
-              headers: p.headers(provider.key),
-              body: JSON.stringify({ query, max_results: n }),
-              signal: AbortSignal.timeout(20_000),
-            })
-          : await get(p.url(query, n), p.headers(provider.key));
-      if (!res.ok) return `error: ${provider.name} search returned ${res.status} ${res.statusText}`;
+      const body = provider.name === "tavily" ? { query, max_results: n } : undefined;
+      const res = await get(p.url(query, n), p.headers(provider.key), body);
       const hits = p.parse(await res.json()).slice(0, n);
       if (hits.length === 0) return `No results for "${query}".`;
       return hits.map((h) => `${h.title}\n${h.url}\n${h.text}`).join("\n\n");
@@ -149,4 +148,6 @@ export const webSearch = defineTool<{ query: string; count?: number }>({
       return `error searching for "${query}": ${(e as Error).message}`;
     }
   },
-});
+} satisfies ToolDef<{ query: string; count?: number }>;
+
+export const webSearch: ToolDef = { ...searchTool, run: guarded(searchTool.inputSchema, (a) => searchTool.run(a)) };

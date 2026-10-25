@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { parseCard } from "../card.ts";
 import { useKeyboard } from "@opentui/react";
 import { SyntaxStyle, TextAttributes, type ScrollBoxRenderable } from "@opentui/core";
 import { useWheelAccel } from "../wheel.ts";
@@ -6,9 +7,10 @@ import { theme } from "../theme.ts";
 import { SplitBorder } from "../ui/border.ts";
 import { DiffView } from "./Diff.tsx";
 import type { FileDiff } from "../diff.ts";
+import { foldRepeats } from "../retry.ts";
 
 export type Entry =
-  | { kind: "user"; text: string; images?: number }
+  | { kind: "user"; id?: string; text: string; images?: number }
   | { kind: "agent"; id?: string; text: string }
   | {
       kind: "thinking";
@@ -26,11 +28,20 @@ export type Entry =
       /** Streaming / final output (rendered for bash blocks). */
       output?: string;
       error?: string;
+      /** Markdown a codemode script showed the user (`tools.display`), always expanded. */
+      display?: string[];
       /** Unified diff hunk (edit/write tools). */
       diff?: FileDiff;
+      /** Times this row replaced a failed one (see retry.ts). */
+      retries?: number;
+      /** Consecutive identical codemode inner calls folded into this row. */
+      repeats?: number;
     }
   | { kind: "info"; text: string }
   | { kind: "error"; text: string };
+
+const retryTag = (e: { retries?: number }) =>
+  e.retries && e.retries > 0 ? <span fg={theme.muted}>{` · retry ${e.retries}`}</span> : "";
 
 /** Rows kept when a block is collapsed (Claude Code shows a short head). */
 const COLLAPSE_MAX = 10;
@@ -48,7 +59,7 @@ function wrap(line: string, width: number): string[] {
   const rows: string[] = [];
   let rest = line;
   while (rest.length > width) {
-    // break on the last space that fits; a word longer than the width is cut
+    // break on the last blank that fits; a word longer than the width is cut
     const cut = rest.lastIndexOf(" ", width);
     const at = cut > 0 ? cut : width;
     rows.push(rest.slice(0, at));
@@ -117,22 +128,12 @@ function collapseMd(
  * only entries that actually collapse react to a click.
  */
 /**
- * Rows a bash/codemode block draws: the command (or the codemode script) above
- * its output. The command line is text in the block like any other and wraps
- * like any other, so leaving it out of the count sized the box short and the
- * output spilled past it — a `bun.lock` grep is one very long line.
+ * Rows the closed block actually cuts. Script and output collapse separately,
+ * so together they can pass COLLAPSE_MAX while neither is cut: that drew
+ * "… +0 lines  Click to expand" under a codemode poll (2026-10-09).
  */
-function shellRows(entry: Entry & { kind: "tool" }, width: number): number {
-  return rowCount(`${entry.summary ?? ""}\n${entry.output}`, width - 2);
-}
-
-function collapsible(entry: Entry, width: number): boolean {
-  if (entry.kind === "agent") return rowCount(entry.text, width - 3) > COLLAPSE_MAX;
-  if (entry.kind === "thinking")
-    return !!entry.done && rowCount(entry.text, width - RAIL) > COLLAPSE_MAX;
-  if (entry.kind === "tool" && (entry.name === "bash" || entry.name === "codemode"))
-    return shellRows(entry, width) > COLLAPSE_MAX;
-  return false;
+function shellHidden(entry: Entry & { kind: "tool" }, width: number): number {
+  return collapse(entry.summary, false, width - 2).hidden + collapse(entry.output, false, width - 2).hidden;
 }
 
 /** Rows a block will occupy once wrapped — decides if it needs an expander. */
@@ -150,16 +151,23 @@ function More({
   hidden,
   open,
   onToggle,
-  hover,
 }: {
   hidden: number;
   open: boolean;
   onToggle?: () => void;
-  /** the pointer is over this entry — the row brightens to say it is clickable */
-  hover?: boolean;
 }) {
+  // the row brightens under the pointer to say it is the clickable part
+  const [hover, setHover] = useState(false);
   return (
-    <box height={1} width="100%" onMouseDown={onToggle}>
+    <box
+      height={1}
+      width="100%"
+      // this row is the only toggle: a click on links or text in the block
+      // must not collapse it (2026-10-12)
+      onMouseDown={onToggle && ((e: { stopPropagation(): void }) => (e.stopPropagation(), onToggle()))}
+      onMouseOver={() => setHover(true)}
+      onMouseOut={() => setHover(false)}
+    >
       <text fg={hover ? theme.fg : theme.muted} selectable={false}>
         {open ? "" : `… +${hidden} lines  `}
         {open ? "Click to collapse" : "Click to expand"}
@@ -207,7 +215,7 @@ function mdSyntaxStyle(): SyntaxStyle {
  * arriving, which is what stops a half-written table row from being parsed as
  * final; it is turned off once the message is done so the last token settles.
  */
-function Md({ text, fg, streaming }: { text: string; fg?: string; streaming?: boolean }) {
+export function Md({ text, fg, streaming }: { text: string; fg?: string; streaming?: boolean }) {
   return (
     <markdown
       content={text}
@@ -249,13 +257,16 @@ function isInlineTool(entry: Entry): boolean {
 /** Cap on rendered entries; older ones fall out of the scrollback. */
 const SCROLLBACK = 200;
 
+const kindTone = (k: string) => (k === "done" ? theme.success : k === "question" ? theme.warning : theme.error);
+
 function Row({
   entry,
   open,
   onOpen,
   width,
-  hover,
   streaming,
+  names,
+  to,
 }: {
   entry: Entry;
   /** this entry is expanded — render every line */
@@ -263,13 +274,25 @@ function Row({
   onOpen?: () => void;
   /** columns the row is drawn into — collapse counts wrapped rows at it */
   width: number;
-  /** the pointer is over this entry and it can collapse */
-  hover?: boolean;
   /** the last entry, so markdown may still be mid-token */
   streaming?: boolean;
+  /** names of the sessions a message card is between */
+  names?: (key: string) => string;
+  to?: string;
 }) {
   switch (entry.kind) {
-    case "user":
+    case "user": {
+      const card = parseCard(entry.text);
+      if (card)
+        return (
+          <box flexDirection="column" paddingLeft={1} marginTop={1}>
+            <text fg={theme.muted}>
+              <span fg={theme.accent}>◆</span> {names?.(card.from) ?? card.from} → {to ?? "main"}
+              {card.kind ? <span fg={kindTone(card.kind)}> · {card.kind}</span> : ""}
+            </text>
+            <box paddingLeft={2}><Md text={card.body} /></box>
+          </box>
+        );
       // opencode UserMessage: native left border ┃ on the panel background
       return (
         <box
@@ -296,17 +319,23 @@ function Row({
           </box>
         </box>
       );
+    }
     case "agent": {
       // opencode TextPart: markdown, paddingLeft 3
       const body = collapseMd(entry.text, open, width - 3);
       // the expander stays visible once open, so the block can be re-collapsed
       const long = rowCount(entry.text, width - 3) > COLLAPSE_MAX;
       return (
-        // hovering a collapsible block tints it, the way a desktop list row
-        // lights up under the pointer — subtle, one step off the background
-        <box flexDirection="column" paddingLeft={3} backgroundColor={hover ? theme.surface : undefined}>
+        // a long block keeps one row above and below at all times, so opening
+        // or closing it never shifts the text against its neighbours
+        <box
+          flexDirection="column"
+          paddingLeft={3}
+          paddingTop={long ? 1 : 0}
+          paddingBottom={long ? 1 : 0}
+        >
           <Md text={body.text} streaming={streaming} />
-          {long && <More hidden={body.hidden} open={open} onToggle={onOpen} hover={hover} />}
+          {long && <More hidden={body.hidden} open={open} onToggle={onOpen} />}
         </box>
       );
     }
@@ -316,13 +345,15 @@ function Row({
         const lines = entry.text.trim().split("\n");
         return (
           <box
+            key="think-tick"
             border={["left"]}
             borderColor={theme.border}
             paddingLeft={2}
             height={1}
             overflow="hidden"
           >
-            <text fg={theme.muted} attributes={TextAttributes.ITALIC}>
+            {/* one row, cut with an ellipsis */}
+            <text fg={theme.muted} attributes={TextAttributes.ITALIC} wrapMode="none" truncate>
               {lines[lines.length - 1] ?? ""}
             </text>
           </box>
@@ -333,18 +364,21 @@ function Row({
       // behind a left rail — never through <markdown>, whose own heading and
       // bold colours override `fg` and made a thinking block indistinguishable
       // from an agent message.
-      // the rail (1 col) plus its padding (2) — the same width `collapsible`
+      // the rail (1 col) plus its padding (2) — the same width `long`
       // measures with, or the two disagree by a row and the expander is drawn
       // into a box that was never sized for it
       const body = collapse(entry.text, open, width - RAIL);
       const long = rowCount(entry.text, width - RAIL) > COLLAPSE_MAX;
+      // distinct keys remount the box when `done` flips; a reused instance kept
+      // height 1 (opentui ignores a prop removed to null) and drew the header
+      // under the body ("Ihshould", 2026-10-08)
       return (
         <box
+          key="think-done"
           flexDirection="column"
           border={["left"]}
           borderColor={theme.border}
           paddingLeft={2}
-          backgroundColor={hover ? theme.surface : undefined}
         >
           <text fg={theme.muted} attributes={TextAttributes.ITALIC | TextAttributes.BOLD}>
             Thinking
@@ -352,7 +386,7 @@ function Row({
           <text fg={theme.muted} attributes={TextAttributes.ITALIC}>
             {body.text}
           </text>
-          {long && <More hidden={body.hidden} open={open} onToggle={onOpen} hover={hover} />}
+          {long && <More hidden={body.hidden} open={open} onToggle={onOpen} />}
         </box>
       );
     }
@@ -367,35 +401,44 @@ function Row({
       if (entry.name === "bash" || entry.name === "codemode") {
         // opencode Shell via BlockTool: panel bg block, $ command, output tail
         const out = collapse(entry.output, open, width - 2);
+        const script = collapse(entry.summary, open, width - 2);
         return (
           <box
             flexDirection="column"
             paddingLeft={2}
             paddingTop={1}
             paddingBottom={1}
-            backgroundColor={hover ? theme.surfaceRaised : theme.surface}
+            backgroundColor={theme.surface}
           >
             {entry.name === "codemode" ? (
               <box flexDirection="column">
                 <text fg={running ? theme.fg : theme.accent}>
                   {running ? "⚙ codemode" : "⌁ codemode"}
+                  {retryTag(entry)}
                 </text>
-                <text fg={theme.muted}>{collapse(entry.summary, open, width - 2).text}</text>
+                <text fg={theme.muted}>{script.text}</text>
               </box>
             ) : (
               <text fg={running ? theme.fg : theme.muted}>
                 {running ? "⚙ " : "$ "}
-                {collapse(entry.summary, open, width - 2).text}
+                {script.text}
+                {retryTag(entry)}
               </text>
             )}
             {entry.name === "codemode" && out.text !== "" && (
               <text fg={theme.border}>{"─".repeat(Math.max(0, width - 4))}</text>
             )}
             {out.text !== "" && <text fg={theme.muted}>{out.text}</text>}
-            {shellRows(entry, width) > COLLAPSE_MAX && (
-              <More hidden={out.hidden} open={open} onToggle={onOpen} hover={hover} />
+            {shellHidden(entry, width) > 0 && (
+              // a long codemode script collapses too, so its cut rows count as hidden
+              <More hidden={script.hidden + out.hidden} open={open} onToggle={onOpen} />
             )}
             {entry.error && <text fg={theme.error}>{entry.error}</text>}
+            {entry.display?.map((md, i) => (
+              <box key={i} flexDirection="column" paddingTop={1}>
+                <Md text={md} />
+              </box>
+            ))}
           </box>
         );
       }
@@ -446,6 +489,8 @@ function Row({
               <span attributes={failed ? undefined : TextAttributes.DIM}>
                 {entry.summary}
               </span>
+              {retryTag(entry)}
+              {entry.repeats && entry.repeats > 1 ? <span fg={theme.muted}>{` ×${entry.repeats}`}</span> : ""}
             </text>
           </box>
           {entry.error && (
@@ -489,8 +534,13 @@ export function Transcript({
   keys = "page",
   width = 80,
   ready = true,
+  names,
+  to,
 }: {
   entries: Entry[];
+  /** session key -> name, and the name of the session this transcript belongs to: for message cards */
+  names?: (key: string) => string;
+  to?: string;
   /** false until the persisted transcript has been read — see `Session.restored` */
   ready?: boolean;
   /** content columns available — long blocks wrap, so row counts need it */
@@ -507,13 +557,6 @@ export function Transcript({
   // expand-everything key, so neither do we
   const [open, setOpen] = useState<Set<string>>(new Set());
   // the entry the pointer is over, so its expander can light up
-  const [hover, setHover] = useState<string | null>(null);
-  // where the button went down, so an up in the same cell is a click and an
-  // up somewhere else is the end of a text selection. opentui marks every up
-  // isDragging once a mousedown over selectable text has started a selection,
-  // so that flag alone cannot tell the two apart.
-  const downAt = useRef<{ x: number; y: number } | null>(null);
-
   // ponytail: opentui's scrollbox has no onScroll, so "am I at the bottom?"
   // is sampled on a timer — cheap, and the only hook the wheel also trips
   useEffect(() => {
@@ -548,7 +591,7 @@ export function Transcript({
     setAway(!atBottom(sb));
   });
 
-  const visible = entries.slice(-SCROLLBACK);
+  const visible = foldRepeats(entries).slice(-SCROLLBACK);
 
   // An unrestored session has nothing to say yet: the welcome screen means
   // "this session is empty", and showing it before the transcript is read
@@ -598,16 +641,18 @@ export function Transcript({
       flexShrink={1}
       stickyScroll
       stickyStart="bottom"
+      // no scrollbar anywhere in the TUI (owner ruling); wheel and keys still scroll
       scrollbarOptions={{ visible: false }}
       scrollAcceleration={wheel}
+      // a left click would focus the scrollbox (opentui autoFocus), and a focused
+      // scrollbox scrolls on up/down too: an open ask's selection then dragged
+      // the transcript with it. Our own handler above owns the scroll keys.
+      focusable={false}
     >
       {/* opencode: one blank row above the first message */}
       <box height={1} />
       {visible.map((entry, i) => {
         const key = "id" in entry && entry.id ? entry.id : `e${i}`;
-        // the whole cell is the expander, so a long block does not have to be
-        // scrolled past to reach its "… +N lines" row
-        const canCollapse = collapsible(entry, width);
         const toggle = () =>
           setOpen((prev) => {
             const next = new Set(prev);
@@ -623,36 +668,24 @@ export function Transcript({
           marginTop={
             i === 0 ? 0 : isInlineTool(entry) && isInlineTool(visible[i - 1]!) ? 0 : 1
           }
-          // mouseup, not mousedown: a mousedown on the body starts a text
-          // selection, so toggling there would make a block impossible to
-          // select from. A click is an up within a cell of where it went down.
-          onMouseDown={canCollapse ? (e: { x: number; y: number }) => {
-            downAt.current = { x: e.x, y: e.y };
-          } : undefined}
-          onMouseUp={canCollapse ? (e: { x: number; y: number }) => {
-            const from = downAt.current;
-            downAt.current = null;
-            if (from && Math.abs(from.x - e.x) < 2 && from.y === e.y) toggle();
-          } : undefined}
-          onMouseOver={canCollapse ? () => setHover(key) : undefined}
-          onMouseOut={canCollapse ? () => setHover((h) => (h === key ? null : h)) : undefined}
         >
           <Row
             width={width}
             entry={entry}
-            hover={canCollapse && hover === key}
             // only the final entry can still be mid-token; settling the
             // earlier ones lets their trailing markdown parse as final
             streaming={i === visible.length - 1}
             open={open.has(key)}
             onOpen={toggle}
+            names={names}
+            to={to}
           />
         </box>
         );
       })}
     </scrollbox>
       {away && (
-        <box height={1} justifyContent="center" onMouseDown={toBottom}>
+        <box position="absolute" bottom={0} left={0} right={0} height={1} justifyContent="center" backgroundColor={theme.bg} onMouseDown={toBottom}>
           <text selectable={false} fg={theme.accent}>
             ↓ jump to bottom <span fg={theme.muted}>end</span>
           </text>

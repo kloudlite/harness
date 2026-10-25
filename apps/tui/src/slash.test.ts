@@ -1,22 +1,11 @@
 import { expect, test } from "bun:test";
-import { matchCommands, menuItems } from "./slash.ts";
-
-test("no menu for ordinary prompts", () => {
-  expect(matchCommands("what is this repo")).toEqual([]);
-  expect(matchCommands("")).toEqual([]);
-});
-
-test("bare slash lists everything, prefix narrows", () => {
-  expect(matchCommands("/").length).toBeGreaterThan(1);
-  expect(matchCommands("/cl").map((c) => c.name)).toEqual(["/clear"]);
-  expect(matchCommands("/nope")).toEqual([]);
-});
+import { commands, menuItems } from "./slash.ts";
 
 const ctx = {
   models: [] as { provider: string; id: string; hint: string }[],
   themes: [],
   logins: [
-    { provider: "anthropic", type: "oauth", label: "Anthropic (Claude Pro/Max)" },
+    { provider: "openai-codex", type: "oauth", label: "ChatGPT Plus/Pro" },
     { provider: "deepseek", type: "api_key", label: "DeepSeek API key" },
   ],
   settings: [],
@@ -66,7 +55,7 @@ test("/settings lists its keys, with the current value as the hint", () => {
   ]);
 });
 
-// "thinking" is a prefix of "thinkingLevel"; the trailing space separates them
+// "thinking" is a prefix of "thinkingLevel"; the trailing blank separates them
 test("naming a setting lists only its values", () => {
   expect(menuItems("/settings thinkingLevel ", settingsCtx).map((i) => i.insert)).toEqual([
     "/settings thinkingLevel off",
@@ -76,4 +65,8 @@ test("naming a setting lists only its values", () => {
     "/settings thinking show",
     "/settings thinking hide",
   ]);
+});
+
+test("/compact is offered", () => {
+  expect(commands.some((c) => c.name === "/compact")).toBe(true);
 });

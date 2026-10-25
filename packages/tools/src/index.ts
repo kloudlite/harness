@@ -8,11 +8,7 @@ export interface ToolDef<I = any> {
   description: string;
   /** JSON Schema for the input. Be prescriptive about *when* to call it. */
   inputSchema: Record<string, unknown>;
-  run(input: I): Promise<string>;
-}
-
-export function defineTool<I>(def: ToolDef<I>): ToolDef<I> {
-  return def;
+  run(input: I, signal?: AbortSignal): Promise<string>;
 }
 
 /** Tools registered for a session. Empty by default. */
@@ -43,4 +39,9 @@ export class Registry {
     return def;
   }
 }
-export { webFetch, webSearch, searchProvider } from "./web.ts";
+export { webFetch, webSearch } from "./web.ts";
+export { api, apiJson, platformTools } from "./platform.ts";
+export { POD_TOOLS, anyPodTools, podTools, podFence, type PodFence, podExec, podGet, podText, podPost, podHold, sessionHold, touched, inflight, type ExecResult } from "./pod.ts";
+export { scratchTools, scratchRoot } from "./scratch.ts";
+export { ensureRunning } from "./ensure.ts";
+export { checkArgs, guarded } from "./args.ts";

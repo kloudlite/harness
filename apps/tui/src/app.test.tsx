@@ -1,7 +1,19 @@
 import { expect, test } from "bun:test";
+import { isCtrlJ } from "./components/Processes.tsx";
 import { testRender } from "@opentui/react/test-utils";
-import { Registry } from "@kloudlite-tui/tools";
-import { writeSettings } from "@kloudlite-tui/agent";
+import type { ToolDef } from "@kloudlite-tui/tools";
+import { setCopier } from "./clipboard.ts";
+import { LocalBackend } from "@kloudlite-tui/backend/local";
+import { backend, boot, hello } from "./hello.ts";
+
+// App reads its settings from hello() once at mount, so tests seed them by re-booting.
+// A fresh backend each time: a turn left pending by the previous test (no auth, it never ends)
+// would otherwise open the next test's session as busy, which the app now honours.
+function writeSettings(patch: Record<string, unknown>) {
+  const fresh = new LocalBackend();
+  fresh.teamView = backend().teamView;
+  boot(fresh, { ...hello(), settings: { ...hello().settings, ...patch } });
+}
 import { App } from "./app.tsx";
 
 const COLS = 200;
@@ -18,7 +30,7 @@ async function mount(opts?: { vim?: "on" | "off" }) {
   // width too: a resize test would otherwise leak its narrow sidebar into
   // every later mount through the shared temp config
   writeSettings({ vim: opts?.vim ?? "on", sidebarWidth: 42 });
-  const setup = await testRender(<App registry={new Registry()} />, {
+  const setup = await testRender(<App />, {
     width: COLS,
     height: ROWS,
     // kitty protocol on: shift+enter etc. arrive as CSI-u like modern terminals
@@ -207,13 +219,13 @@ test("selecting /login from the menu allows typing the sub-option filter", async
 });
 
 test("sidebar docks when wide, hides when narrow", async () => {
-  const wide = await testRender(<App registry={new Registry()} />, { width: 160, height: 32 });
+  const wide = await testRender(<App />, { width: 160, height: 32 });
   await tick();
   await wide.renderOnce();
   expect(wide.captureCharFrame()).toContain("api-gateway"); // sidebar docked
   wide.renderer.destroy();
 
-  const narrow = await testRender(<App registry={new Registry()} />, { width: 100, height: 32 });
+  const narrow = await testRender(<App />, { width: 100, height: 32 });
   await tick();
   await narrow.renderOnce();
   expect(narrow.captureCharFrame()).not.toContain("api-gateway");
@@ -260,7 +272,7 @@ test("workspaces carry their own named sessions", async () => {
   t.done();
 });
 
-test("s searches file contents from the files view", async () => {
+test("s in a workspace files view says search is not available and opens no prompt", async () => {
   const t = await mount();
   t.mockInput.pressKey("1"); // enter a workspace
   await t.frame();
@@ -268,16 +280,9 @@ test("s searches file contents from the files view", async () => {
   expect(await t.frame()).toContain("CHANGES");
 
   t.mockInput.pressKey("s");
-  await t.frame();
-  await t.mockInput.typeText("sessionKey");
-  await t.frame();
-  t.mockInput.pressKey("RETURN");
   const f = await t.frame();
-  expect(f).toContain("search sessionKey");
-  expect(f).toContain("src/sessions.ts:"); // a hit, with its line number
-
-  t.mockInput.pressKey("ESCAPE"); // clears the search, stays in the view
-  expect(await t.frame()).not.toContain("search sessionKey");
+  expect(f).toContain("search is not available for workspaces");
+  expect(f).not.toContain("search ›");
   t.done();
 });
 
@@ -290,36 +295,67 @@ test("mouse: clicking a sidebar workspace and a hint", async () => {
   await t.mockMouse.click(col + 1, row);
   expect(await t.frame()).toContain("billing-svc "); // hint bar path follows
 
-  // the hint bar's "f view" switches the column view on click
+  // the hint bar's "f files" switches the column view on click
   const hints = (await t.frame()).split("\n");
-  const hrow = hints.findIndex((l) => l.includes("f view"));
-  const hcol = hints[hrow]!.indexOf("f view");
+  const hrow = hints.findIndex((l) => l.includes("f files"));
+  const hcol = hints[hrow]!.indexOf("f files");
   await t.mockMouse.click(hcol + 1, hrow);
   expect(await t.frame()).toContain("CHANGES");
   t.done();
 });
 
-test("processes view lists what the workspace runs, with its logs", async () => {
+async function processesView() {
   const t = await mount();
   t.mockInput.pressKey("1"); // api-gateway
   await t.frame();
-  t.mockInput.pressKey("f"); // files
-  await t.frame();
-  t.mockInput.pressKey("f"); // processes
+  t.mockInput.pressKey("j", { ctrl: true }); // jobs
+  return t;
+}
+
+test("processes view lists what the workspace runs, with its logs", async () => {
+  const t = await processesView();
   const f = await t.frame();
-  expect(f).toContain("2/3 running");
-  expect(f).toContain("server:8080");
-  expect(f).toContain("crashed (1)");
+  expect(f).toContain("2 running · 1 crashed");
+  expect(f).toContain("RUNNING");
+  expect(f).toContain("STOPPED");
+  expect(f).toContain("gateway serve --port 8080"); // the reader header carries the full command
   expect(f).toContain("listening on :8080"); // selected process's log
+  expect(f).toContain("following");
 
   t.mockInput.pressKey("j"); // metrics
   await t.frame();
   t.mockInput.pressKey("j"); // tests (crashed)
-  expect(await t.frame()).toContain("--- FAIL: TestRateLimit");
+  const g = await t.frame();
+  expect(g).toContain("--- FAIL: TestRateLimit");
+  expect(g).toContain("limiter_test.go:42: want 100 got 128"); // stderr line
   t.done();
 });
 
+test("processes view: section headers with counts, crashed row, filter, follow", async () => {
+  const t = await processesView();
+  const f = await t.frame();
+  expect(f).toMatch(/RUNNING\s+2/);
+  expect(f).toMatch(/STOPPED\s+1/);
+  expect(f).toMatch(/✕ go test\s+exit 1/);
+  expect(f).toMatch(/● gateway serve\s+\S+/);
 
+  t.mockInput.pressKey("F", { shift: true }); // toggles follow off
+  expect(await t.frame()).not.toContain("following");
+  t.mockInput.pressKey("F", { shift: true });
+  expect(await t.frame()).toContain("following");
+
+  t.mockInput.pressKey("/");
+  await t.frame();
+  await t.mockInput.typeText("metrics");
+  expect(await t.frame()).toContain("/metrics");
+  t.mockInput.pressEnter();
+  const g = await t.frame();
+  expect(g).toContain("/metrics");
+  expect(g).toContain("1/3");
+  expect(g).not.toContain("STOPPED");
+  expect(g).not.toContain("go test");
+  t.done();
+});
 
 test("sidebar: session header, workspaces with their ephemerals, environment with its services", async () => {
   const t = await mount();
@@ -334,9 +370,9 @@ test("sidebar: session header, workspaces with their ephemerals, environment wit
   expect(f).not.toContain("●"); // no dot indicators
   expect(f).toContain("Environment"); // the env heads its own block
   expect(f).toContain("production");
-  expect(f).toContain("current snapshot: pre-rate-limits"); // labelled, on its own line
+  expect(f).not.toContain("current snapshot"); // the platform names no restore point; the row only shows when one is known
   expect(f).toContain("→ api-gateway"); // interception, in the right-hand column
-  expect(f).toContain("http:8080"); // ports stay in their own column
+  expect(f).toContain("tcp:8080"); // ports stay in their own column; the platform has no protocol, so tcp
   t.done();
 });
 
@@ -410,28 +446,13 @@ test("the sidebar resizes with [ and ] and clamps at its limits", async () => {
   t.done();
 });
 
-// The env tools are defined once but close over a ref, so the danger is a tool
-// that acts on the state of the render that defined it. Create through the tool
-// and look for the workspace in the frame.
-test("the env tools act on live state and reach the UI", async () => {
-  const registry = new Registry();
-  const t = await testRender(<App registry={registry} />, { width: 160, height: 40 });
-  await new Promise((r) => setTimeout(r, 400));
-
-  expect(registry.names()).toContain("env_status");
-  expect(await registry.get("env_status").run({})).toContain("environment:");
-
-  expect(await registry.get("workspace_create").run({ name: "probe-ws" })).toContain("created");
+// The platform tools live in the backend now; the TUI owns only what needs the user.
+test("the TUI registers no tools: question is the daemon's", async () => {
+  const tools: ToolDef[] = [];
+  const t = await testRender(<App tools={tools} />, { width: 160, height: 40 });
   await new Promise((r) => setTimeout(r, 200));
-  await t.renderOnce();
-  expect(await registry.get("env_status").run({})).toContain("probe-ws");
-  expect(t.captureCharFrame()).toContain("probe-ws");
-
-  // a name that does not exist has to come back with the names that do
-  const bad = await registry.get("env_connect").run({ name: "nope" });
-  expect(bad).toContain("error");
-  expect(bad).toContain("production");
-}, 20000);
+  expect(tools.map((t) => t.name)).toEqual([]);
+});
 
 // Permission mode is per-session chrome: shift+tab cycles it and only a
 // non-default mode shows, so the ordinary case stays quiet.
@@ -442,10 +463,12 @@ test("shift+tab cycles the permission mode and shows it in the hint bar", async 
   await tick();
   await t.renderOnce();
   expect(t.captureCharFrame()).toContain("acceptEdits");
-  await t.mockInput.pressKey("TAB", { shift: true });
-  await t.mockInput.pressKey("TAB", { shift: true });
-  await tick();
-  await t.renderOnce();
+  // the mode is the daemon's: each press waits for the push back before the next cycles from it
+  for (let i = 0; i < 2; i++) {
+    await t.mockInput.pressKey("TAB", { shift: true });
+    await tick();
+    await t.renderOnce();
+  }
   expect(t.captureCharFrame()).toContain("bypass");
   t.done();
 });
@@ -496,4 +519,406 @@ test("ctrl+s submits the prompt without clearing it twice", async () => {
   // not busy, so ctrl+s is inert and the text stays put to be sent with enter
   expect(t.captureCharFrame()).toContain("steered");
   t.done();
+});
+
+// The daemon owns the rebuild now (idle agents at once, busy ones at agent_end): the TUI only
+// writes the setting.
+test("toggling codemode writes the setting and leaves the rebuild to the daemon", async () => {
+  const real = backend();
+  const writes: Record<string, unknown>[] = [];
+  const opens: string[] = [];
+  const wrap = <T extends object>(t: T, over: Partial<T>) =>
+    new Proxy(t, {
+      get: (o: any, p) => (p in over ? (over as any)[p] : typeof o[p] === "function" ? o[p].bind(o) : o[p]),
+    }) as T;
+  boot(
+    wrap(real, {
+      settings: { write: async (p: Record<string, unknown>) => void writes.push(p) },
+      session: async (key, opts) => (opens.push(key), real.session(key, opts)),
+    }),
+    { ...hello(), settings: { ...hello().settings, vim: "on", codemode: "on" } },
+  );
+  const setup = await testRender(<App />, { width: COLS, height: ROWS, kittyKeyboard: true });
+  await tick();
+  await setup.renderOnce();
+  setup.mockInput.pressKey("i");
+  await tick();
+  await setup.renderOnce();
+  await setup.mockInput.typeText("/settings codemode off");
+  await tick();
+  await setup.renderOnce();
+  setup.mockInput.pressKey("RETURN");
+  for (let i = 0; i < 50 && !writes.some((w) => w.codemode === "off"); i++) await tick();
+  const before = opens.length;
+  await tick();
+  expect(writes).toContainEqual({ codemode: "off" });
+  expect(opens.length).toBe(before); // no TUI-side rebuild
+  setup.renderer.destroy();
+  boot(real, hello());
+});
+
+// The daemon disposes an idle or rebuilt agent and tells the client; the dead handle must not be
+// reused, so the next prompt opens a fresh one.
+test("session_closed makes the next prompt reopen the session", async () => {
+  const real = backend();
+  let opens = 0;
+  let fire: (e: any) => void = () => {};
+  const wrap = <T extends object>(t: T, over: Partial<T>) =>
+    new Proxy(t, {
+      get: (o: any, p) => (p in over ? (over as any)[p] : typeof o[p] === "function" ? o[p].bind(o) : o[p]),
+    }) as T;
+  boot(
+    wrap(real, {
+      session: async (key, opts) => {
+        opens++;
+        const h = await real.session(key, opts);
+        return wrap(h, { subscribe: (cb) => ((fire = cb as any), h.subscribe(cb)) });
+      },
+    }),
+    { ...hello(), settings: { ...hello().settings, vim: "on" } },
+  );
+  const setup = await testRender(<App />, { width: COLS, height: ROWS, kittyKeyboard: true });
+  for (let i = 0; i < 10 && opens < 1; i++) await tick();
+  await tick();
+  expect(opens).toBe(1);
+  fire({ type: "session_closed", reopen: false });
+  await tick();
+  setup.mockInput.pressKey("i");
+  await tick();
+  await setup.mockInput.typeText("hello");
+  await tick();
+  setup.mockInput.pressKey("RETURN");
+  for (let i = 0; i < 50 && opens < 2; i++) await tick();
+  expect(opens).toBe(2);
+  setup.renderer.destroy();
+  boot(real, hello());
+});
+
+// A reopened session carries tool results as separate `toolResult` messages; the
+// transcript has to fold each into its tool entry or every restored tool looks empty.
+async function restored(messages: unknown[]) {
+  const real = backend();
+  const wrap = <T extends object>(t: T, over: Partial<T>) =>
+    new Proxy(t, {
+      get: (o: any, p) => (p in over ? (over as any)[p] : typeof o[p] === "function" ? o[p].bind(o) : o[p]),
+    }) as T;
+  boot(
+    wrap(real, {
+      session: async (key, opts) => {
+        const h = await real.session(key, opts);
+        return wrap(h, { messages: messages as any });
+      },
+    }),
+    { ...hello(), settings: { ...hello().settings, vim: "on", sidebarWidth: 42 } },
+  );
+  const setup = await testRender(<App />, { width: COLS, height: ROWS, kittyKeyboard: true });
+  let f = "";
+  for (let i = 0; i < 10; i++) {
+    await tick();
+    await setup.renderOnce();
+    f = setup.captureCharFrame();
+  }
+  setup.renderer.destroy();
+  boot(real, hello());
+  return f;
+}
+
+const codemodeSession = (code: string, result: string, isError: boolean) => [
+  { role: "user", content: [{ type: "text", text: "run it" }] },
+  {
+    role: "assistant",
+    content: [{ type: "toolCall", id: "t1", name: "codemode", arguments: { code } }],
+  },
+  {
+    role: "toolResult",
+    toolCallId: "t1",
+    toolName: "codemode",
+    content: [{ type: "text", text: result }],
+    isError,
+  },
+];
+
+test("a restored session shows each tool's result", async () => {
+  const f = await restored(codemodeSession("return 1;", "RESULT-MARKER", false));
+  expect(f).toContain("RESULT-MARKER");
+});
+
+test("a restored session shows what a codemode script displayed", async () => {
+  const msgs = codemodeSession("return 1;", "shown", false);
+  (msgs[2] as any).details = { display: ["| hcol | hval |\n|---|---|\n| DISP-MARKER | 2 |"] };
+  const f = await restored(msgs);
+  expect(f).toContain("DISP-MARKER");
+});
+
+test("a restored session shows a failed tool's error", async () => {
+  const f = await restored(codemodeSession("return 1;", "ERROR-MARKER boom", true));
+  expect(f).toContain("ERROR-MARKER boom");
+});
+
+test("a long codemode script's expander counts the script's hidden rows, not just the output's", async () => {
+  // COLLAPSE_MAX is 10 in Transcript.tsx; 15 short rows hide 5
+  const code = Array.from({ length: 15 }, (_, i) => `const v${i} = ${i};`).join("\n");
+  const f = await restored(codemodeSession(code, "ok", false));
+  expect(f).not.toContain("+0 lines");
+  expect(f).toContain("+5 lines");
+});
+
+// The sidebar is the platform's data, so it has to say so when the platform is
+// down, and an empty team view must not crash the environment guards.
+async function sidebarWith(view: Record<string, unknown>) {
+  const real = backend();
+  // the team view arrives as a push now: the first thing the bench stream says
+  const watch = async (cb: any) => (cb({ type: "team", view }), () => {});
+  boot(new Proxy(real, { get: (o: any, p) => (p === "teamView" ? async () => view : p === "watch" ? watch : typeof o[p] === "function" ? o[p].bind(o) : o[p]) }) as any, hello());
+  const setup = await testRender(<App />, { width: COLS, height: ROWS, kittyKeyboard: true });
+  let f = "";
+  for (let i = 0; i < 10; i++) {
+    await tick();
+    await setup.renderOnce();
+    f = setup.captureCharFrame();
+  }
+  setup.renderer.destroy();
+  boot(real, hello());
+  return f;
+}
+
+test("sidebar: an unreachable platform shows the reason, not demo rows", async () => {
+  const f = await sidebarWith({ available: false, error: "unavailable: no KL_API_URL", user: "", workspaces: [], environments: [] });
+  expect(f).toContain("platform not reachable");
+  expect(f).not.toContain("api-gateway");
+});
+
+test("sidebar: a team view without environments renders no Environment block", async () => {
+  const f = await sidebarWith({ available: true, user: "me", workspaces: [{ id: "w1", name: "solo", owner: "me", state: "ready" }], environments: [] });
+  expect(f).toContain("solo");
+  expect(f).not.toContain("Environment");
+});
+
+test("dragging over log lines selects the log text (not the gutter) and copies it", async () => {
+  const copies: string[] = [];
+  setCopier((text) => (copies.push(text), true));
+  const t = await processesView();
+  let lines: string[] = [];
+  let row = -1;
+  for (let i = 0; i < 10 && row < 0; i++) {
+    // the log loads a beat after the view opens
+    lines = (await t.frame()).split("\n");
+    row = lines.findIndex((l) => l.includes("listening on :8080"));
+  }
+  const row2 = row + 1;
+  const col = lines[row]!.indexOf("listening");
+  await t.mockMouse.drag(col, row, col + 20, row2);
+  const f = await t.frame();
+  const sel = t.renderer.getSelection()?.getSelectedText() ?? "";
+  expect(sel).toBe("listening on :8080\nroute  GET  /healthz"); // no line numbers
+  expect(copies).toEqual([sel]);
+  const cell = t.captureSpans().lines[row]!.spans.find((sp) => sp.text.includes("listening"))!;
+  // no selectionBg passed: the native default must still paint the highlight
+  const rest = t.captureSpans().lines[row2 + 3]!.spans[0]!;
+  expect(Array.from(cell.bg.buffer)).not.toEqual(Array.from(rest.bg.buffer));
+  expect(f).toContain("copied 2 lines");
+  setCopier(null);
+  t.done();
+});
+
+/** A session whose turn never ends, so /btw is exercised mid-turn and abort is observable. */
+function btwSession(calls: { btw: string[]; abort: number; prompt: string[] }, reply: () => Promise<string>) {
+  const noop = async () => {};
+  const h: any = new Proxy(
+    {
+      messages: [],
+      busy: false,
+      state: { type: "session_state", model: hello().defaultModel, thinkingLevel: "medium", autoCompact: true, codemode: true, queued: { steering: [], followUp: [] } },
+      subscribe: () => () => {},
+      btw: async (q: string) => (calls.btw.push(q), reply()),
+      abort: async () => void calls.abort++,
+      prompt: async (t: string) => void calls.prompt.push(t),
+    },
+    { get: (o: any, k) => (k in o ? o[k] : k === "then" ? undefined : noop) },
+  );
+  return h;
+}
+
+/** The session opens asynchronously; wait for the app to reach it. */
+async function until(t: { frame(): Promise<string> }, ok: () => boolean) {
+  for (let i = 0; i < 30 && !ok(); i++) await t.frame();
+}
+
+async function withBtw(reply: () => Promise<string>, run: (t: Awaited<ReturnType<typeof mount>>, calls: { btw: string[]; abort: number; prompt: string[] }) => Promise<void>) {
+  const calls = { btw: [] as string[], abort: 0, prompt: [] as string[] };
+  const orig = LocalBackend.prototype.session;
+  LocalBackend.prototype.session = (async () => btwSession(calls, reply)) as any;
+  try {
+    const t = await mount({ vim: "off" });
+    await run(t, calls);
+    t.done();
+  } finally {
+    LocalBackend.prototype.session = orig;
+  }
+}
+
+test("/btw shows the answer in a panel, esc closes it without aborting, nothing enters the transcript", async () => {
+  await withBtw(async () => "Because **cache** keys collide.", async (t, calls) => {
+    await t.mockInput.typeText("/btw why is it slow");
+    await t.frame();
+    t.mockInput.pressEnter();
+    await until(t, () => calls.btw.length > 0);
+    let f = await t.frame();
+    expect(calls.btw).toEqual(["why is it slow"]);
+    expect(calls.prompt).toEqual([]);
+    expect(f).toContain("btw: why is it slow");
+    expect(f).toContain("Because");
+    expect(f).toContain("esc close");
+    t.mockInput.pressEscape();
+    f = await t.frame();
+    expect(f).not.toContain("btw: why is it slow");
+    expect(f).not.toContain("Because");
+    expect(calls.abort).toBe(0);
+  });
+});
+
+test("/btw alone shows the usage hint and asks nothing", async () => {
+  await withBtw(async () => "x", async (t, calls) => {
+    await t.mockInput.typeText("/btw");
+    await t.frame();
+    t.mockInput.pressEnter();
+    const f = await t.frame();
+    expect(f).toContain("usage: /btw <question>");
+    expect(calls.btw).toEqual([]);
+  });
+});
+
+test("a /btw answer that arrives after esc is dropped; an error shows in the panel", async () => {
+  let release!: (s: string) => void;
+  await withBtw(() => new Promise<string>((r) => (release = r)), async (t) => {
+    await t.mockInput.typeText("/btw late one");
+    await t.frame();
+    t.mockInput.pressEnter();
+    await t.frame();
+    let f = await t.frame();
+    expect(f).toContain("thinking");
+    t.mockInput.pressEscape();
+    await until(t, () => release !== undefined);
+    await t.frame();
+    release("too late");
+    f = await t.frame();
+    expect(f).not.toContain("too late");
+  });
+  await withBtw(async () => { throw new Error("no model"); }, async (t) => {
+    await t.mockInput.typeText("/btw q");
+    await t.frame();
+    t.mockInput.pressEnter();
+    await until(t, () => false);
+    expect(await t.frame()).toContain("no model");
+  });
+});
+
+test("with vim off, ^f toggles files and chat; ^j toggles the jobs screen", async () => {
+  const t = await mount({ vim: "off" });
+  t.mockInput.pressKey("k", { ctrl: true });
+  await t.frame();
+  t.mockInput.pressKey("f", { ctrl: true });
+  expect(await t.frame()).toContain("CHANGES");
+  t.mockInput.pressKey("f", { ctrl: true }); // files -> chat, never processes
+  const chat = await t.frame();
+  expect(chat).not.toContain("CHANGES");
+  expect(chat).not.toContain("no processes");
+  t.mockInput.pressKey("j", { ctrl: true });
+  expect(await t.frame()).toContain("processes ›");
+  t.mockInput.pressKey("j", { ctrl: true }); // ^j closes it
+  expect(await t.frame()).not.toContain("processes ›");
+  t.done();
+});
+
+test("^j opens the jobs screen from main, grouped by workspace, and closes it", async () => {
+  const t = await mount();
+  t.mockInput.pressKey("j", { ctrl: true });
+  const f = await t.frame();
+  expect(f).toMatch(/api-gateway\s+2 running/);
+  expect(f).toContain("probe"); // another workspace's job
+  expect(f).not.toContain("RUNNING");
+  t.mockInput.pressKey("j", { ctrl: true });
+  expect(await t.frame()).not.toMatch(/api-gateway\s+2 running/);
+  t.done();
+});
+
+test("^j counts when it arrives as a bare LF (no kitty protocol: tmux, Terminal.app), alt+LF does not", () => {
+  expect(isCtrlJ({ name: "linefeed", ctrl: false, meta: false })).toBe(true);
+  expect(isCtrlJ({ name: "j", ctrl: true, meta: false })).toBe(true);
+  expect(isCtrlJ({ name: "linefeed", ctrl: false, meta: true })).toBe(false);
+  expect(isCtrlJ({ name: "j", ctrl: false, meta: false })).toBe(false);
+});
+
+test("jobs screen in a workspace: sections, command once, running when the start is unknown", async () => {
+  const t = await processesView();
+  const f = await t.frame();
+  expect(f).toMatch(/RUNNING\s+2/);
+  expect(f.split("gateway serve --port 8080").length - 1).toBe(1); // reader header only, not also the row
+  t.done();
+});
+
+test("jobs row says running when the pod gave no start time", async () => {
+  const { Processes } = await import("./components/Processes.tsx");
+  const p = { id: "1", name: "srv", command: "srv --x", status: "running" as const, logs: [] };
+  const setup = await testRender(<Processes workspace="w" processes={[p]} onClose={() => {}} />, { width: 100, height: 12 });
+  await tick();
+  await setup.renderOnce();
+  expect(setup.captureCharFrame()).toMatch(/● srv\s+running/);
+  setup.renderer.destroy();
+});
+
+
+/** A busy session: agent_start is announced on subscribe, so the next enter is mid-turn. */
+function busySession(calls: { route: string[]; steer: string[]; followUp: string[] }, route: () => Promise<any>) {
+  const noop = async () => {};
+  return new Proxy(
+    {
+      messages: [],
+      busy: true,
+      state: { type: "session_state", model: hello().defaultModel, thinkingLevel: "medium", autoCompact: true, codemode: true, queued: { steering: [], followUp: [] } },
+      subscribe: (cb: any) => (cb({ type: "agent_start" }), () => {}),
+      route: async (t: string) => (calls.route.push(t), route()),
+      steer: async (t: string) => void calls.steer.push(t),
+      followUp: async (t: string) => void calls.followUp.push(t),
+    } as any,
+    { get: (o: any, k) => (k in o ? o[k] : k === "then" ? undefined : noop) },
+  );
+}
+
+async function withBusy(route: () => Promise<any>, run: (t: Awaited<ReturnType<typeof mount>>, calls: { route: string[]; steer: string[]; followUp: string[] }) => Promise<void>) {
+  const calls = { route: [] as string[], steer: [] as string[], followUp: [] as string[] };
+  const orig = LocalBackend.prototype.session;
+  LocalBackend.prototype.session = (async () => busySession(calls, route)) as any;
+  try {
+    const t = await mount({ vim: "off" });
+    await run(t, calls);
+    t.done();
+  } finally {
+    LocalBackend.prototype.session = orig;
+  }
+}
+
+test("enter while busy routes (a deciding row shows until it answers); ctrl+s steers with no fork", async () => {
+  let release!: (v: any) => void;
+  await withBusy(() => new Promise((r) => (release = r)), async (t, calls) => {
+    await t.frame();
+    await t.mockInput.typeText("and add tests");
+    await t.frame();
+    t.mockInput.pressEnter();
+    await until(t, () => calls.route.length > 0);
+    let f = await t.frame();
+    expect(calls.route).toEqual(["and add tests"]);
+    expect(calls.followUp).toEqual([]);
+    expect(f).toContain("deciding and add tests");
+    release({ kind: "followUp", reason: "separate" });
+    await t.frame();
+    f = await t.frame();
+    expect(f).not.toContain("deciding");
+    await t.mockInput.typeText("stop now");
+    await t.frame();
+    t.mockInput.pressKey("s", { ctrl: true });
+    await until(t, () => calls.steer.length > 0);
+    expect(calls.steer).toEqual(["stop now"]);
+    expect(calls.route).toEqual(["and add tests"]);
+  });
 });

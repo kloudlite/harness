@@ -1,19 +1,17 @@
 import { TextAttributes } from "@opentui/core";
 import { theme } from "../theme.ts";
-import { CURRENT_USER, type Service, type Workspace } from "../workspaces.ts";
+import { clip } from "../ui/text.ts";
+import { type Service, type Workspace } from "../workspaces.ts";
 import { useWheelAccel } from "../wheel.ts";
 
 // resolved per render: the theme singleton mutates on /theme
 
-/** Clip to a width with an ellipsis — rows are one line, always. */
-const clip = (text: string, max: number) =>
-  max <= 1 ? "" : text.length > max ? `${text.slice(0, max - 1)}…` : text;
 
 /**
  * Section label: bold title-case, then a hairline across the rest of the row —
  * the same separator the session title bar uses, instead of SHOUTING CAPS.
  */
-function Heading({ children, count, width, flush }: { children: string; count?: number; width: number; flush?: boolean }) {
+export function Heading({ children, count, width, flush }: { children: string; count?: number; width: number; flush?: boolean }) {
   const label = count === undefined ? children : `${children}  ${count}`;
   return (
     <box paddingLeft={1} paddingRight={1} height={1} marginTop={flush ? 0 : 1}>
@@ -60,8 +58,8 @@ function Row({
 }
 
 /**
- * Session header, WORKSPACES (each with its ephemeral tasks under a guide
- * rail), and a pinned Environment block at the bottom — the connected
+ * Session header, WORKSPACES (each with its ephemeral workspaces under a guide
+ * rail; the task plan lives in the Work panel of the session, not here), and a pinned Environment block at the bottom — the connected
  * environment with the services that belong to it directly under it.
  */
 export function Sidebar({
@@ -69,20 +67,30 @@ export function Sidebar({
   services,
   envName,
   envOwner,
+  user,
+  unavailable,
   snapshot,
   running,
+  waiting,
   focus,
   width,
   onFocus,
 }: {
   workspaces: Workspace[];
   services: Service[];
-  envName: string;
+  /** Undefined = the session has no environment: the block renders nothing. */
+  envName?: string;
   envOwner?: string;
+  /** The signed-in user: only their workspaces are focusable. */
+  user: string;
+  /** Why the platform could not be read; replaces the workspace list. */
+  unavailable?: string;
   /** The restore point the environment is on, if the agent switched to one. */
   snapshot?: string;
   /** Per-workspace: its session has a turn running */
   running: boolean[];
+  /** Per-workspace: a permission card or question is waiting for the user */
+  waiting: boolean[];
   /** 0 = the session, 1..N = workspace */
   focus: number;
   width: number;
@@ -91,7 +99,7 @@ export function Sidebar({
 }) {
   const inner = width - 4; // padding + row padding
   const wheel = useWheelAccel();
-  // the tree counts workspaces, not their ephemeral tasks
+  // the tree counts workspaces, not their ephemeral children
   const count = workspaces.filter((w) => !w.parent).length;
 
   return (
@@ -115,21 +123,22 @@ export function Sidebar({
       <scrollbox flexGrow={1} flexBasis={0} flexShrink={1} paddingLeft={1} paddingRight={1} scrollbarOptions={{ visible: false }} scrollAcceleration={wheel}>
         <box flexDirection="column" flexShrink={0}>
           <Heading count={count} width={width - 2} flush>Workspaces</Heading>
-          {workspaces.length === 0 && (
+          {unavailable && <Row left={<span fg={theme.muted}>{clip(`platform not reachable: ${unavailable}`, inner - 2)}</span>} />}
+          {!unavailable && workspaces.length === 0 && (
             <Row left={<span fg={theme.muted}>none yet — a to create one</span>} />
           )}
           {workspaces.map((w, i) => {
-            const mine = w.owner === CURRENT_USER;
+            const mine = w.owner === user;
             const on = mine && focus === i + 1;
             const click = onFocus && mine ? () => onFocus(i + 1) : undefined;
 
             if (w.parent) {
-              // last task of its workspace closes the branch
+              // last child of its workspace closes the branch
               const last = !workspaces.some((o, j) => j > i && o.parent === w.parent);
               // an ephemeral workspace: branch glyph, short name, and the
               // same one state word its parent gets — these are running agents,
               // so they must read as plainly as the workspace above them
-              const tag = running[i] ? "working" : "";
+              const tag = waiting[i] ? "needs you" : running[i] ? "working" : "";
               return (
                 <Row
                   key={w.id}
@@ -145,7 +154,7 @@ export function Sidebar({
                   }
                   right={
                     <span
-                      fg={running[i] ? theme.accent : theme.muted}
+                      fg={waiting[i] ? theme.warning : running[i] ? theme.accent : theme.muted}
                     >
                       {tag}
                     </span>
@@ -154,11 +163,15 @@ export function Sidebar({
               );
             }
 
-            // one word on the right, and only when it earns the space
-            const stateTag = running[i]
+            // one word on the right, and only when it earns the room
+            const stateTag = waiting[i]
+              ? "needs you"
+              : running[i]
               ? "working"
               : w.status === "cloning"
                 ? w.progress ?? "cloning"
+                : jobs(w)
+                ? jobs(w)
                 : !mine
                   ? w.owner
                   : "";
@@ -179,7 +192,7 @@ export function Sidebar({
                 }
                 right={
                   <span
-                    fg={running[i] ? theme.accent : theme.muted}
+                    fg={waiting[i] ? theme.warning : running[i] ? theme.accent : theme.muted}
                   >
                     {stateTag}
                   </span>
@@ -191,7 +204,7 @@ export function Sidebar({
       </scrollbox>
 
       {/* pinned: the one environment, and the services it runs */}
-      <box flexDirection="column" flexShrink={0} paddingBottom={1}>
+      {envName !== undefined && <box flexDirection="column" flexShrink={0} paddingBottom={1}>
         <box flexDirection="column" paddingLeft={1} paddingRight={1}>
         <Heading width={width - 2} flush>Environment</Heading>
         <Row
@@ -227,18 +240,22 @@ export function Sidebar({
           // tag and would collide with a long env name up on the env row
           <>
             <box height={1} flexShrink={0} />
-            <Row
-              left={
-                <span>
-                  <span fg={theme.muted}>{"current snapshot: "}</span>
-                  <span fg={theme.fg}>{clip(snapshot, inner - 18)}</span>
-                </span>
-              }
-            />
+            <Row left={<span fg={theme.muted}>{"current snapshot"}</span>} />
+            {/* own line, wrapped: a snapshot message rarely fits after the label */}
+            <box paddingLeft={2} paddingRight={1}>
+              <text fg={theme.fg} wrapMode="word">{snapshot}</text>
+            </box>
           </>
         ) : null}
         </box>
-      </box>
+      </box>}
     </box>
   );
+}
+
+/** "2 jobs" when a workspace runs background processes: the panel is two `f`s deep, and nothing
+ * else on the sidebar said there was anything there to open. */
+function jobs(w: { processes?: { status: string }[] }): string {
+  const n = w.processes?.filter((p) => p.status === "running").length ?? 0;
+  return n === 0 ? "" : n === 1 ? "1 job" : `${n} jobs`;
 }
