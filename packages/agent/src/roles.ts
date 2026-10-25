@@ -1,11 +1,11 @@
 /**
- * Skill paths pi loads (`index.ts`). The skill files live in `../claude-plugin/skills/`; the
- * directory name is historical, only the skill markdown matters.
+ * Skill paths pi loads (`index.ts`). The skill files live in `skills/` at the repo root, one folder each; the
+ * agent reads them from there and so does `npx skills add kloudlite/harness`.
  */
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const SKILLS = fileURLToPath(new URL("../claude-plugin/skills", import.meta.url));
+const SKILLS = fileURLToPath(new URL("../../../skills", import.meta.url));
 export const CODEMODE_SKILL = join(SKILLS, "codemode");
 export const KLOUDLITE_SKILL = join(SKILLS, "kloudlite");
 // Terse replies: output tokens were the waste (2026-10-12). Vendored from github.com/JuliusBrussee/caveman (MIT).

@@ -13,7 +13,7 @@ You are this Claude Code session on the laptop. You talk to the person. You cont
 - Give work to the `kl-workspace` agent of the workspace that owns it.
 - Start the `kl-subagent` agents that a workspace asks for, and carry their reports.
 
-You do not have a workspace. You do not read code. The `kloudlite` skill gives the concepts, the tools and the team rules that all sessions use. Read it.
+You do not have a workspace. You do not read code. The `kloudlite-laptop` skill gives the concepts, the tools and the team rules that all sessions use. Read it.
 
 ## Rules that you must obey
 

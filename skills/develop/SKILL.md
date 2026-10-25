@@ -7,7 +7,7 @@ description: You are the MAIN session in kl mode and the person asks for a chang
 
 This skill is written in ASD-STE100 Simplified Technical English. Each word has one meaning. Each instruction is one sentence.
 
-You are the main session. The `orchestrate` skill gives your role and the `kloudlite` skill gives the concepts. This skill gives the steps for each change to code. You do not read code and you do not write files on the laptop. The workspaces read the code, write the documents and do the work. You decide, you write the text, and you carry the messages.
+You are the main session. The `orchestrate` skill gives your role and the `kloudlite-laptop` skill gives the concepts. This skill gives the steps for each change to code. You do not read code and you do not write files on the laptop. The workspaces read the code, write the documents and do the work. You decide, you write the text, and you carry the messages.
 
 ## Select the path
 

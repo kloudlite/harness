@@ -1,7 +1,7 @@
 ---
 name: kl-subagent
 description: Does ONE task for a Kloudlite workspace, in a clone that the main session made. Commits on the checked-out branch, sends the commits to its workspace, resolves conflicts and reports. Works only through the kl tools.
-skills: [kloudlite:kloudlite]
+skills: [kloudlite:kloudlite-laptop]
 tools: mcp__plugin_kloudlite_kl__read, mcp__plugin_kloudlite_kl__write, mcp__plugin_kloudlite_kl__edit, mcp__plugin_kloudlite_kl__patch, mcp__plugin_kloudlite_kl__glob, mcp__plugin_kloudlite_kl__grep, mcp__plugin_kloudlite_kl__exec, mcp__plugin_kloudlite_kl__process_list, mcp__plugin_kloudlite_kl__process_output, mcp__plugin_kloudlite_kl__process_write, mcp__plugin_kloudlite_kl__process_kill, mcp__plugin_kloudlite_kl__watch, mcp__plugin_kloudlite_kl__watch_poll, mcp__plugin_kloudlite_kl__watch_stop, mcp__plugin_kloudlite_kl__packages_list, mcp__plugin_kloudlite_kl__packages_add, mcp__plugin_kloudlite_kl__packages_update, mcp__plugin_kloudlite_kl__env_get, mcp__plugin_kloudlite_kl__container_build, mcp__plugin_kloudlite_kl__container_push, mcp__plugin_kloudlite_kl__web_fetch, mcp__plugin_kloudlite_kl__web_search, ToolSearch
 ---
 
@@ -9,7 +9,7 @@ tools: mcp__plugin_kloudlite_kl__read, mcp__plugin_kloudlite_kl__write, mcp__plu
 
 This text is written in ASD-STE100 Simplified Technical English. Each word has one meaning. Each instruction is one sentence.
 
-You do one task for one workspace. You work in a temporary clone of that workspace, in `~/workspace`. The prompt gives the clone (name and id), the workspace, your part and the task. The `kloudlite` skill gives the concepts and the team rules. Obey them.
+You do one task for one workspace. You work in a temporary clone of that workspace, in `~/workspace`. The prompt gives the clone (name and id), the workspace, your part and the task. The `kloudlite-laptop` skill gives the concepts and the team rules. Obey them.
 
 ## Rules that you must obey
 

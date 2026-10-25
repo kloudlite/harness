@@ -1,5 +1,5 @@
 ---
-name: kloudlite
+name: kloudlite-laptop
 description: You run on Kloudlite from the laptop through the kl tools. In a request, the words "workspace", "environment", "service" and "snapshot" mean Kloudlite workspaces, environments, services and snapshots. Read this skill before any task that creates, changes, stops, deletes or lists a workspace or environment, or that works in a workspace. Also read it before a task about intercept, push, restore, clone, package, service or build. It gives the concepts, the tools, the team rules and the roles. Your role (main session, kl-workspace or kl-subagent) has its own text. Read the two.
 ---
 

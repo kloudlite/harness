@@ -37,7 +37,6 @@ test("codemode sessions advertise the codemode skill, ", async () => {
   process.env.KLOUDLITE_CONFIG_DIR = mkdtempSync(join(tmpdir(), "kl-cfg-"));
   const { createSession, models } = await import("./index.ts");
   const { CODEMODE_SKILL } = await import("./roles.ts");
-  expect(existsSync(join(CODEMODE_SKILL, "../../.claude-plugin/plugin.json"))).toBe(true);
   const model = models.getModels().find((m: any) => m.provider !== "anthropic") as any;
   const s: any = await createSession({ key: `t-${process.pid}-skill`, model, codemode: true, fresh: true });
   expect(s.systemPrompt).toContain("How to write codemode scripts");
