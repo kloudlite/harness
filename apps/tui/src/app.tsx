@@ -1133,7 +1133,7 @@ export function App({
         const connected = [...a].filter(([, v]) => v.ok).map(([p]) => p);
         await probeProviders(a, true);
         const bad = connected.filter(isUnusable);
-        const verified = connected.filter((p) => verdictOf(p)?.state === "ok");
+        const verified = connected.filter((p) => verdictOf(p)?.state === "ok" && !bad.includes(p));
         const unverified = connected.filter((p) => verdictOf(p)?.state === "unknown" && !bad.includes(p));
         const unchecked = connected.filter((p) => !bad.includes(p) && !verified.includes(p) && !unverified.includes(p));
         const parts = [

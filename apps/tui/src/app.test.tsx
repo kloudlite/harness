@@ -1288,3 +1288,53 @@ test("/model test separates verified, could-not-verify, blocked and unchecked pr
   clearUnusable("mistral");
   boot(real, hello());
 });
+
+// A probe that says ok must not undo what a refused request showed: after a real 403 the provider
+// stays blocked and /model test does not call it verified.
+test("a 403 outranks a later ok probe: /model test keeps the provider blocked", async () => {
+  const real = backend();
+  let fire: (e: any) => void = () => {};
+  const wrap = <T extends object>(t: T, over: Partial<T>) =>
+    new Proxy(t, {
+      get: (o: any, p) => (p in over ? (over as any)[p] : typeof o[p] === "function" ? o[p].bind(o) : o[p]),
+    }) as T;
+  boot(
+    wrap(real, {
+      auth: wrap(real.auth, {
+        providers: async () =>
+          (await real.auth.providers()).map((a) => ({ ...a, ok: a.provider === "huggingface" || a.provider === "deepseek" })),
+        check: async (p: string) => (p === "huggingface" ? { state: "ok" as const } : { state: "none" as const }),
+      }),
+      session: async (key, opts) => {
+        const h = await real.session(key, opts);
+        return wrap(h, { subscribe: (cb) => ((fire = cb as any), h.subscribe(cb)) });
+      },
+    }),
+    { ...hello(), settings: { ...hello().settings, vim: "off" } },
+  );
+  const setup = await testRender(<App />, { width: COLS, height: ROWS, kittyKeyboard: true });
+  for (let i = 0; i < 10; i++) await tick();
+  fire({
+    type: "message_end",
+    message: {
+      role: "assistant",
+      timestamp: 4,
+      content: [],
+      stopReason: "error",
+      provider: "huggingface",
+      errorMessage: '403 "This authentication method does not have sufficient permissions"',
+    },
+  });
+  for (let i = 0; i < 6; i++) await tick();
+  await setup.mockInput.typeText("/model test");
+  await tick();
+  setup.mockInput.pressEnter();
+  for (let i = 0; i < 8; i++) await tick();
+  await setup.renderOnce();
+  const frame = setup.captureCharFrame().replace(/\s+/g, " ");
+  expect(frame).toContain("Blocked: huggingface (refused (403))");
+  expect(frame).not.toContain("Verified: huggingface");
+  setup.renderer.destroy();
+  clearUnusable("huggingface");
+  boot(real, hello());
+});

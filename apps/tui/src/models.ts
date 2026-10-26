@@ -67,7 +67,8 @@ export async function probeProviders(auth: Map<string, { ok: boolean }>, force =
         if (v?.state === "blocked") {
           markUnusable(p, v.reason);
           marked.push(p);
-        } else if (v?.state === "ok") unusable.delete(p);
+        }
+        // an ok does not clear a mark: a refused real request outranks a probe, and only a new login lifts it
       }),
   );
   return marked;

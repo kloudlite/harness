@@ -261,7 +261,11 @@ export function withCodemodeExtras(factory: ReturnType<typeof createCodemodeExte
 export { hfInference, type ProviderCheck } from "./provider-check.ts";
 
 /** Can this provider run inference? See provider-check.ts. */
-export const checkProviderAuth = (provider: string) => checkProvider(models as never, provider);
+export const checkProviderAuth = (provider: string) => {
+  // a small model of the provider keeps the one-token request cheap
+  const ids = models.getModels().filter((m) => m.provider === provider).map((m) => m.id);
+  return checkProvider(models as never, provider, ids.find((id) => /flash|lite|mini|small|nano|turbo/i.test(id)) ?? ids[0]);
+};
 
 /** Auth status for every provider (env keys, stored credentials, ambient). */
 export async function providerAuth(): Promise<ProviderAuth[]> {
