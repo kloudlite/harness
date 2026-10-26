@@ -31,6 +31,7 @@ export async function loadProviderAuth(): Promise<Map<string, { ok: boolean; env
  */
 const unusable = new Set<string>();
 export const markUnusable = (provider: string) => void unusable.add(provider);
+export const isUnusable = (provider: string) => unusable.has(provider);
 export const clearUnusable = (provider: string) => void unusable.delete(provider);
 
 /** The model call was refused for want of permission, not for a transient fault. */
@@ -38,7 +39,7 @@ export const isAuthRefusal = (message: string) => /\b(401|403)\b|unauthori[sz]ed
 
 /** A loaded auth map that has no working credential for the provider; an unloaded (empty) one decides nothing. */
 export function lacksCredentials(auth: Map<string, { ok: boolean }>, provider: string): boolean {
-  return unusable.has(provider) || (auth.size > 0 && !auth.get(provider)?.ok);
+  return isUnusable(provider) || (auth.size > 0 && !auth.get(provider)?.ok);
 }
 
 const FAST = /flash|lite|mini|haiku|nano|small|turbo/i;

@@ -20,7 +20,7 @@ import { Spinner } from "./components/Spinner.tsx";
 import { menuItems, placeholders } from "./slash.ts";
 import { fromTeam, wsPath } from "./workspaces.ts";
 import { setTheme, theme, themeNames } from "./theme.ts";
-import { catalog, clearUnusable, findModel, isAuthRefusal, lacksCredentials, markUnusable, loadProviderAuth, modelLabel, pickConnectedModel, refreshCatalog } from "./models.ts";
+import { catalog, clearUnusable, findModel, isAuthRefusal, isUnusable, lacksCredentials, markUnusable, loadProviderAuth, modelLabel, pickConnectedModel, refreshCatalog } from "./models.ts";
 import type {
   Ask as BenchAsk,
   BenchEvent,
@@ -761,6 +761,7 @@ export function App({
           const bad = (m as any).provider ?? getSession(sessions, key).model.provider;
           markUnusable(bad);
           void loadProviderAuth().then((a) => {
+            setAuth(a);
             const pick = pickConnectedModel(catalog, a);
             if (pick && getSession(sessions, key).model.provider === bad) selectModel(pick);
             append(key, {
@@ -1160,7 +1161,9 @@ export function App({
       setInput(text);
       append(activeKey, {
         kind: "error",
-        text: `${modelLabel(cur)} (${cur.provider}) has no credentials — pick a connected model with /model, or connect ${cur.provider} with /login. Your message was not sent.`,
+        text: isUnusable(cur.provider)
+          ? `${modelLabel(cur)} (${cur.provider}) is connected but cannot run inference — pick another with /model, or reconnect ${cur.provider} with /login. Your message was not sent.`
+          : `${modelLabel(cur)} (${cur.provider}) has no credentials — pick a connected model with /model, or connect ${cur.provider} with /login. Your message was not sent.`,
       });
       return;
     }
@@ -1232,7 +1235,7 @@ export function App({
       models: [...models]
         .filter((m) => auth.get(m.provider)?.ok)
         .sort((a, b) => a.provider.localeCompare(b.provider) || a.id.localeCompare(b.id))
-        .map((m) => ({ provider: m.provider, id: m.id, hint: m.name })),
+        .map((m) => ({ provider: m.provider, id: m.id, hint: isUnusable(m.provider) ? `connected · inference blocked — ${m.name}` : m.name })),
       themes: themeNames,
       logins: hello().logins,
       // this environment's main sessions, newest first

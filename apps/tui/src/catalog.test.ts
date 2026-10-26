@@ -4,7 +4,7 @@ import { spawnSync } from "bun";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { catalog, clearUnusable, isAuthRefusal, lacksCredentials, markUnusable, modelLabel, pickConnectedModel, refreshCatalog } from "./models.ts";
+import { catalog, clearUnusable, isUnusable, isAuthRefusal, lacksCredentials, markUnusable, modelLabel, pickConnectedModel, refreshCatalog } from "./models.ts";
 
 // pi's bundled JSON is an offline seed, and every provider is dynamic — so a
 // never-refreshed catalog is pinned to whatever shipped in dist. This is the
@@ -89,6 +89,7 @@ test("a provider refused with 401/403 is unusable until a fresh login, and is ne
   expect(isAuthRefusal('403 "This authentication method does not have sufficient permissions"')).toBe(true);
   expect(isAuthRefusal("rate limited")).toBe(false);
   markUnusable("huggingface");
+  expect(isUnusable("huggingface")).toBe(true);
   expect(lacksCredentials(auth, "huggingface")).toBe(true);
   expect(pickConnectedModel(list, auth, "huggingface")).toBeUndefined();
   clearUnusable("huggingface");
