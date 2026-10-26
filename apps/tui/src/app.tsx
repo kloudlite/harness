@@ -140,6 +140,9 @@ export function App({
   }, [renderer]);
   const { width: columns, height: rows } = useTerminalDimensions();
   const [sessions, setSessions] = useState<SessionMap>({});
+  // agent-event handlers outlive the render that made them: they read the latest state through this
+  const sessionsRef = useRef(sessions);
+  sessionsRef.current = sessions;
   const [input, setInput] = useState("");
   // images pasted with ctrl+v, sent with the next prompt
   const [images, setImages] = useState<ClipImage[]>([]);
@@ -760,15 +763,18 @@ export function App({
         const m = msg;
         if (m.role === "assistant" && m.stopReason === "error" && isAuthRefusal(m.errorMessage ?? "")) {
           // Connected on paper, refused in practice: stop offering it and move to one that runs.
-          const bad = (m as any).provider ?? getSession(sessions, key).model.provider;
+          const bad = (m as any).provider ?? getSession(sessionsRef.current, key).model.provider;
           markUnusable(bad);
           void loadProviderAuth().then((a) => {
             setAuth(a);
             const pick = pickConnectedModel(catalog, a);
-            if (pick && getSession(sessions, key).model.provider === bad) selectModel(pick);
+            // judged against the model the session is on NOW, not the one this handler was made with,
+            // and "now using" is only said once the switch has been applied
+            const switched = !!pick && getSession(sessionsRef.current, key).model.provider === bad;
+            if (switched) selectModel(pick!, key);
             append(key, {
               kind: "info",
-              text: `${bad} is connected but cannot run inference; ${pick ? `now using ${modelLabel(pick)} (${pick.provider}). Change it with /model` : "pick another with /model or reconnect with /login"}.`,
+              text: `${bad} is connected but cannot run inference; ${switched ? `now using ${modelLabel(pick!)} (${pick!.provider}). Change it with /model` : "pick another with /model or reconnect with /login"}.`,
             });
           });
         }
@@ -1014,12 +1020,12 @@ export function App({
 
   /** `steer` interrupts the running turn; otherwise a mid-turn prompt queues. */
   /** Make `ref` this session's model and the saved default. */
-  function selectModel(ref: { provider: string; id: string }) {
-    picked.current.set(activeKey, ref);
-    setSessions((map) => patchSession(map, activeKey, { model: ref }));
+  function selectModel(ref: { provider: string; id: string }, key = activeKey) {
+    picked.current.set(key, ref);
+    setSessions((map) => patchSession(map, key, { model: ref }));
     backend().settings.write({ defaultModel: ref }).catch(() => {}); // persists across restarts
     setDefaultModel(ref);
-    agents.current.get(activeKey)?.then((a) => a.setModel(ref)).catch(() => {});
+    agents.current.get(key)?.then((a) => a.setModel(ref)).catch(() => {});
   }
 
   function submit(text: string, steer = false) {

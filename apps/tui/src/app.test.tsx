@@ -968,6 +968,13 @@ test("a 403 marks the provider blocked, switches to a usable one and labels it i
   );
   const setup = await testRender(<App />, { width: COLS, height: ROWS, kittyKeyboard: true });
   for (let i = 0; i < 10; i++) await tick();
+  // the session must be ON the blocked provider for a switch to be due
+  await setup.mockInput.typeText("/model huggingface");
+  await tick();
+  setup.mockInput.pressEnter();
+  await tick();
+  setup.mockInput.pressEnter();
+  for (let i = 0; i < 5; i++) await tick();
   fire({
     type: "message_end",
     message: {
@@ -1096,6 +1103,61 @@ test("login repair: connecting a provider moves a session off an unusable one", 
   const frame = setup.captureCharFrame();
   expect(frame).toContain("Now using DeepSeek V4.1 Flash (deepseek)");
   expect(frame).toContain("DeepSeek V4.1 Flash deepseek");
+  setup.renderer.destroy();
+  clearUnusable("huggingface");
+  boot(real, hello());
+});
+
+// The agent-event subscription is made once; a /model picked afterwards must still count when a
+// 403 arrives, or the notice claims a switch the session never made.
+test("manual /model then a 403: the session and the card both switch to a usable model", async () => {
+  const real = backend();
+  let fire: (e: any) => void = () => {};
+  const wrap = <T extends object>(t: T, over: Partial<T>) =>
+    new Proxy(t, {
+      get: (o: any, p) => (p in over ? (over as any)[p] : typeof o[p] === "function" ? o[p].bind(o) : o[p]),
+    }) as T;
+  boot(
+    wrap(real, {
+      auth: wrap(real.auth, {
+        providers: async () =>
+          (await real.auth.providers()).map((a) => ({ ...a, ok: a.provider === "huggingface" || a.provider === "deepseek" })),
+      }),
+      session: async (key, opts) => {
+        const h = await real.session(key, opts);
+        return wrap(h, { subscribe: (cb) => ((fire = cb as any), h.subscribe(cb)) });
+      },
+    }),
+    { ...hello(), settings: { ...hello().settings, vim: "off" } },
+  );
+  const setup = await testRender(<App />, { width: COLS, height: ROWS, kittyKeyboard: true });
+  for (let i = 0; i < 10; i++) await tick();
+  await setup.mockInput.typeText("/model huggingface");
+  await tick();
+  setup.mockInput.pressEnter();
+  await tick();
+  setup.mockInput.pressEnter();
+  for (let i = 0; i < 5; i++) await tick();
+  await setup.renderOnce();
+  expect(setup.captureCharFrame()).toContain("huggingface");
+  fire({
+    type: "message_end",
+    message: {
+      role: "assistant",
+      timestamp: 3,
+      content: [],
+      stopReason: "error",
+      provider: "huggingface",
+      errorMessage: '403 "This authentication method does not have sufficient permissions"',
+    },
+  });
+  for (let i = 0; i < 8; i++) await tick();
+  await setup.renderOnce();
+  const frame = setup.captureCharFrame();
+  expect(frame).toContain("now using");
+  const card = frame.split("\n").filter((l) => l.includes("Working Session · ")).pop() ?? "";
+  expect(card).toContain("deepseek");
+  expect(card).not.toContain("huggingface");
   setup.renderer.destroy();
   clearUnusable("huggingface");
   boot(real, hello());
