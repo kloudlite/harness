@@ -5,6 +5,7 @@ import type { ToolDef } from "@kloudlite-tui/tools";
 import { setCopier } from "./clipboard.ts";
 import { LocalBackend } from "@kloudlite-tui/backend/local";
 import { backend, boot, hello } from "./hello.ts";
+import { clearUnusable } from "./models.ts";
 
 // App reads its settings from hello() once at mount, so tests seed them by re-booting.
 // A fresh backend each time: a turn left pending by the previous test (no auth, it never ends)
@@ -935,4 +936,101 @@ test("enter while busy routes (a deciding row shows until it answers); ctrl+s st
     expect(calls.steer).toEqual(["stop now"]);
     expect(calls.route).toEqual(["and add tests"]);
   });
+});
+
+// A provider that auth lists as connected but refuses inference (403) is marked unusable: the turn
+// moves to a usable provider, /model labels the blocked one, and the send guard names the real cause.
+test("a 403 marks the provider blocked, switches to a usable one and labels it in /model", async () => {
+  const real = backend();
+  const bad = hello().catalog.find((m) => m.provider === "huggingface");
+  const good = hello().catalog.find((m) => m.provider === "deepseek");
+  expect(bad && good).toBeTruthy();
+  let fire: (e: any) => void = () => {};
+  const wrap = <T extends object>(t: T, over: Partial<T>) =>
+    new Proxy(t, {
+      get: (o: any, p) => (p in over ? (over as any)[p] : typeof o[p] === "function" ? o[p].bind(o) : o[p]),
+    }) as T;
+  const providers = async () =>
+    (await real.auth.providers()).map((a) => ({ ...a, ok: a.provider === "huggingface" || a.provider === "deepseek" }));
+  boot(
+    wrap(real, {
+      auth: wrap(real.auth, { providers }),
+      session: async (key, opts) => {
+        const h = await real.session(key, opts);
+        return wrap(h, { subscribe: (cb) => ((fire = cb as any), h.subscribe(cb)) });
+      },
+    }),
+    {
+      ...hello(),
+      defaultModel: { provider: bad!.provider, id: bad!.id },
+      settings: { ...hello().settings, vim: "off" },
+    },
+  );
+  const setup = await testRender(<App />, { width: COLS, height: ROWS, kittyKeyboard: true });
+  for (let i = 0; i < 10; i++) await tick();
+  fire({
+    type: "message_end",
+    message: {
+      role: "assistant",
+      timestamp: 1,
+      content: [],
+      stopReason: "error",
+      provider: "huggingface",
+      errorMessage: '403 "This authentication method does not have sufficient permissions"',
+    },
+  });
+  for (let i = 0; i < 5; i++) await tick();
+  await setup.renderOnce();
+  expect(setup.captureCharFrame()).toContain("huggingface is connected but cannot run inference; now using");
+  // /model labels the blocked provider's rows
+  await setup.mockInput.typeText("/model huggingface");
+  await tick();
+  await setup.renderOnce();
+  expect(setup.captureCharFrame()).toContain("connected · inference blocked");
+  // picking it anyway: the send guard says why, and keeps the draft
+  setup.mockInput.pressEnter();
+  await tick();
+  await setup.mockInput.typeText("hi there");
+  setup.mockInput.pressEnter();
+  await tick();
+  await setup.renderOnce();
+  expect(setup.captureCharFrame()).toContain("is connected but cannot run inference — pick another");
+  setup.renderer.destroy();
+  clearUnusable("huggingface");
+  boot(real, hello());
+});
+
+// A model whose provider has no credentials: the prompt is refused and the draft kept.
+async function mountUnconnected(connected: string[]) {
+  const real = backend();
+  const wrap = <T extends object>(t: T, over: Partial<T>) =>
+    new Proxy(t, {
+      get: (o: any, p) => (p in over ? (over as any)[p] : typeof o[p] === "function" ? o[p].bind(o) : o[p]),
+    }) as T;
+  boot(
+    wrap(real, {
+      auth: wrap(real.auth, {
+        providers: async () => (await real.auth.providers()).map((a) => ({ ...a, ok: connected.includes(a.provider) })),
+      }),
+    }),
+    // the session starts on DEFAULT_MODEL, fixed at import, so "unconnected" is whatever it is not
+    { ...hello(), settings: { ...hello().settings, vim: "off" } },
+  );
+  const setup = await testRender(<App />, { width: COLS, height: ROWS, kittyKeyboard: true });
+  for (let i = 0; i < 8; i++) await tick();
+  await setup.renderOnce();
+  return { setup, real };
+}
+
+test("prompt refusal: with nothing usable the message is not sent and stays in the prompt", async () => {
+  const { setup, real } = await mountUnconnected(["none"]);
+  await setup.mockInput.typeText("hello world");
+  setup.mockInput.pressEnter();
+  await tick();
+  await setup.renderOnce();
+  const frame = setup.captureCharFrame();
+  expect(frame).toContain("Your message was not sent");
+  expect(frame).toContain("hello world");
+  setup.renderer.destroy();
+  boot(real, hello());
 });
