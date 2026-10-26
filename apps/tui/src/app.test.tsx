@@ -1011,6 +1011,16 @@ test("a 403 marks the provider blocked, switches to a usable one and labels it i
   await tick();
   await setup.renderOnce();
   expect(setup.captureCharFrame()).toContain("is connected but cannot run inference — pick another");
+  // reconnecting shows why the provider was blocked, in full
+  for (let i = 0; i < 12; i++) setup.mockInput.pressBackspace();
+  await setup.mockInput.typeText("/login huggingface api_key");
+  await tick();
+  setup.mockInput.pressEnter();
+  for (let i = 0; i < 5; i++) await tick();
+  await setup.renderOnce();
+  const login = setup.captureCharFrame().replace(/\s+/g, " ");
+  expect(login).toContain("Blocked just now");
+  expect(login).toContain("sufficient permissions");
   setup.renderer.destroy();
   clearUnusable("huggingface");
   boot(real, hello());

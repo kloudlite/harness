@@ -30,10 +30,11 @@ export async function loadProviderAuth(): Promise<Map<string, { ok: boolean; env
  * inference rights, and auth keeps listing it as connected, so only these two signals tell. A fresh
  * login replaces the credential and clears the mark.
  */
-type Blocked = { reason: string; at: number };
+type Blocked = { reason: string; at: number; detail: string };
 const unusable = new Map<string, Blocked>();
-export const markUnusable = (provider: string, reason = "the provider refused the request") =>
-  void unusable.set(provider, { reason, at: Date.now() });
+/** `reason` is the short form the menu shows; `detail` is the full text, shown when the user reconnects. */
+export const markUnusable = (provider: string, reason = "the provider refused the request", detail = reason) =>
+  void unusable.set(provider, { reason, at: Date.now(), detail });
 export const isUnusable = (provider: string) => unusable.has(provider);
 export const unusableInfo = (provider: string) => unusable.get(provider);
 export const clearUnusable = (provider: string) => {

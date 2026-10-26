@@ -773,7 +773,7 @@ export function App({
         if (m.role === "assistant" && m.stopReason === "error" && isAuthRefusal(m.errorMessage ?? "")) {
           // Connected on paper, refused in practice: stop offering it and move to one that runs.
           const bad = (m as any).provider ?? getSession(sessionsRef.current, key).model.provider;
-          markUnusable(bad, `refused (${/\b(401|403)\b/.exec(m.errorMessage ?? "")?.[1] ?? "auth"})`);
+          markUnusable(bad, `refused (${/\b(401|403)\b/.exec(m.errorMessage ?? "")?.[1] ?? "auth"})`, cleanError(m.errorMessage ?? "").slice(0, 300));
           void loadProviderAuth().then((a) => {
             setAuth(a);
             const pick = pickConnectedModel(catalog, a);
@@ -1467,6 +1467,11 @@ export function App({
               <Login
                 provider={login.provider}
                 type={login.type}
+                note={
+                  isUnusable(login.provider)
+                    ? `Blocked ${ago(unusableInfo(login.provider)!.at)}: ${unusableInfo(login.provider)!.detail}`
+                    : undefined
+                }
                 onDone={(ok) => {
                   const connected = login.provider;
                   setLogin(null);

@@ -20,6 +20,8 @@ type Pending = {
 export function Login(props: {
   provider: string;
   type: LoginType;
+  /** Why the user is reconnecting, e.g. the full error that blocked the provider. */
+  note?: string;
   onDone: (ok: boolean) => void;
 }) {
   return <PiLogin {...props} />;
@@ -30,10 +32,12 @@ export type LoginType = "oauth" | "api_key";
 function PiLogin({
   provider,
   type,
+  note,
   onDone,
 }: {
   provider: string;
   type: LoginType;
+  note?: string;
   onDone: (ok: boolean) => void;
 }) {
   const [events, setEvents] = useState<AuthEvent[]>([]);
@@ -118,6 +122,8 @@ function PiLogin({
         <b>Login</b> · <span fg={theme.accent}>{provider}</span>{" "}
         <span fg={theme.muted}>{type === "oauth" ? "OAuth" : "API key"}</span>
       </text>
+
+      {note && <text fg={theme.muted}>{note}</text>}
 
       {events.map((event, i) => (
         <box key={i} flexDirection="column">
