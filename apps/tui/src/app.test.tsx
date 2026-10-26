@@ -997,7 +997,7 @@ test("a 403 marks the provider blocked, switches to a usable one and labels it i
   await tick();
   await setup.renderOnce();
   const menu = setup.captureCharFrame();
-  expect(menu).toContain("huggingface · connected · inference blocked");
+  expect(menu).toContain("huggingface · blocked");
   expect(menu).toContain("Enter to reconnect");
   expect(menu).not.toContain("huggingface/deepseek-ai/");
   // naming a model of it anyway: the send guard says why, and keeps the draft
@@ -1042,6 +1042,8 @@ test("start repair: an unconnected saved model is replaced by a connected one, a
   const { setup, real } = await mountUnconnected(["huggingface"]);
   const frame = setup.captureCharFrame();
   expect(frame).toContain("has no credentials; now using");
+  // the only connected provider could not be verified: the notice says so instead of implying it works
+  expect(frame).toContain("Could not verify that huggingface");
   // the prompt card follows the repair, even though the session opened on the old model
   expect(frame).toContain("Working Session · DeepSeek V4 Flash huggingface");
   setup.renderer.destroy();
@@ -1189,7 +1191,7 @@ test("scope probe: a provider shown to lack inference rights is blocked up front
         check: async (p: string) => {
           checks++;
           return p === "huggingface"
-            ? { state: "blocked" as const, reason: "the token has no Inference Providers permission" }
+            ? { state: "blocked" as const, reason: "no inference permission" }
             : { state: "unknown" as const };
         },
       }),
@@ -1203,8 +1205,8 @@ test("scope probe: a provider shown to lack inference rights is blocked up front
   await tick();
   await setup.renderOnce();
   const menu = setup.captureCharFrame();
-  expect(menu).toContain("huggingface · connected · inference blocked");
-  expect(menu).toContain("no Inference Providers permission");
+  expect(menu).toContain("huggingface · blocked");
+  expect(menu).toContain("no inference permission");
   expect(menu).not.toContain("huggingface/deepseek-ai/");
   for (let i = 0; i < "/model huggingface".length; i++) setup.mockInput.pressBackspace();
   await setup.mockInput.typeText("/model test");
@@ -1212,7 +1214,7 @@ test("scope probe: a provider shown to lack inference rights is blocked up front
   setup.mockInput.pressEnter();
   for (let i = 0; i < 6; i++) await tick();
   await setup.renderOnce();
-  expect(setup.captureCharFrame()).toContain("Blocked: huggingface (the token has no Inference Providers permission)");
+  expect(setup.captureCharFrame()).toContain("Blocked: huggingface (no inference permission)");
   setup.renderer.destroy();
   boot(real, hello());
 });
@@ -1233,5 +1235,46 @@ test("switch toast: an automatic switch shows /model undo, and undo puts the pre
   expect(after).not.toContain("⇄");
   expect(after.split("\n").filter((l) => l.includes("Working Session · ")).pop()).toContain("deepseek");
   setup.renderer.destroy();
+  boot(real, hello());
+});
+
+// "No problem found" was reported for a provider the probe could not read; unverified, blocked and
+// verified are three different answers.
+test("/model test separates verified, could-not-verify, blocked and unchecked providers", async () => {
+  const real = backend();
+  const wrap = <T extends object>(t: T, over: Partial<T>) =>
+    new Proxy(t, {
+      get: (o: any, p) => (p in over ? (over as any)[p] : typeof o[p] === "function" ? o[p].bind(o) : o[p]),
+    }) as T;
+  const verdict: Record<string, any> = {
+    huggingface: { state: "unknown", reason: "no token to read" },
+    deepseek: { state: "none" },
+    openrouter: { state: "ok" },
+    mistral: { state: "blocked", reason: "token rejected" },
+  };
+  boot(
+    wrap(real, {
+      auth: wrap(real.auth, {
+        providers: async () => (await real.auth.providers()).map((a) => ({ ...a, ok: a.provider in verdict })),
+        check: async (p: string) => verdict[p],
+      }),
+    }),
+    { ...hello(), settings: { ...hello().settings, vim: "off" } },
+  );
+  const setup = await testRender(<App />, { width: COLS, height: ROWS, kittyKeyboard: true });
+  for (let i = 0; i < 10; i++) await tick();
+  await setup.mockInput.typeText("/model test");
+  await tick();
+  setup.mockInput.pressEnter();
+  for (let i = 0; i < 8; i++) await tick();
+  await setup.renderOnce();
+  const frame = setup.captureCharFrame().replace(/\s+/g, " ");
+  expect(frame).toContain("Blocked: mistral (token");
+  expect(frame).toContain("Could not verify: huggingface (no");
+  expect(frame).toContain("Verified: openrouter");
+  expect(frame).toContain("No check exists for deepseek");
+  expect(frame).not.toContain("No problem found");
+  setup.renderer.destroy();
+  clearUnusable("mistral");
   boot(real, hello());
 });

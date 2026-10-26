@@ -39,7 +39,12 @@ export const unusableInfo = (provider: string) => unusable.get(provider);
 export const clearUnusable = (provider: string) => {
   unusable.delete(provider);
   probed.delete(provider);
+  verdicts.delete(provider);
 };
+
+/** What the scope probe said last, per provider. `unknown` is "could not verify" and is never treated as fine. */
+const verdicts = new Map<string, { state: "ok" | "blocked" | "unknown" | "none"; reason?: string }>();
+export const verdictOf = (provider: string) => verdicts.get(provider);
 
 /** Providers the scope probe has already judged this run: one probe per credential, cleared by a login. */
 const probed = new Set<string>();
@@ -57,6 +62,7 @@ export async function probeProviders(auth: Map<string, { ok: boolean }>, force =
       .map(async ([p]) => {
         probed.add(p);
         const v = await backend().auth.check(p).catch(() => undefined);
+        if (v) verdicts.set(p, v);
         if (v?.state === "blocked") {
           markUnusable(p, v.reason);
           marked.push(p);
@@ -86,11 +92,15 @@ export function pickConnectedModel(
   provider?: string,
 ): ModelRef | undefined {
   const ok = list.filter((m) => auth.get(m.provider)?.ok && !unusable.has(m.provider) && (!provider || m.provider === provider));
-  const sorted = [...ok].sort((a, b) => a.provider.localeCompare(b.provider) || a.id.localeCompare(b.id));
+  // a provider the probe confirmed outranks one it could not verify, which outranks the rest
+  const rank = (p: string) => (verdicts.get(p)?.state === "ok" ? 0 : verdicts.get(p)?.state === "unknown" ? 2 : 1);
+  const sorted = [...ok].sort((a, b) => rank(a.provider) - rank(b.provider) || a.provider.localeCompare(b.provider) || a.id.localeCompare(b.id));
+  if (!sorted.length) return undefined;
+  const top = sorted.filter((m) => rank(m.provider) === rank(sorted[0]!.provider));
   const best =
-    ["deepseek-v4-flash", "deepseek-flash"].map((id) => ok.find((m) => m.id === id)).find(Boolean) ??
-    sorted.find((m) => FAST.test(m.id)) ??
-    sorted[0];
+    ["deepseek-v4-flash", "deepseek-flash"].map((id) => top.find((m) => m.id === id)).find(Boolean) ??
+    top.find((m) => FAST.test(m.id)) ??
+    top[0];
   return best && { provider: best.provider, id: best.id };
 }
 

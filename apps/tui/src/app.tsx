@@ -20,7 +20,7 @@ import { Spinner } from "./components/Spinner.tsx";
 import { menuItems, placeholders } from "./slash.ts";
 import { fromTeam, wsPath } from "./workspaces.ts";
 import { setTheme, theme, themeNames } from "./theme.ts";
-import { catalog, clearUnusable, findModel, isAuthRefusal, isUnusable, lacksCredentials, markUnusable, probeProviders, unusableInfo, loadProviderAuth, modelLabel, pickConnectedModel, refreshCatalog } from "./models.ts";
+import { catalog, clearUnusable, findModel, isAuthRefusal, isUnusable, lacksCredentials, markUnusable, probeProviders, unusableInfo, verdictOf, loadProviderAuth, modelLabel, pickConnectedModel, refreshCatalog } from "./models.ts";
 import type {
   Ask as BenchAsk,
   BenchEvent,
@@ -429,7 +429,8 @@ export function App({
               ? `is connected but cannot run inference (${unusableInfo(m.provider)?.reason})`
               : "has no credentials";
             if (pick) {
-              switchModel(activeKey, m, pick, `${modelLabel(m)} (${m.provider}) ${why}; now using ${modelLabel(pick)} (${pick.provider}). Change it with /model.`);
+              const unverified = verdictOf(pick.provider)?.state === "unknown" ? ` Could not verify that ${pick.provider} can run inference.` : "";
+              switchModel(activeKey, m, pick, `${modelLabel(m)} (${m.provider}) ${why}; now using ${modelLabel(pick)} (${pick.provider}). Change it with /model.${unverified}`);
             } else
               append(activeKey, {
                 kind: "info",
@@ -772,7 +773,7 @@ export function App({
         if (m.role === "assistant" && m.stopReason === "error" && isAuthRefusal(m.errorMessage ?? "")) {
           // Connected on paper, refused in practice: stop offering it and move to one that runs.
           const bad = (m as any).provider ?? getSession(sessionsRef.current, key).model.provider;
-          markUnusable(bad, cleanError(m.errorMessage ?? "").slice(0, 120) || undefined);
+          markUnusable(bad, `refused (${/\b(401|403)\b/.exec(m.errorMessage ?? "")?.[1] ?? "auth"})`);
           void loadProviderAuth().then((a) => {
             setAuth(a);
             const pick = pickConnectedModel(catalog, a);
@@ -1132,13 +1133,19 @@ export function App({
         const connected = [...a].filter(([, v]) => v.ok).map(([p]) => p);
         await probeProviders(a, true);
         const bad = connected.filter(isUnusable);
+        const verified = connected.filter((p) => verdictOf(p)?.state === "ok");
+        const unverified = connected.filter((p) => verdictOf(p)?.state === "unknown" && !bad.includes(p));
+        const unchecked = connected.filter((p) => !bad.includes(p) && !verified.includes(p) && !unverified.includes(p));
+        const parts = [
+          bad.length && `Blocked: ${bad.map((p) => `${p} (${unusableInfo(p)?.reason})`).join(", ")}.`,
+          unverified.length &&
+            `Could not verify: ${unverified.map((p) => `${p} (${verdictOf(p)?.reason ?? "no answer"})`).join(", ")}.`,
+          verified.length && `Verified: ${verified.join(", ")}.`,
+          unchecked.length && `No check exists for ${unchecked.join(", ")}; a refused request will mark it.`,
+        ].filter(Boolean);
         append(activeKey, {
           kind: "info",
-          text: !connected.length
-            ? "No AI provider connected yet — run /login to connect one."
-            : bad.length
-              ? `Blocked: ${bad.map((p) => `${p} (${unusableInfo(p)?.reason})`).join(", ")}. Not blocked: ${connected.filter((p) => !bad.includes(p)).join(", ") || "none"}.`
-              : `No problem found with ${connected.join(", ")}.`,
+          text: connected.length ? parts.join(" ") : "No AI provider connected yet — run /login to connect one.",
         });
         const cur = getSession(sessionsRef.current, activeKey).model;
         const pick = lacksCredentials(a, cur.provider) ? pickConnectedModel(catalog, a) : undefined;

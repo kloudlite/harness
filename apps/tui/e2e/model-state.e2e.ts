@@ -80,7 +80,7 @@ try {
   expect("scope probe: the card moved to the usable provider", await until(pane, "Working Session · DeepSeek V4.1 Flash deepseek"), pane);
   tmux("send-keys", "-t", "kl-e2e-2", "/model huggingface");
   await sleep(1500);
-  expect("scope probe: /model shows one reconnect row", has(pane, "inference blocked") && has(pane, "Enter to reconnect") && !has(pane, "huggingface/deepseek-ai/"), pane);
+  expect("scope probe: /model shows one reconnect row", has(pane, "huggingface · blocked") && has(pane, "Enter to reconnect") && !has(pane, "huggingface/deepseek-ai/"), pane);
   tmux("kill-session", "-t", "kl-e2e-2");
 
   // 3. the switch was saved: a restart opens on the usable model with the blocked one still blocked

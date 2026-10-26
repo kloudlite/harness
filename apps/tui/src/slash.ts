@@ -83,8 +83,8 @@ export function menuItems(input: string, ctx: MenuContext): MenuItem[] {
         const login = ctx.logins.filter((l) => l.provider === b.provider).sort((x, y) => +(y.type === "api_key") - +(x.type === "api_key"))[0];
         return {
           insert: login ? `/login ${login.provider} ${login.type}` : `/model ${b.provider}`,
-          label: `${b.provider} · connected · inference blocked`,
-          hint: `${b.reason}, ${b.ago} — Enter to reconnect`,
+          label: `${b.provider} · blocked`,
+          hint: `${b.reason} · ${b.ago} · Enter to reconnect`,
         };
       });
     const actions = ctx.blocked
@@ -93,7 +93,10 @@ export function menuItems(input: string, ctx: MenuContext): MenuItem[] {
           { insert: "/model test", label: "test", hint: "check that each connected provider can run inference" },
         ].filter((a) => filter(a.label))
       : [];
+    // `/model test` typed in full is the command, not a search that a model id containing "test" can win
+    const exact = actions.filter((a) => a.label === q);
     return [
+      ...exact,
       ...ctx.models
         .filter((m) => filter(`${m.provider}/${m.id}`))
         .map((m) => ({
@@ -102,7 +105,7 @@ export function menuItems(input: string, ctx: MenuContext): MenuItem[] {
           hint: m.hint,
         })),
       ...blocked,
-      ...actions,
+      ...actions.filter((a) => a.label !== q),
     ];
   }
   if (cmd === "/theme")
