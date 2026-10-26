@@ -22,11 +22,12 @@ test("every provider is dynamic, so the seed is never the whole story", () => {
 
 // refresh returns the live list and the exported `catalog` binding follows it
 test("refreshCatalog returns the live list and updates the binding", async () => {
-  const seeded = catalog.length;
   const live = await refreshCatalog();
   expect(Array.isArray(live)).toBe(true);
-  expect(live.length).toBeGreaterThanOrEqual(seeded);
-  expect(catalog).toBe(live);
+  // Not >= the seed: a provider's live list can shrink between runs (a retired model, a failed fetch).
+  expect(live.length).toBeGreaterThan(0);
+  // not toBe: a refresh an earlier App test started can rebind `catalog` after ours returns
+  expect(catalog).toEqual(live);
 });
 
 // A cold start knows only pi's bundled seed, so validating a saved model
