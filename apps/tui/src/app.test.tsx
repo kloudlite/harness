@@ -232,6 +232,20 @@ test("sidebar docks when wide, hides when narrow", async () => {
   narrow.renderer.destroy();
 });
 
+test("a terminal below 80x24 gets a size message instead of a broken layout", async () => {
+  const small = await testRender(<App />, { width: 40, height: 20 });
+  await tick();
+  await small.renderOnce();
+  expect(small.captureCharFrame()).toContain("Terminal too small");
+  small.renderer.destroy();
+
+  const ok = await testRender(<App />, { width: 80, height: 24 });
+  await tick();
+  await ok.renderOnce();
+  expect(ok.captureCharFrame()).not.toContain("Terminal too small");
+  ok.renderer.destroy();
+});
+
 test("f opens the files view: changes and tree in one list", async () => {
   const t = await mount();
   t.mockInput.pressKey("1"); // enter api-gateway

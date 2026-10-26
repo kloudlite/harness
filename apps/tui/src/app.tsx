@@ -105,6 +105,9 @@ const WIDE_COLUMNS = 120;
  * thinking, coding tools, steering queues, compaction, retries). A running
  * turn belongs to its session and keeps streaming while you look elsewhere.
  */
+const MIN_COLUMNS = 80;
+const MIN_ROWS = 24;
+
 export function App({
   tools: sink,
   onExit,
@@ -178,7 +181,7 @@ export function App({
   // The team view: the session's real workspaces and environments, polled from the backend (see `refreshTeam`).
   // Workspaces belong to the working session, not to an environment.
   const [teamView, setTeamView] = useState<TeamView>();
-  const mapped = useMemo(() => (teamView ? fromTeam(teamView) : { workspaces: [], environments: [], envIndex: 0 }), [teamView]);
+  const mapped = useMemo(() => (teamView ? fromTeam(teamView) : { workspaces: [], environments: [], envIndex: -1 }), [teamView]);
   const user = teamView?.user ?? "";
   const envs = mapped.environments;
   const env = mapped.envIndex;
@@ -1313,6 +1316,15 @@ export function App({
       }}
     />
   );
+
+  // Below this the layout overlaps and splits words; say so instead of drawing it.
+  if (columns < MIN_COLUMNS || rows < MIN_ROWS) {
+    return (
+      <box width={columns} height={rows} backgroundColor={theme.bg} justifyContent="center" alignItems="center">
+        <text fg={theme.muted}>{`Terminal too small: resize to at least ${MIN_COLUMNS}×${MIN_ROWS}.`}</text>
+      </box>
+    );
+  }
 
   return (
     // pinned to the terminal size: without it the tree grows with content

@@ -173,5 +173,5 @@ export function fromTeam(v: TeamView): { workspaces: Workspace[]; environments: 
     services: e.services.map((s) => ({ name: s.name, port: s.ports[0] ?? 0, interceptedBy: s.interceptedBy && (name.get(s.interceptedBy) ?? s.interceptedBy) })),
     snapshot: e.snapshot,
   }));
-  return { workspaces, environments, envIndex: Math.max(0, environments.findIndex((e) => e.id === v.connected)) };
+  return { workspaces, environments, envIndex: environments.findIndex((e) => e.id === v.connected) };
 }

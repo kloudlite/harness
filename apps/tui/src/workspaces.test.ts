@@ -15,7 +15,7 @@ const view = (over: Partial<TeamView> = {}): TeamView => ({ available: true, use
 const sw = (id: string, over: Partial<TeamView["workspaces"][number]> = {}) => ({ id, name: `n-${id}`, owner: "me", state: "ready", ...over });
 
 test("fromTeam: empty view maps to nothing, env index 0", () => {
-  expect(fromTeam(view())).toEqual({ workspaces: [], environments: [], envIndex: 0 });
+  expect(fromTeam(view())).toEqual({ workspaces: [], environments: [], envIndex: -1 });
 });
 
 test("fromTeam: status follows attachment, then state", () => {
@@ -56,7 +56,7 @@ test("fromTeam: processes are named by their binary; failed or non-zero exits ar
 test("fromTeam: the connected environment picks the index; unknown falls back to 0", () => {
   const e = (id: string) => ({ id, name: id, owner: "t", state: "running", services: [] });
   expect(fromTeam(view({ environments: [e("a"), e("b")], connected: "b" })).envIndex).toBe(1);
-  expect(fromTeam(view({ environments: [e("a"), e("b")], connected: "zz" })).envIndex).toBe(0);
+  expect(fromTeam(view({ environments: [e("a"), e("b")], connected: "zz" })).envIndex).toBe(-1);
 });
 
 test("procName: the label a person would give the command", () => {
