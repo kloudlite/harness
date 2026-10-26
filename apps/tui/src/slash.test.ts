@@ -70,3 +70,10 @@ test("naming a setting lists only its values", () => {
 test("/compact is offered", () => {
   expect(commands.some((c) => c.name === "/compact")).toBe(true);
 });
+
+test("/login does not say 'api key' twice when the label already does", () => {
+  const items = menuItems("/login ", ctx);
+  const byProvider = Object.fromEntries(items.map((i) => [i.label.split(" · ")[0], i.hint]));
+  expect(byProvider["deepseek"]).toBe("");
+  expect(byProvider["openai-codex"]).toBe("oauth");
+});

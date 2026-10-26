@@ -36,8 +36,10 @@ type MenuContext = {
 export const MENU_MAX = 8;
 
 /** Menu for the current input: command list, or the typed command's options. */
-function loginHint(type: string, prefix: string): string {
-  return prefix + (type === "oauth" ? "oauth" : "api key");
+function loginHint(type: string, prefix: string, label = ""): string {
+  const kind = type === "oauth" ? "oauth" : "api key";
+  // The row's label usually already says "API key"; saying it twice is noise.
+  return label.toLowerCase().includes(kind) ? prefix.replace(/ · $/, "") : prefix + kind;
 }
 
 export function menuItems(input: string, ctx: MenuContext): MenuItem[] {
@@ -69,7 +71,7 @@ export function menuItems(input: string, ctx: MenuContext): MenuItem[] {
         .map((l) => ({
           insert: `/login ${l.provider} ${l.type}`,
           label: `${l.provider} · ${l.label}`,
-          hint: loginHint(l.type, "connect · "),
+          hint: loginHint(l.type, "connect · ", l.label),
         }));
     return ctx.models
       .filter((m) => filter(`${m.provider}/${m.id}`))
@@ -91,7 +93,7 @@ export function menuItems(input: string, ctx: MenuContext): MenuItem[] {
       .map((l) => ({
         insert: `/login ${l.provider} ${l.type}`,
         label: `${l.provider} · ${l.label}`,
-        hint: loginHint(l.type, ""),
+        hint: loginHint(l.type, "", l.label),
       }));
   if (cmd === "/session") {
     const rest = input.slice(blank + 1);

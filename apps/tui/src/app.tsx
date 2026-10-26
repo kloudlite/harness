@@ -405,6 +405,16 @@ export function App({
             kind: "info",
             text: "No AI provider connected yet — run /login to connect one.",
           });
+        else {
+          // Some provider works, but the model a prompt would go to may not be one of them: the
+          // first prompt would be accepted and then fail with "No API key found".
+          const m = getSession(sessions, activeKey).model;
+          if (!a.get(m.provider)?.ok)
+            append(activeKey, {
+              kind: "info",
+              text: `${modelLabel(m)} (${m.provider}) has no credentials — pick a connected model with /model, or connect ${m.provider} with /login.`,
+            });
+        }
       })
       .catch(() => {});
     refreshCatalog().then(setModels).catch(() => {});
