@@ -4,7 +4,7 @@ import { spawnSync } from "bun";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { catalog, lacksCredentials, modelLabel, pickConnectedModel, refreshCatalog } from "./models.ts";
+import { catalog, clearUnusable, isAuthRefusal, lacksCredentials, markUnusable, modelLabel, pickConnectedModel, refreshCatalog } from "./models.ts";
 
 // pi's bundled JSON is an offline seed, and every provider is dynamic — so a
 // never-refreshed catalog is pinned to whatever shipped in dist. This is the
@@ -78,4 +78,28 @@ test("pickConnectedModel prefers the fast model of a connected provider and neve
   expect(pickConnectedModel(list, auth, "huggingface")).toEqual({ provider: "huggingface", id: "a-model" });
   expect(pickConnectedModel(list, auth, "amazon-bedrock")).toBeUndefined();
   expect(pickConnectedModel(list, new Map())).toBeUndefined();
+});
+
+test("a provider refused with 401/403 is unusable until a fresh login, and is never picked", () => {
+  const list = [
+    { provider: "deepseek", id: "deepseek-flash" },
+    { provider: "huggingface", id: "a-model" },
+  ] as never;
+  const auth = new Map([["deepseek", { ok: true }], ["huggingface", { ok: true }]]);
+  expect(isAuthRefusal('403 "This authentication method does not have sufficient permissions"')).toBe(true);
+  expect(isAuthRefusal("rate limited")).toBe(false);
+  markUnusable("huggingface");
+  expect(lacksCredentials(auth, "huggingface")).toBe(true);
+  expect(pickConnectedModel(list, auth, "huggingface")).toBeUndefined();
+  clearUnusable("huggingface");
+  expect(lacksCredentials(auth, "huggingface")).toBe(false);
+});
+
+test("pickConnectedModel prefers a fast model over the alphabetical first", () => {
+  const list = [
+    { provider: "huggingface", id: "DeepSeek-R1" },
+    { provider: "huggingface", id: "small-lite" },
+  ] as never;
+  const auth = new Map([["huggingface", { ok: true }]]);
+  expect(pickConnectedModel(list, auth)).toEqual({ provider: "huggingface", id: "small-lite" });
 });

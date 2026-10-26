@@ -20,7 +20,7 @@ import { Spinner } from "./components/Spinner.tsx";
 import { menuItems, placeholders } from "./slash.ts";
 import { fromTeam, wsPath } from "./workspaces.ts";
 import { setTheme, theme, themeNames } from "./theme.ts";
-import { catalog, findModel, lacksCredentials, loadProviderAuth, modelLabel, pickConnectedModel, refreshCatalog } from "./models.ts";
+import { catalog, clearUnusable, findModel, isAuthRefusal, lacksCredentials, markUnusable, loadProviderAuth, modelLabel, pickConnectedModel, refreshCatalog } from "./models.ts";
 import type {
   Ask as BenchAsk,
   BenchEvent,
@@ -756,6 +756,19 @@ export function App({
         if (text) upsert(key, mid, () => ({ kind: "agent", id: mid, text }));
         if (event.type !== "message_end") break;
         const m = msg;
+        if (m.role === "assistant" && m.stopReason === "error" && isAuthRefusal(m.errorMessage ?? "")) {
+          // Connected on paper, refused in practice: stop offering it and move to one that runs.
+          const bad = (m as any).provider ?? getSession(sessions, key).model.provider;
+          markUnusable(bad);
+          void loadProviderAuth().then((a) => {
+            const pick = pickConnectedModel(catalog, a);
+            if (pick && getSession(sessions, key).model.provider === bad) selectModel(pick);
+            append(key, {
+              kind: "info",
+              text: `${bad} is connected but cannot run inference; ${pick ? `now using ${modelLabel(pick)} (${pick.provider}). Change it with /model` : "pick another with /model or reconnect with /login"}.`,
+            });
+          });
+        }
         if (m.role === "assistant" && (m.stopReason === "error" || m.stopReason === "aborted")) {
           append(key, {
             kind: "error",
@@ -1390,6 +1403,7 @@ export function App({
                         setModels(m);
                         // The login is how someone leaves an unconnected model: move to one the new
                         // provider can run, instead of leaving the old selection to fail on the next prompt.
+                        clearUnusable(connected ?? "");
                         const cur = getSession(sessions, activeKey).model;
                         const pick = lacksCredentials(a, cur.provider) ? pickConnectedModel(m, a, connected) : undefined;
                         if (pick) {
