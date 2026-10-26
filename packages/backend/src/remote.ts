@@ -150,6 +150,7 @@ export class RemoteBackend implements Backend {
   models = { refresh: () => this.peer.request<any>("models.refresh", null) };
   auth = {
     providers: () => this.peer.request<any>("auth.providers", null),
+    check: (provider: string) => this.peer.request<any>("auth.check", { provider }),
     login: async (provider: string, type: any, ui: LoginUi) => {
       const lid = String(++this.#lid);
       this.#logins.set(lid, ui);

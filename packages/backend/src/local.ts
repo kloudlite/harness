@@ -15,6 +15,7 @@ import {
   loginProvider,
   models,
   nameSession,
+  checkProviderAuth,
   providerAuth,
   readSettings,
   offered,
@@ -835,6 +836,7 @@ export class LocalBackend implements Backend {
 
   auth = {
     providers: () => providerAuth(),
+    check: (provider: string) => checkProviderAuth(provider),
     login: async (provider: string, type: any, ui: any) => {
       await loginProvider(provider, type, ui);
       this.#broadcast({ type: "auth_changed" });

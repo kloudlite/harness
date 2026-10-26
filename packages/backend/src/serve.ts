@@ -108,6 +108,7 @@ export function serve(backend: Backend, peer: Peer) {
   });
   peer.handle("models.refresh", () => backend.models.refresh());
   peer.handle("auth.providers", () => backend.auth.providers());
+  peer.handle("auth.check", ({ provider }) => backend.auth.check(provider));
   peer.handle("auth.login", ({ lid, provider, type }, signal) =>
     backend.auth.login(provider, type, {
       signal,

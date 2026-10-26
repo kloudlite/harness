@@ -25,14 +25,46 @@ export async function loadProviderAuth(): Promise<Map<string, { ok: boolean; env
 }
 
 /**
- * Providers whose credential resolved but was refused (401/403) this run. A connector can be linked
- * for git and still lack inference rights, and auth keeps listing it as connected, so only a failed
- * request tells. Cleared by a fresh login, which replaces the credential.
+ * Providers whose credential resolved but cannot run inference: refused (401/403) on a request, or
+ * shown to lack the permission by a scope probe. A connector can be linked for git and still lack
+ * inference rights, and auth keeps listing it as connected, so only these two signals tell. A fresh
+ * login replaces the credential and clears the mark.
  */
-const unusable = new Set<string>();
-export const markUnusable = (provider: string) => void unusable.add(provider);
+type Blocked = { reason: string; at: number };
+const unusable = new Map<string, Blocked>();
+export const markUnusable = (provider: string, reason = "the provider refused the request") =>
+  void unusable.set(provider, { reason, at: Date.now() });
 export const isUnusable = (provider: string) => unusable.has(provider);
-export const clearUnusable = (provider: string) => void unusable.delete(provider);
+export const unusableInfo = (provider: string) => unusable.get(provider);
+export const clearUnusable = (provider: string) => {
+  unusable.delete(provider);
+  probed.delete(provider);
+};
+
+/** Providers the scope probe has already judged this run: one probe per credential, cleared by a login. */
+const probed = new Set<string>();
+
+/**
+ * Ask the backend whether each connected provider can run inference, once per credential. A
+ * `blocked` verdict marks it unusable up front, so the first prompt never has to find out.
+ * `force` re-asks (the `/model test` action). Returns the providers it marked.
+ */
+export async function probeProviders(auth: Map<string, { ok: boolean }>, force = false): Promise<string[]> {
+  const marked: string[] = [];
+  await Promise.all(
+    [...auth]
+      .filter(([p, a]) => a.ok && (force || !probed.has(p)))
+      .map(async ([p]) => {
+        probed.add(p);
+        const v = await backend().auth.check(p).catch(() => undefined);
+        if (v?.state === "blocked") {
+          markUnusable(p, v.reason);
+          marked.push(p);
+        } else if (v?.state === "ok") unusable.delete(p);
+      }),
+  );
+  return marked;
+}
 
 /** The model call was refused for want of permission, not for a transient fault. */
 export const isAuthRefusal = (message: string) => /\b(401|403)\b|unauthori[sz]ed|insufficient permissions/i.test(message);

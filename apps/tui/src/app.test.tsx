@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { afterEach, expect, test } from "bun:test";
 import { isCtrlJ } from "./components/Processes.tsx";
 import { testRender } from "@opentui/react/test-utils";
 import type { ToolDef } from "@kloudlite-tui/tools";
@@ -6,6 +6,9 @@ import { setCopier } from "./clipboard.ts";
 import { LocalBackend } from "@kloudlite-tui/backend/local";
 import { backend, boot, hello } from "./hello.ts";
 import { clearUnusable } from "./models.ts";
+
+// a failed test must not leave a provider marked unusable for the ones after it
+afterEach(() => clearUnusable("huggingface"));
 
 // App reads its settings from hello() once at mount, so tests seed them by re-booting.
 // A fresh backend each time: a turn left pending by the previous test (no auth, it never ends)
@@ -989,12 +992,18 @@ test("a 403 marks the provider blocked, switches to a usable one and labels it i
   for (let i = 0; i < 5; i++) await tick();
   await setup.renderOnce();
   expect(setup.captureCharFrame()).toContain("huggingface is connected but cannot run inference; now using");
-  // /model labels the blocked provider's rows
+  // /model shows one actionable row for the blocked provider, not its models
   await setup.mockInput.typeText("/model huggingface");
   await tick();
   await setup.renderOnce();
-  expect(setup.captureCharFrame()).toContain("connected · inference blocked");
-  // picking it anyway: the send guard says why, and keeps the draft
+  const menu = setup.captureCharFrame();
+  expect(menu).toContain("huggingface · connected · inference blocked");
+  expect(menu).toContain("Enter to reconnect");
+  expect(menu).not.toContain("huggingface/deepseek-ai/");
+  // naming a model of it anyway: the send guard says why, and keeps the draft
+  for (let i = 0; i < "huggingface".length; i++) setup.mockInput.pressBackspace();
+  await setup.mockInput.typeText("huggingface/deepseek-ai/DeepSeek-V3.2");
+  await tick();
   setup.mockInput.pressEnter();
   await tick();
   await setup.mockInput.typeText("hi there");
@@ -1160,5 +1169,69 @@ test("manual /model then a 403: the session and the card both switch to a usable
   expect(card).not.toContain("huggingface");
   setup.renderer.destroy();
   clearUnusable("huggingface");
+  boot(real, hello());
+});
+
+// A token that resolves but has no inference permission is found by the scope probe at start, so
+// /model shows it as a blocked, reconnectable provider before any prompt has failed.
+test("scope probe: a provider shown to lack inference rights is blocked up front, and /model test says so", async () => {
+  const real = backend();
+  const wrap = <T extends object>(t: T, over: Partial<T>) =>
+    new Proxy(t, {
+      get: (o: any, p) => (p in over ? (over as any)[p] : typeof o[p] === "function" ? o[p].bind(o) : o[p]),
+    }) as T;
+  let checks = 0;
+  boot(
+    wrap(real, {
+      auth: wrap(real.auth, {
+        providers: async () =>
+          (await real.auth.providers()).map((a) => ({ ...a, ok: a.provider === "huggingface" || a.provider === "deepseek" })),
+        check: async (p: string) => {
+          checks++;
+          return p === "huggingface"
+            ? { state: "blocked" as const, reason: "the token has no Inference Providers permission" }
+            : { state: "unknown" as const };
+        },
+      }),
+    }),
+    { ...hello(), settings: { ...hello().settings, vim: "off" } },
+  );
+  const setup = await testRender(<App />, { width: COLS, height: ROWS, kittyKeyboard: true });
+  for (let i = 0; i < 10; i++) await tick();
+  expect(checks).toBeGreaterThan(0);
+  await setup.mockInput.typeText("/model huggingface");
+  await tick();
+  await setup.renderOnce();
+  const menu = setup.captureCharFrame();
+  expect(menu).toContain("huggingface · connected · inference blocked");
+  expect(menu).toContain("no Inference Providers permission");
+  expect(menu).not.toContain("huggingface/deepseek-ai/");
+  for (let i = 0; i < "/model huggingface".length; i++) setup.mockInput.pressBackspace();
+  await setup.mockInput.typeText("/model test");
+  await tick();
+  setup.mockInput.pressEnter();
+  for (let i = 0; i < 6; i++) await tick();
+  await setup.renderOnce();
+  expect(setup.captureCharFrame()).toContain("Blocked: huggingface (the token has no Inference Providers permission)");
+  setup.renderer.destroy();
+  boot(real, hello());
+});
+
+// An automatic switch stays on screen with the way back; /model undo reverses exactly it.
+test("switch toast: an automatic switch shows /model undo, and undo puts the previous model back", async () => {
+  const { setup, real } = await mountUnconnected(["huggingface"]);
+  const before = setup.captureCharFrame();
+  expect(before).toContain("⇄");
+  expect(before).toContain("/model undo");
+  await setup.mockInput.typeText("/model undo");
+  await tick();
+  setup.mockInput.pressEnter();
+  for (let i = 0; i < 4; i++) await tick();
+  await setup.renderOnce();
+  const after = setup.captureCharFrame();
+  expect(after).toContain("Back on DeepSeek V4.1 Flash (deepseek)");
+  expect(after).not.toContain("⇄");
+  expect(after.split("\n").filter((l) => l.includes("Working Session · ")).pop()).toContain("deepseek");
+  setup.renderer.destroy();
   boot(real, hello());
 });

@@ -20,7 +20,7 @@ import { Spinner } from "./components/Spinner.tsx";
 import { menuItems, placeholders } from "./slash.ts";
 import { fromTeam, wsPath } from "./workspaces.ts";
 import { setTheme, theme, themeNames } from "./theme.ts";
-import { catalog, clearUnusable, findModel, isAuthRefusal, isUnusable, lacksCredentials, markUnusable, loadProviderAuth, modelLabel, pickConnectedModel, refreshCatalog } from "./models.ts";
+import { catalog, clearUnusable, findModel, isAuthRefusal, isUnusable, lacksCredentials, markUnusable, probeProviders, unusableInfo, loadProviderAuth, modelLabel, pickConnectedModel, refreshCatalog } from "./models.ts";
 import type {
   Ask as BenchAsk,
   BenchEvent,
@@ -249,6 +249,13 @@ export function App({
   const agents = useRef(new Map<string, Promise<SessionHandle>>());
   /** The model last picked per session key, so a session that finishes opening later cannot undo it. */
   const picked = useRef(new Map<string, ModelRef>());
+  /** The last automatic model switch, shown for a while with the way back (`/model undo`). */
+  const [toast, setToast] = useState<{ text: string; undo: { key: string; ref: ModelRef } } | null>(null);
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 20000);
+    return () => clearTimeout(t);
+  }, [toast]);
   // ↑/↓ recall position in the active session's history; null = live input
   const [histIdx, setHistIdx] = useState<number | null>(null);
   // interactive prompts (permissions, model questions), oldest first
@@ -399,7 +406,9 @@ export function App({
 
   useEffect(() => {
     loadProviderAuth()
-      .then((a) => {
+      .then(async (a) => {
+        // a provider whose token lacks inference rights is judged now, not on the first prompt
+        await probeProviders(a);
         setAuth(a);
         // First run: no credentials anywhere, so there is no model to send to
         // and an empty /model menu would be the only clue. Say so on arrival —
@@ -414,18 +423,17 @@ export function App({
           // Some provider works, but the model a prompt would go to may not be one of them: the
           // first prompt would be accepted and then fail with "No API key found".
           const m = getSession(sessions, activeKey).model;
-          if (!a.get(m.provider)?.ok) {
+          if (lacksCredentials(a, m.provider)) {
             const pick = pickConnectedModel(catalog, a);
+            const why = isUnusable(m.provider)
+              ? `is connected but cannot run inference (${unusableInfo(m.provider)?.reason})`
+              : "has no credentials";
             if (pick) {
-              selectModel(pick);
-              append(activeKey, {
-                kind: "info",
-                text: `${modelLabel(m)} (${m.provider}) has no credentials; now using ${modelLabel(pick)} (${pick.provider}). Change it with /model.`,
-              });
+              switchModel(activeKey, m, pick, `${modelLabel(m)} (${m.provider}) ${why}; now using ${modelLabel(pick)} (${pick.provider}). Change it with /model.`);
             } else
               append(activeKey, {
                 kind: "info",
-                text: `${modelLabel(m)} (${m.provider}) has no credentials — pick a connected model with /model, or connect ${m.provider} with /login.`,
+                text: `${modelLabel(m)} (${m.provider}) ${why} — pick a connected model with /model, or ${isUnusable(m.provider) ? "reconnect" : "connect"} ${m.provider} with /login.`,
               });
           }
         }
@@ -764,18 +772,17 @@ export function App({
         if (m.role === "assistant" && m.stopReason === "error" && isAuthRefusal(m.errorMessage ?? "")) {
           // Connected on paper, refused in practice: stop offering it and move to one that runs.
           const bad = (m as any).provider ?? getSession(sessionsRef.current, key).model.provider;
-          markUnusable(bad);
+          markUnusable(bad, cleanError(m.errorMessage ?? "").slice(0, 120) || undefined);
           void loadProviderAuth().then((a) => {
             setAuth(a);
             const pick = pickConnectedModel(catalog, a);
             // judged against the model the session is on NOW, not the one this handler was made with,
             // and "now using" is only said once the switch has been applied
-            const switched = !!pick && getSession(sessionsRef.current, key).model.provider === bad;
-            if (switched) selectModel(pick!, key);
-            append(key, {
-              kind: "info",
-              text: `${bad} is connected but cannot run inference; ${switched ? `now using ${modelLabel(pick!)} (${pick!.provider}). Change it with /model` : "pick another with /model or reconnect with /login"}.`,
-            });
+            const from = getSession(sessionsRef.current, key).model;
+            const switched = !!pick && from.provider === bad;
+            const text = `${bad} is connected but cannot run inference; ${switched ? `now using ${modelLabel(pick!)} (${pick!.provider}). Change it with /model` : "pick another with /model or reconnect with /login"}.`;
+            if (switched) switchModel(key, from, pick!, text);
+            else append(key, { kind: "info", text });
           });
         }
         if (m.role === "assistant" && (m.stopReason === "error" || m.stopReason === "aborted")) {
@@ -1020,6 +1027,13 @@ export function App({
 
   /** `steer` interrupts the running turn; otherwise a mid-turn prompt queues. */
   /** Make `ref` this session's model and the saved default. */
+  /** An automatic switch: applied, said in the transcript, and kept on screen with the way back. */
+  function switchModel(key: string, from: ModelRef, to: ModelRef, text: string) {
+    selectModel(to, key);
+    append(key, { kind: "info", text });
+    setToast({ text: `${modelLabel(from)} → ${modelLabel(to)} (${to.provider})`, undo: { key, ref: from } });
+  }
+
   function selectModel(ref: { provider: string; id: string }, key = activeKey) {
     picked.current.set(key, ref);
     setSessions((map) => patchSession(map, key, { model: ref }));
@@ -1103,6 +1117,33 @@ export function App({
       setTheme(name);
       backend().settings.write({ theme: name }).catch(() => {}); // persists across restarts
       setThemeTick((t) => t + 1);
+      return;
+    }
+    if (trimmed === "/model undo") {
+      if (!toast) return append(activeKey, { kind: "info", text: "nothing to undo" });
+      selectModel(toast.undo.ref, toast.undo.key);
+      append(toast.undo.key, { kind: "info", text: `Back on ${modelLabel(toast.undo.ref)} (${toast.undo.ref.provider}).` });
+      setToast(null);
+      return;
+    }
+    if (trimmed === "/model test") {
+      void loadProviderAuth().then(async (a) => {
+        setAuth(a);
+        const connected = [...a].filter(([, v]) => v.ok).map(([p]) => p);
+        await probeProviders(a, true);
+        const bad = connected.filter(isUnusable);
+        append(activeKey, {
+          kind: "info",
+          text: !connected.length
+            ? "No AI provider connected yet — run /login to connect one."
+            : bad.length
+              ? `Blocked: ${bad.map((p) => `${p} (${unusableInfo(p)?.reason})`).join(", ")}. Not blocked: ${connected.filter((p) => !bad.includes(p)).join(", ") || "none"}.`
+              : `No problem found with ${connected.join(", ")}.`,
+        });
+        const cur = getSession(sessionsRef.current, activeKey).model;
+        const pick = lacksCredentials(a, cur.provider) ? pickConnectedModel(catalog, a) : undefined;
+        if (pick) switchModel(activeKey, cur, pick, `${cur.provider} cannot run inference; now using ${modelLabel(pick)} (${pick.provider}).`);
+      });
       return;
     }
     if (trimmed.startsWith("/model ")) {
@@ -1251,10 +1292,14 @@ export function App({
       // Grouped by provider and sorted within it, so a provider's models sit
       // together in the menu's scrolling window. The label is already
       // `provider/id`, so the hint carries the model's display name.
+      blocked: [...auth]
+        .filter(([p, v]) => v.ok && isUnusable(p))
+        .map(([p]) => ({ provider: p, reason: unusableInfo(p)!.reason, ago: ago(unusableInfo(p)!.at) })),
+      canUndo: toast !== null,
       models: [...models]
-        .filter((m) => auth.get(m.provider)?.ok)
+        .filter((m) => auth.get(m.provider)?.ok && !isUnusable(m.provider))
         .sort((a, b) => a.provider.localeCompare(b.provider) || a.id.localeCompare(b.id))
-        .map((m) => ({ provider: m.provider, id: m.id, hint: isUnusable(m.provider) ? `connected · inference blocked — ${m.name}` : m.name })),
+        .map((m) => ({ provider: m.provider, id: m.id, hint: m.name })),
       themes: themeNames,
       logins: hello().logins,
       // this environment's main sessions, newest first
@@ -1313,7 +1358,7 @@ export function App({
         })),
       ],
     }),
-    [auth, models, prefs, envs, env, focus, environment, activeBase, sessionId, baseSessions],
+    [auth, models, prefs, envs, env, focus, environment, activeBase, sessionId, baseSessions, toast],
   );
   const jumpMatches = useMemo(
     () =>
@@ -1420,18 +1465,22 @@ export function App({
                   setLogin(null);
                   if (ok) {
                     Promise.all([loadProviderAuth(), refreshCatalog()])
-                      .then(([a, m]) => {
+                      .then(async ([a, m]) => {
+                        clearUnusable(connected ?? "");
+                        // the new credential may itself lack inference rights: judge it before offering it
+                        await probeProviders(a);
                         setAuth(a);
                         setModels(m);
                         // The login is how someone leaves an unconnected model: move to one the new
                         // provider can run, instead of leaving the old selection to fail on the next prompt.
-                        clearUnusable(connected ?? "");
-                        const cur = getSession(sessions, activeKey).model;
+                        const cur = getSession(sessionsRef.current, activeKey).model;
+                        if (isUnusable(connected ?? ""))
+                          append(activeKey, {
+                            kind: "info",
+                            text: `${connected} is connected but cannot run inference (${unusableInfo(connected ?? "")?.reason}); use a token with the Inference Providers permission.`,
+                          });
                         const pick = lacksCredentials(a, cur.provider) ? pickConnectedModel(m, a, connected) : undefined;
-                        if (pick) {
-                          selectModel(pick);
-                          append(activeKey, { kind: "info", text: `Now using ${modelLabel(pick)} (${pick.provider}).` });
-                        }
+                        if (pick) switchModel(activeKey, cur, pick, `Now using ${modelLabel(pick)} (${pick.provider}).`);
                       })
                       .catch(() => {});
                   }
@@ -1493,6 +1542,11 @@ export function App({
               tight; question/permission panels replace the whole block */}
           {!filesView && !processesView && !planView && !doneView && (
           <box flexDirection="column" flexShrink={0}>
+          {toast && (
+            <box flexShrink={0} paddingLeft={2}>
+              <text fg={theme.muted} selectable={false}>{`⇄ ${toast.text}  ·  /model undo`}</text>
+            </box>
+          )}
           <Plan rows={planAll(Math.max(6, Math.floor(rows * 0.4)))} width={contentWidth} />
           <Queue
             messages={session.queued}

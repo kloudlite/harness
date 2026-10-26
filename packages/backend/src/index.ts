@@ -28,6 +28,8 @@ export type SessionMeta = ReturnType<typeof listSessions>[number];
 export type LiveSessionMeta = SessionMeta & { busy: boolean };
 export type LoginOption = ReturnType<typeof loginOptions>[number];
 export type ProviderAuth = Awaited<ReturnType<typeof providerAuth>>[number];
+export type { ProviderCheck } from "@kloudlite-tui/agent";
+import type { ProviderCheck } from "@kloudlite-tui/agent";
 export type LoginType = Parameters<typeof loginProvider>[1];
 /** pi's `AuthInteraction`: `{ signal?, prompt(p): Promise<string>, notify(e): void }`. */
 export type LoginUi = Parameters<typeof loginProvider>[2];
@@ -216,6 +218,8 @@ export interface Backend {
   models: { refresh(): Promise<CatalogModel[]> };
   auth: {
     providers(): Promise<ProviderAuth[]>;
+    /** Whether a connected provider can run inference (a token scope probe; `unknown` when none exists). */
+    check(provider: string): Promise<ProviderCheck>;
     login(provider: string, type: LoginType, ui: LoginUi): Promise<void>;
   };
   fs: {

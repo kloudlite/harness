@@ -31,6 +31,10 @@ type MenuContext = {
   settings: { key: string; value: string; hint: string }[];
   /** this environment's main sessions, newest first */
   sessions: { id: string; label: string; hint: string }[];
+  /** Connected providers that cannot run inference: one row each, Enter reconnects. Their models are not in `models`. */
+  blocked?: { provider: string; reason: string; ago: string }[];
+  /** `/model test` always; `/model undo` only while an automatic switch can be reverted. */
+  canUndo?: boolean;
 };
 
 export const MENU_MAX = 8;
@@ -65,7 +69,7 @@ export function menuItems(input: string, ctx: MenuContext): MenuItem[] {
     // here rather than an empty menu. Filtering models to connected providers
     // otherwise dead-ends a first run: no models to choose and no sign that
     // /login is what's missing.
-    if (ctx.models.length === 0)
+    if (ctx.models.length === 0 && !ctx.blocked?.length)
       return ctx.logins
         .filter((l) => filter(`${l.provider} ${l.label}`))
         .map((l) => ({
@@ -73,13 +77,33 @@ export function menuItems(input: string, ctx: MenuContext): MenuItem[] {
           label: `${l.provider} · ${l.label}`,
           hint: loginHint(l.type, "connect · ", l.label),
         }));
-    return ctx.models
-      .filter((m) => filter(`${m.provider}/${m.id}`))
-      .map((m) => ({
-        insert: `/model ${m.provider}/${m.id}`,
-        label: `${m.provider}/${m.id}`,
-        hint: m.hint,
-      }));
+    const blocked = (ctx.blocked ?? [])
+      .filter((b) => filter(b.provider))
+      .map((b) => {
+        const login = ctx.logins.filter((l) => l.provider === b.provider).sort((x, y) => +(y.type === "api_key") - +(x.type === "api_key"))[0];
+        return {
+          insert: login ? `/login ${login.provider} ${login.type}` : `/model ${b.provider}`,
+          label: `${b.provider} · connected · inference blocked`,
+          hint: `${b.reason}, ${b.ago} — Enter to reconnect`,
+        };
+      });
+    const actions = ctx.blocked
+      ? [
+          ...(ctx.canUndo ? [{ insert: "/model undo", label: "undo", hint: "go back to the model before the automatic switch" }] : []),
+          { insert: "/model test", label: "test", hint: "check that each connected provider can run inference" },
+        ].filter((a) => filter(a.label))
+      : [];
+    return [
+      ...ctx.models
+        .filter((m) => filter(`${m.provider}/${m.id}`))
+        .map((m) => ({
+          insert: `/model ${m.provider}/${m.id}`,
+          label: `${m.provider}/${m.id}`,
+          hint: m.hint,
+        })),
+      ...blocked,
+      ...actions,
+    ];
   }
   if (cmd === "/theme")
     return ctx.themes.filter(filter).map((name) => ({

@@ -13,6 +13,7 @@ import {
 import type { Api, AuthInteraction, AuthType, Credential, Model } from "@earendil-works/pi-ai";
 import type { Registry } from "@kloudlite-tui/tools";
 import { budgeted, budgetExtension } from "./budget.ts";
+import { checkProvider } from "./provider-check.ts";
 import { guardExtension } from "./guard.ts";
 import { orphansExtension } from "./orphans.ts";
 import { CAVEMAN_SKILL, CODEMODE_SKILL, KLOUDLITE_SKILL, roleSkill, type Role } from "./roles.ts";
@@ -256,6 +257,11 @@ export function withCodemodeExtras(factory: ReturnType<typeof createCodemodeExte
     );
   };
 }
+
+export { hfInference, type ProviderCheck } from "./provider-check.ts";
+
+/** Can this provider run inference? See provider-check.ts. */
+export const checkProviderAuth = (provider: string) => checkProvider(models as never, provider);
 
 /** Auth status for every provider (env keys, stored credentials, ambient). */
 export async function providerAuth(): Promise<ProviderAuth[]> {
