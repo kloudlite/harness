@@ -24,6 +24,11 @@ export async function loadProviderAuth(): Promise<Map<string, { ok: boolean; env
   return new Map(all.map((a) => [a.provider, { ok: a.ok, envKey: a.envKeys[0] }]));
 }
 
+/** A loaded auth map that has no working credential for the provider; an unloaded (empty) one decides nothing. */
+export function lacksCredentials(auth: Map<string, { ok: boolean }>, provider: string): boolean {
+  return auth.size > 0 && !auth.get(provider)?.ok;
+}
+
 export function findModel(ref: ModelRef): CatalogModel | undefined {
   return catalog.find((m) => m.provider === ref.provider && m.id === ref.id);
 }

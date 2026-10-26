@@ -4,7 +4,7 @@ import { spawnSync } from "bun";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { catalog, modelLabel, refreshCatalog } from "./models.ts";
+import { catalog, lacksCredentials, modelLabel, refreshCatalog } from "./models.ts";
 
 // pi's bundled JSON is an offline seed, and every provider is dynamic — so a
 // never-refreshed catalog is pinned to whatever shipped in dist. This is the
@@ -55,4 +55,12 @@ test("a saved default model survives a cold start", () => {
 // the label is what the title bar shows before refresh lands
 test("an unrefreshed model still labels as its id", () => {
   expect(modelLabel({ provider: "deepseek", id: "not-a-real-model" })).toBe("not-a-real-model");
+});
+
+test("lacksCredentials refuses an unconnected provider but not an unloaded auth map", () => {
+  const auth = new Map([["deepseek", { ok: true }], ["amazon-bedrock", { ok: false }]]);
+  expect(lacksCredentials(auth, "amazon-bedrock")).toBe(true);
+  expect(lacksCredentials(auth, "unlisted")).toBe(true);
+  expect(lacksCredentials(auth, "deepseek")).toBe(false);
+  expect(lacksCredentials(new Map(), "amazon-bedrock")).toBe(false);
 });

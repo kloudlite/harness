@@ -20,7 +20,7 @@ import { Spinner } from "./components/Spinner.tsx";
 import { menuItems, placeholders } from "./slash.ts";
 import { fromTeam, wsPath } from "./workspaces.ts";
 import { setTheme, theme, themeNames } from "./theme.ts";
-import { catalog, findModel, loadProviderAuth, modelLabel, refreshCatalog } from "./models.ts";
+import { catalog, findModel, lacksCredentials, loadProviderAuth, modelLabel, refreshCatalog } from "./models.ts";
 import type {
   Ask as BenchAsk,
   BenchEvent,
@@ -1128,6 +1128,17 @@ export function App({
     // queueing — steer() is the explicit verb for that, so pick it here from
     // the target session's own busy flag, not the visible one's: the user may
     // be looking at a different session than the one they are prompting.
+    // A model whose provider has no credentials fails the turn only after it is sent; say so now and
+    // keep the draft. An unloaded auth map (size 0) decides nothing.
+    const cur = getSession(sessions, activeKey).model;
+    if (lacksCredentials(auth, cur.provider)) {
+      setInput(text);
+      append(activeKey, {
+        kind: "error",
+        text: `${modelLabel(cur)} (${cur.provider}) has no credentials — pick a connected model with /model, or connect ${cur.provider} with /login. Your message was not sent.`,
+      });
+      return;
+    }
     const key = activeKey;
     const streaming = getSession(sessions, key).busy;
     const sent = images;
