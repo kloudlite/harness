@@ -244,6 +244,8 @@ export function App({
   });
   // Live agent sessions, one per session key (created lazily on first prompt).
   const agents = useRef(new Map<string, Promise<SessionHandle>>());
+  /** The model last picked per session key, so a session that finishes opening later cannot undo it. */
+  const picked = useRef(new Map<string, ModelRef>());
   // ↑/↓ recall position in the active session's history; null = live input
   const [histIdx, setHistIdx] = useState<number | null>(null);
   // interactive prompts (permissions, model questions), oldest first
@@ -892,7 +894,15 @@ export function App({
           handleAgentEvent(key, event);
         });
         // a turn that outlived the previous client is still going: show it as such
-        setSessions((map) => patchSession(map, key, { ...applyState(agent.state), busy: agent.busy }));
+        setSessions((map) =>
+          patchSession(map, key, {
+            ...applyState(agent.state),
+            busy: agent.busy,
+            // a model picked while the session was still opening (the startup repair) outranks the
+            // one the daemon opened it with; selectModel's setModel reaches the daemon right after
+            ...(picked.current.get(key) && { model: picked.current.get(key)! }),
+          }),
+        );
         if (!opts?.fresh) restoreTranscript(key, agent);
         return agent;
       });
@@ -962,7 +972,9 @@ export function App({
     const { entries, history } = transcript(agent.messages, agent.busy, toolSummary);
     setSessions((map) =>
       patchSession(map, key, (s) => ({
-        entries: foldRetries(entries),
+        // notices that arrived before the session finished opening (the startup model notice) are
+        // not in the daemon's messages; the first restore must not wipe them
+        entries: [...foldRetries(entries), ...(s.restored ? [] : s.entries)],
         history: s.history.length ? s.history : history,
         restored: true,
       })),
@@ -1003,6 +1015,7 @@ export function App({
   /** `steer` interrupts the running turn; otherwise a mid-turn prompt queues. */
   /** Make `ref` this session's model and the saved default. */
   function selectModel(ref: { provider: string; id: string }) {
+    picked.current.set(activeKey, ref);
     setSessions((map) => patchSession(map, activeKey, { model: ref }));
     backend().settings.write({ defaultModel: ref }).catch(() => {}); // persists across restarts
     setDefaultModel(ref);

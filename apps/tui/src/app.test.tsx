@@ -1022,6 +1022,16 @@ async function mountUnconnected(connected: string[]) {
   return { setup, real };
 }
 
+test("start repair: an unconnected saved model is replaced by a connected one, and the notice survives the session opening", async () => {
+  const { setup, real } = await mountUnconnected(["huggingface"]);
+  const frame = setup.captureCharFrame();
+  expect(frame).toContain("has no credentials; now using");
+  // the prompt card follows the repair, even though the session opened on the old model
+  expect(frame).toContain("Working Session · DeepSeek V4 Flash huggingface");
+  setup.renderer.destroy();
+  boot(real, hello());
+});
+
 test("prompt refusal: with nothing usable the message is not sent and stays in the prompt", async () => {
   const { setup, real } = await mountUnconnected(["none"]);
   await setup.mockInput.typeText("hello world");
@@ -1032,5 +1042,61 @@ test("prompt refusal: with nothing usable the message is not sent and stays in t
   expect(frame).toContain("Your message was not sent");
   expect(frame).toContain("hello world");
   setup.renderer.destroy();
+  boot(real, hello());
+});
+
+// The whole repair chain on one session: start moves off an unconnected model, a 403 leaves the
+// only connected provider blocked, and connecting another provider moves the session onto it.
+test("login repair: connecting a provider moves a session off an unusable one", async () => {
+  const real = backend();
+  let fire: (e: any) => void = () => {};
+  let loggedIn = false;
+  const wrap = <T extends object>(t: T, over: Partial<T>) =>
+    new Proxy(t, {
+      get: (o: any, p) => (p in over ? (over as any)[p] : typeof o[p] === "function" ? o[p].bind(o) : o[p]),
+    }) as T;
+  boot(
+    wrap(real, {
+      auth: wrap(real.auth, {
+        providers: async () =>
+          (await real.auth.providers()).map((a) => ({
+            ...a,
+            ok: a.provider === "huggingface" || (loggedIn && a.provider === "deepseek"),
+          })),
+        login: async () => {
+          loggedIn = true;
+        },
+      }),
+      session: async (key, opts) => {
+        const h = await real.session(key, opts);
+        return wrap(h, { subscribe: (cb) => ((fire = cb as any), h.subscribe(cb)) });
+      },
+    }),
+    { ...hello(), settings: { ...hello().settings, vim: "off" } },
+  );
+  const setup = await testRender(<App />, { width: COLS, height: ROWS, kittyKeyboard: true });
+  for (let i = 0; i < 10; i++) await tick();
+  fire({
+    type: "message_end",
+    message: {
+      role: "assistant",
+      timestamp: 2,
+      content: [],
+      stopReason: "error",
+      provider: "huggingface",
+      errorMessage: '403 "This authentication method does not have sufficient permissions"',
+    },
+  });
+  for (let i = 0; i < 5; i++) await tick();
+  await setup.mockInput.typeText("/login deepseek api_key");
+  await tick();
+  setup.mockInput.pressEnter();
+  for (let i = 0; i < 15; i++) await tick();
+  await setup.renderOnce();
+  const frame = setup.captureCharFrame();
+  expect(frame).toContain("Now using DeepSeek V4.1 Flash (deepseek)");
+  expect(frame).toContain("DeepSeek V4.1 Flash deepseek");
+  setup.renderer.destroy();
+  clearUnusable("huggingface");
   boot(real, hello());
 });
