@@ -20,7 +20,7 @@ import { Spinner } from "./components/Spinner.tsx";
 import { menuItems, placeholders } from "./slash.ts";
 import { fromTeam, wsPath } from "./workspaces.ts";
 import { setTheme, theme, themeNames } from "./theme.ts";
-import { catalog, findModel, lacksCredentials, loadProviderAuth, modelLabel, refreshCatalog } from "./models.ts";
+import { catalog, findModel, lacksCredentials, loadProviderAuth, modelLabel, pickConnectedModel, refreshCatalog } from "./models.ts";
 import type {
   Ask as BenchAsk,
   BenchEvent,
@@ -409,11 +409,20 @@ export function App({
           // Some provider works, but the model a prompt would go to may not be one of them: the
           // first prompt would be accepted and then fail with "No API key found".
           const m = getSession(sessions, activeKey).model;
-          if (!a.get(m.provider)?.ok)
-            append(activeKey, {
-              kind: "info",
-              text: `${modelLabel(m)} (${m.provider}) has no credentials — pick a connected model with /model, or connect ${m.provider} with /login.`,
-            });
+          if (!a.get(m.provider)?.ok) {
+            const pick = pickConnectedModel(catalog, a);
+            if (pick) {
+              selectModel(pick);
+              append(activeKey, {
+                kind: "info",
+                text: `${modelLabel(m)} (${m.provider}) has no credentials; now using ${modelLabel(pick)} (${pick.provider}). Change it with /model.`,
+              });
+            } else
+              append(activeKey, {
+                kind: "info",
+                text: `${modelLabel(m)} (${m.provider}) has no credentials — pick a connected model with /model, or connect ${m.provider} with /login.`,
+              });
+          }
         }
       })
       .catch(() => {});
@@ -978,6 +987,14 @@ export function App({
   }
 
   /** `steer` interrupts the running turn; otherwise a mid-turn prompt queues. */
+  /** Make `ref` this session's model and the saved default. */
+  function selectModel(ref: { provider: string; id: string }) {
+    setSessions((map) => patchSession(map, activeKey, { model: ref }));
+    backend().settings.write({ defaultModel: ref }).catch(() => {}); // persists across restarts
+    setDefaultModel(ref);
+    agents.current.get(activeKey)?.then((a) => a.setModel(ref)).catch(() => {});
+  }
+
   function submit(text: string, steer = false) {
     if (palette) {
       setPalette(false);
@@ -1059,12 +1076,7 @@ export function App({
       const ref = trimmed.slice(7).trim();
       const slash = ref.indexOf("/");
       if (slash > 0) {
-        const provider = ref.slice(0, slash);
-        const id = ref.slice(slash + 1);
-        setSessions((map) => patchSession(map, activeKey, { model: { provider, id } }));
-        backend().settings.write({ defaultModel: { provider, id } }).catch(() => {}); // persists across restarts
-        setDefaultModel({ provider, id });
-        agents.current.get(activeKey)?.then((a) => a.setModel({ provider, id })).catch(() => {});
+        selectModel({ provider: ref.slice(0, slash), id: ref.slice(slash + 1) });
       }
       return;
     }
@@ -1369,10 +1381,23 @@ export function App({
                 provider={login.provider}
                 type={login.type}
                 onDone={(ok) => {
+                  const connected = login.provider;
                   setLogin(null);
                   if (ok) {
-                    loadProviderAuth().then(setAuth).catch(() => {});
-                    refreshCatalog().then(setModels).catch(() => {});
+                    Promise.all([loadProviderAuth(), refreshCatalog()])
+                      .then(([a, m]) => {
+                        setAuth(a);
+                        setModels(m);
+                        // The login is how someone leaves an unconnected model: move to one the new
+                        // provider can run, instead of leaving the old selection to fail on the next prompt.
+                        const cur = getSession(sessions, activeKey).model;
+                        const pick = lacksCredentials(a, cur.provider) ? pickConnectedModel(m, a, connected) : undefined;
+                        if (pick) {
+                          selectModel(pick);
+                          append(activeKey, { kind: "info", text: `Now using ${modelLabel(pick)} (${pick.provider}).` });
+                        }
+                      })
+                      .catch(() => {});
                   }
                 }}
               />

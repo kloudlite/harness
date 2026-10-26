@@ -4,7 +4,7 @@ import { spawnSync } from "bun";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { catalog, lacksCredentials, modelLabel, refreshCatalog } from "./models.ts";
+import { catalog, lacksCredentials, modelLabel, pickConnectedModel, refreshCatalog } from "./models.ts";
 
 // pi's bundled JSON is an offline seed, and every provider is dynamic — so a
 // never-refreshed catalog is pinned to whatever shipped in dist. This is the
@@ -63,4 +63,19 @@ test("lacksCredentials refuses an unconnected provider but not an unloaded auth 
   expect(lacksCredentials(auth, "unlisted")).toBe(true);
   expect(lacksCredentials(auth, "deepseek")).toBe(false);
   expect(lacksCredentials(new Map(), "amazon-bedrock")).toBe(false);
+});
+
+test("pickConnectedModel prefers the fast model of a connected provider and never an unconnected one", () => {
+  const list = [
+    { provider: "amazon-bedrock", id: "nova-2-lite" },
+    { provider: "deepseek", id: "deepseek-chat" },
+    { provider: "deepseek", id: "deepseek-flash" },
+    { provider: "huggingface", id: "a-model" },
+  ] as never;
+  const auth = new Map([["deepseek", { ok: true }], ["huggingface", { ok: true }], ["amazon-bedrock", { ok: false }]]);
+  expect(pickConnectedModel(list, auth, "deepseek")).toEqual({ provider: "deepseek", id: "deepseek-flash" });
+  expect(pickConnectedModel(list, auth)).toEqual({ provider: "deepseek", id: "deepseek-flash" });
+  expect(pickConnectedModel(list, auth, "huggingface")).toEqual({ provider: "huggingface", id: "a-model" });
+  expect(pickConnectedModel(list, auth, "amazon-bedrock")).toBeUndefined();
+  expect(pickConnectedModel(list, new Map())).toBeUndefined();
 });

@@ -29,6 +29,22 @@ export function lacksCredentials(auth: Map<string, { ok: boolean }>, provider: s
   return auth.size > 0 && !auth.get(provider)?.ok;
 }
 
+/**
+ * A model a connected provider can run: the one the harness prefers when it is there (fast and
+ * cheap), else the first by name. `provider` limits the pick to a provider just connected.
+ */
+export function pickConnectedModel(
+  list: readonly CatalogModel[],
+  auth: Map<string, { ok: boolean }>,
+  provider?: string,
+): ModelRef | undefined {
+  const ok = list.filter((m) => auth.get(m.provider)?.ok && (!provider || m.provider === provider));
+  const best =
+    ["deepseek-v4-flash", "deepseek-flash"].map((id) => ok.find((m) => m.id === id)).find(Boolean) ??
+    [...ok].sort((a, b) => a.provider.localeCompare(b.provider) || a.id.localeCompare(b.id))[0];
+  return best && { provider: best.provider, id: best.id };
+}
+
 export function findModel(ref: ModelRef): CatalogModel | undefined {
   return catalog.find((m) => m.provider === ref.provider && m.id === ref.id);
 }
