@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { addTask, blockers, markRunning, boardTools, boardText, ready, readTasks, taskTools, tasksFile, updateTask } from "./tasks.ts";
+import { addTask, blockers, markRunning, boardText, ready, readTasks, taskTools, tasksFile, updateTask } from "./tasks.ts";
 
 const tmp = () => join(mkdtempSync(join(tmpdir(), "kl-tasks-")), "tasks.json");
 
@@ -62,35 +62,37 @@ test("two sessions' boards are separate", async () => {
   const d = mkdtempSync(join(tmpdir(), "kl-boards-"));
   const [add] = taskTools(tasksFile("main", d));
   const [wsAdd] = taskTools(tasksFile("ws-a:agent-1", d));
-  await add!.run({ title: "m" });
-  await wsAdd!.run({ title: "w1" });
-  await wsAdd!.run({ title: "w2" });
+  await add!.run({ action: "add", title: "m" });
+  await wsAdd!.run({ action: "add", title: "w1" });
+  await wsAdd!.run({ action: "add", title: "w2" });
   expect(readTasks(join(d, "main.json")).map((t) => t.title)).toEqual(["m"]);
   expect(readTasks(join(d, "ws-a.json")).map((t) => [t.id, t.title])).toEqual([["T1", "w1"], ["T2", "w2"]]);
 });
 
-test("workspace_tasks reads one board, all boards, a missing board, never main", async () => {
+test("task list with workspace reads one board, all boards, a missing board, never main", async () => {
   const d = mkdtempSync(join(tmpdir(), "kl-boards-"));
-  await taskTools(tasksFile("main", d))[0]!.run({ title: "m" });
-  await taskTools(tasksFile("ws-a", d))[0]!.run({ title: "a1" });
-  await taskTools(tasksFile("ws-b", d))[0]!.run({ title: "b1" });
-  const [t] = boardTools(d);
+  await taskTools(tasksFile("main", d))[0]!.run({ action: "add", title: "m" });
+  await taskTools(tasksFile("ws-a", d))[0]!.run({ action: "add", title: "a1" });
+  await taskTools(tasksFile("ws-b", d))[0]!.run({ action: "add", title: "b1" });
+  const [t] = taskTools(tasksFile("main", d), d);
   const titles = (r: string) => JSON.parse(r).map((b: any) => [b.workspace, b.tasks.map((x: any) => x.title)]);
-  expect(titles(await t!.run({ workspace: "ws-a:agent-1" }))).toEqual([["ws-a:agent-1", ["a1"]]]);
-  expect(titles(await t!.run({}))).toEqual([["ws-a", ["a1"]], ["ws-b", ["b1"]]]);
-  expect(titles(await t!.run({ workspace: "ws-zzz" }))).toEqual([["ws-zzz", []]]);
+  expect(titles(await t!.run({ action: "list", workspace: "ws-a:agent-1" }))).toEqual([["ws-a:agent-1", ["a1"]]]);
+  expect(titles(await t!.run({ action: "list", workspace: "*" }))).toEqual([["ws-a", ["a1"]], ["ws-b", ["b1"]]]);
+  expect(titles(await t!.run({ action: "list", workspace: "ws-zzz" }))).toEqual([["ws-zzz", []]]);
 });
 
-test("task_update refuses done without summary or verified, and an over-long summary", async () => {
+test("task update refuses done without summary or verified, and an over-long summary", async () => {
   const f = tmp();
   addTask(f, { title: "a" });
-  const upd = taskTools(f)[1]!;
-  expect(await upd.run({ id: "T1", state: "done" })).toContain("summary");
-  expect(await upd.run({ id: "T1", state: "done", summary: "did it" })).toContain("verified");
-  expect(await upd.run({ id: "T1", state: "done", summary: "did it", verified: "  " })).toContain("verified");
-  expect(await upd.run({ id: "T1", summary: "x".repeat(2001) })).toContain("2000");
+  const task = taskTools(f)[0]!;
+  // a refusal is a thrown error now (the tool failed); the message is what the model reads
+  const upd = { run: (i: any) => task.run(i).catch((e: Error) => e.message) };
+  expect(await upd.run({ action: "update", id: "T1", state: "done" })).toContain("summary");
+  expect(await upd.run({ action: "update", id: "T1", state: "done", summary: "did it" })).toContain("verified");
+  expect(await upd.run({ action: "update", id: "T1", state: "done", summary: "did it", verified: "  " })).toContain("verified");
+  expect(await upd.run({ action: "update", id: "T1", summary: "x".repeat(2001) })).toContain("2000");
   expect(readTasks(f)[0]!.state).toBe("queued");
-  expect(await upd.run({ id: "T1", state: "done", summary: "did it", verified: "bun test: pass" })).toContain("[done]");
+  expect(await upd.run({ action: "update", id: "T1", state: "done", summary: "did it", verified: "bun test: pass" })).toContain("[done]");
   expect(readTasks(f)[0]).toMatchObject({ state: "done", summary: "did it", verified: "bun test: pass" });
 });
 
@@ -106,12 +108,12 @@ test("markRunning marks a queued task when nothing runs; refuses otherwise", () 
   expect(markRunning(f, "T9")).toBe(false);
 });
 
-test("task_update clears the watcher's mark", async () => {
+test("task update clears the watcher's mark", async () => {
   const f = tmp();
   addTask(f, { title: "a" });
   markRunning(f, "T1");
-  const update = taskTools(f).find((t) => t.name === "task_update")!;
-  await update.run({ id: "T1", note: "mine" });
+  const update = taskTools(f)[0]!;
+  await update.run({ action: "update", id: "T1", note: "mine" });
   expect(readTasks(f)[0]!.by).toBeUndefined();
   expect(boardText(readTasks(f))).not.toContain("(watcher)");
 });

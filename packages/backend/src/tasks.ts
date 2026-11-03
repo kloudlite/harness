@@ -6,7 +6,7 @@
 import { mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { guarded, type ToolDef } from "@kloudlite-tui/tools";
+import { resource, type ToolDef } from "@kloudlite-tui/tools";
 import type { BoardTask, TaskState } from "./index.ts";
 
 export const tasksDir = () => join(homedir(), ".kl", "tasks");
@@ -136,55 +136,44 @@ function refuseDone(cur: BoardTask | undefined, p: { state?: TaskState; summary?
 
 const STR = { type: "string" };
 const DEPS = { type: "array", items: STR };
+const PRIORITY = { type: "integer", minimum: 0, description: "Lower runs first (default 3)." };
 
-export function taskTools(file: string): ToolDef[] {
-  const add: ToolDef = {
-    name: "task_add",
-    description: "Add a task to your own board. A lower priority number runs first. The default is 3. `depends_on` lists the ids of tasks that must be done first. Returns the task line.",
-    inputSchema: { type: "object", properties: { title: STR, priority: { type: "integer", minimum: 0, description: "Lower runs first." }, depends_on: DEPS, note: STR }, required: ["title"] },
-    async run(i: { title: string; priority?: number; depends_on?: string[]; note?: string }) {
-      const r = addTask(file, { title: i.title, priority: i.priority, dependsOn: i.depends_on, note: i.note });
-      return typeof r === "string" ? r : line(readTasks(file), r);
-    },
-  };
-  const update: ToolDef = {
-    name: "task_update",
-    description: "Change a task. Set a task running before you start it and done as soon as its check passes, not all at the end: the board is how the person follows your work. You can change the title, the priority, `depends_on`, the state, the note, the summary or the verified check. To set the state to done, give `summary` (what changed and where, at most 2000 characters) and `verified` (the check that passed, with its result). The tool refuses a done task without both. The tool refuses a dependency loop or an unknown id. Then the board does not change. Returns the task line.",
-    inputSchema: { type: "object", properties: { id: STR, title: STR, priority: { type: "integer", minimum: 0, description: "Lower runs first." }, depends_on: DEPS, state: { type: "string", enum: STATES }, note: STR, summary: STR, verified: STR }, required: ["id"] },
-    async run(i: { id: string; title?: string; priority?: number; depends_on?: string[]; state?: TaskState; note?: string; summary?: string; verified?: string }) {
-      const { id, depends_on, ...rest } = i;
-      const no = refuseDone(readTasks(file).find((t) => t.id === id), rest);
-      if (no) return no;
-      const r = updateTask(file, id, { ...rest, dependsOn: depends_on });
-      return typeof r === "string" ? r : line(readTasks(file), r);
-    },
-  };
-  const list: ToolDef = {
-    name: "task_list",
-    description: "Show the task board. It lists your open tasks, with what each task waits on. At the end it gives the count of done tasks.",
-    inputSchema: { type: "object", properties: {} },
-    async run() {
-      return boardText(readTasks(file));
-    },
-  };
-  // a priority of 2.5 or -1 is refused here, not stored
-  return [add, update, list].map((t) => ({ ...t, run: guarded(t.inputSchema, (a) => t.run(a)) }));
-}
-
-/** Main's window onto the workspaces' own boards. Read only: a message never moves a task on another
- * session's board, so there is no writer here. */
-export function boardTools(dir = tasksDir()): ToolDef[] {
+/** The one `task` tool over a session's own board. With `boards` (main and the laptop door) `list` can also
+ * read the workspaces' boards: read only, since a message never moves a task on another session's board. */
+export function taskTools(file: string, boards?: string): ToolDef[] {
+  const own = !!boards;
   return [
-    {
-      name: "workspace_tasks",
-      description: "Show the task board of a workspace session. Each workspace keeps its own board. Use it to see the progress of work you asked for. You cannot change it.",
-      inputSchema: { type: "object", properties: { workspace: { type: "string", description: "The workspace id (`ws-…`). Leave it out to get every workspace board." } } },
-      async run(i: { workspace?: string }) {
-        const boards = i.workspace
-          ? [{ workspace: i.workspace, tasks: readTasks(tasksFile(i.workspace, dir)) }]
-          : readBoards(dir).filter((b) => b.session !== "main").map((b) => ({ workspace: b.session, tasks: b.tasks }));
-        return JSON.stringify(boards);
+    resource("task", "Your own task board, how the person follows your work. Actions: list, add, update. Set a task running before you start it and done as soon as its check passes.", {
+      list: {
+        properties: own ? { workspace: { type: "string", description: "A workspace id: show its board instead (`*` for every workspace's). You cannot change it." } } : {},
+        required: [],
+        async run(i: { workspace?: string }) {
+          if (!boards || !i.workspace) return boardText(readTasks(file));
+          const out = i.workspace !== "*"
+            ? [{ workspace: i.workspace, tasks: readTasks(tasksFile(i.workspace, boards)) }]
+            : readBoards(boards).filter((b) => b.session !== "main").map((b) => ({ workspace: b.session, tasks: b.tasks }));
+          return JSON.stringify(out);
+        },
       },
-    },
+      add: {
+        properties: { title: STR, priority: PRIORITY, depends_on: DEPS, note: STR },
+        required: ["title"],
+        async run(i: { title: string; priority?: number; depends_on?: string[]; note?: string }) {
+          const r = addTask(file, { title: i.title, priority: i.priority, dependsOn: i.depends_on, note: i.note });
+          return typeof r === "string" ? r : line(readTasks(file), r);
+        },
+      },
+      update: {
+        properties: { id: STR, title: STR, priority: PRIORITY, depends_on: DEPS, state: { type: "string", enum: STATES }, note: STR, summary: { type: "string", description: "Done only: what changed and where (at most 2000 characters)." }, verified: { type: "string", description: "Done only: the check that passed, with its result." } },
+        required: ["id"],
+        async run(i: { id: string; title?: string; priority?: number; depends_on?: string[]; state?: TaskState; note?: string; summary?: string; verified?: string }) {
+          const { id, depends_on, ...rest } = i;
+          const no = refuseDone(readTasks(file).find((t) => t.id === id), rest);
+          if (no) return no;
+          const r = updateTask(file, id, { ...rest, dependsOn: depends_on });
+          return typeof r === "string" ? r : line(readTasks(file), r);
+        },
+      },
+    }),
   ];
 }

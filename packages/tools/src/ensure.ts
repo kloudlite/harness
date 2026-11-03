@@ -34,7 +34,7 @@ async function wake(
   if (ready(d)) return;
   // idle_since is present only while desired Running but idle-stopped; a person's stop never has it
   if (d?.idle_since) await api("POST", `${path}/start`);
-  else if (d?.state === "stopped") throw new Error(`${id} is stopped; start it with \`${kind === "workspaces" ? "workspace_start" : "env_start"}\``);
+  else if (d?.state === "stopped") throw new Error(`${id} is stopped; start it with \`${kind === "workspaces" ? "workspace" : "env"}\` action start`);
   const until = Date.now() + (o.timeoutMs ?? TIMEOUT_MS);
   let failed = false;
   for (;;) {
@@ -55,7 +55,7 @@ async function wake(
   }
 }
 
-// workspaces report `ready`, environments `running` (see workspace_get / env_get)
+// workspaces report `ready`, environments `running` (see `workspace get` / `env get`)
 const ready = (d: any) => d?.ready === true || d?.state === "ready" || d?.state === "running";
 // the doc names its conditions as ConditionDoc { ready, reason, message } under these keys
 const reason = (d: any) =>

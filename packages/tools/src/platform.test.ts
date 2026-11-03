@@ -33,7 +33,30 @@ afterEach(() => {
 });
 
 const json = (v: unknown, status = 200) => () => new Response(JSON.stringify(v), { status });
-const tool = (tools: ReturnType<typeof platformTools>, n: string) => tools.find((t) => t.name === n)!;
+/** The old per-verb tool names, as {tool, action} calls on the folded tools: the cases below keep their wording. */
+const tool = (tools: ReturnType<typeof platformTools>, n: string) => {
+  const exact = tools.find((t) => t.name === n);
+  if (exact) return exact;
+  const over: Record<string, [string, string, ((i: any) => any)?]> = {
+    pipeline_version_delete: ["pipeline", "delete"],
+    workspace_env_get: ["workspace_vars", "get"],
+    workspace_env_set: ["workspace_vars", "set"],
+  };
+  if (over[n]) {
+    const [tn, action] = over[n]!;
+    const t = tools.find((x) => x.name === tn)!;
+    return { ...t, name: n, run: (i: any) => t.run({ action, ...i }) };
+  }
+  const r = tools.filter((t) => n.startsWith(t.name + "_")).sort((a, b) => b.name.length - a.name.length)[0];
+  if (!r) throw new Error(`no tool ${n}`);
+  const action = n.slice(r.name.length + 1);
+  const tweak: Record<string, (i: any) => any> = {
+    session_connect: (i) => ({ action: "use", environment: i.environment }),
+    session_disconnect: () => ({ action: "use", environment: null }),
+    workspace_clone: ({ workspace, ...i }) => ({ action: "create", source: workspace, ...i }),
+  };
+  return { ...r, name: n, run: (i: any) => r.run(tweak[n] ? tweak[n]!(i ?? {}) : { action, ...(i ?? {}) }) };
+};
 
 test("api reads the token file on every call, reports unavailable, 204 and errors", async () => {
   routes["GET /x"] = json({ a: 1 });
@@ -62,16 +85,25 @@ test("packages_add merges by attr, packages_remove errors on unknown", async () 
   expect(calls.length).toBe(n + 1); // the GET only, no PATCH
 });
 
-test("main keeps packages_list only; a workspace stops itself with no workspace param", async () => {
-  const names = platformTools("main").map((x) => x.name);
-  for (const n of ["packages_add", "packages_remove", "packages_update", "intercept", "release"]) expect(names).not.toContain(n);
-  expect(names).toContain("packages_list");
+test("a workspace session has the slice its token reaches, folded; main keeps today's subset and all adds the workspace-only tools", async () => {
+  const slice = platformTools("workspace", "w1");
+  expect(slice.map((x) => x.name)).toEqual(["workspace", "env", "session", "service", "packages", "intercept", "release"]);
+  const actions = (t: ReturnType<typeof platformTools>, n: string) => (tool(t, n).inputSchema as any).properties.action.enum;
+  expect(actions(slice, "workspace")).toEqual(["stop", "snapshot"]);
+  expect(actions(slice, "env")).toEqual(["get", "wait"]);
+  expect(actions(slice, "session")).toEqual(["current"]);
+  expect(actions(platformTools("workspace", "w1", 5000, true), "workspace")).toEqual(["snapshot"]);
+  const main = platformTools("main");
+  expect(actions(main, "packages")).toEqual(["list"]);
+  expect(main.map((x) => x.name)).not.toContain("intercept");
+  expect(main.map((x) => x.name)).not.toContain("release");
+  expect(actions(platformTools("all"), "packages")).toEqual(["list", "add", "remove", "update"]);
   routes["POST /v1/workspaces/w1/stop"] = json({}, 202);
-  const stop = tool(platformTools("workspace", "w1"), "workspace_stop");
-  expect((stop.inputSchema as any).properties).toEqual({});
+  const stop = tool(slice, "workspace_stop");
+  expect((tool(slice, "workspace").inputSchema as any).properties.workspace).toBeUndefined();
   await stop.run({});
   expect(calls.at(-1)!.url).toBe("/v1/workspaces/w1/stop");
-  expect(((tool(platformTools("main"), "workspace_stop").inputSchema as any).required)).toEqual(["workspace"]);
+  await expect(tool(main, "workspace_stop").run({})).rejects.toThrow("`workspace` is required");
 });
 
 test("service add/update/remove PATCH the whole list; duplicates and strangers error", async () => {
@@ -114,13 +146,9 @@ test("workspace sessions default env through the workspace's session", async () 
   expect(t.some((x) => x.name === "workspace_create")).toBe(false);
 });
 
-test("the bench offers session_current only: a bench belongs to its session and never joins", () => {
-  for (const kind of ["main", "all", "workspace"] as const) {
-    const names = platformTools(kind, "w1").map((x) => x.name);
-    expect(names).toContain("session_current");
-    expect(names).not.toContain("session_use");
-    expect(names).not.toContain("session_clear");
-  }
+test("the bench offers session current and use: a bench belongs to its session and never joins another", () => {
+  for (const kind of ["main", "all"] as const) expect((tool(platformTools(kind, "w1"), "session").inputSchema as any).properties.action.enum).toEqual(expect.arrayContaining(["current", "use", "create"]));
+  expect((tool(platformTools("workspace", "w1"), "session").inputSchema as any).properties.action.enum).toEqual(["current"]);
 });
 
 test("session_current shows the workspace's own session; the bench's is its KL_SESSION", async () => {
@@ -135,20 +163,23 @@ test("session_current shows the workspace's own session; the bench's is its KL_S
   expect(await tool(t, "session_current").run({})).toContain("ended");
 });
 
-test("session_connect and session_disconnect are the bench's only; a workspace cannot change its session", async () => {
-  expect(platformTools("workspace", "w1").map((x) => x.name)).not.toContain("session_connect");
+test("session use sets or clears the bench's environment (null disconnects) and refuses another session", async () => {
   const t = platformTools("main");
-  expect(t.map((x) => x.name)).toContain("session_connect");
-  expect(t.map((x) => x.name)).toContain("session_disconnect");
   delete process.env.KL_SESSION;
   expect(await tool(t, "session_connect").run({ environment: "e2" })).toContain("no session");
   process.env.KL_SESSION = "ses-1";
+  routes["GET /v1/sessions/ses-1"] = json({ id: "ses-1", name: "main", environment: "e2" });
   routes["PUT /v1/sessions/ses-1/environment"] = json({ id: "ses-1", name: "main", environment: "e2" });
   expect(JSON.parse(await tool(t, "session_connect").run({ environment: "e2" }))).toEqual({ id: "ses-1", name: "main", environment: "e2" });
   expect(calls.at(-1)!.body).toEqual({ environment: "e2" });
   routes["PUT /v1/sessions/ses-1/environment"] = json({ id: "ses-1", name: "main", environment: null });
   expect(JSON.parse(await tool(t, "session_disconnect").run({}))).toEqual({ id: "ses-1", name: "main", environment: null });
   expect(calls.at(-1)!.body).toEqual({ environment: null });
+  // absent keeps; another session's name is refused
+  const n = calls.length;
+  await tool(t, "session").run({ action: "use" });
+  expect(calls.slice(n).map((c) => c.method)).toEqual(["GET"]);
+  await expect(tool(t, "session").run({ action: "use", name: "other", environment: "e3" })).rejects.toThrow("belongs to session main");
 });
 
 test("env_get folds service_status readiness into services[]; workspace_clone sends task only when given", async () => {
@@ -201,43 +232,46 @@ test("service_logs reads the build gate's logs port, defaulting env in a workspa
     }) as any;
     // main: env is required and goes into the path
     const m = platformTools("main");
-    expect(await tool(m, "service_logs").run({ env: "e1", service: "web", tail: 50, previous: true })).toBe("{\"pods\":[]}");
+    expect(await tool(m, "service_logs").run({ env: "e1", name: "web", tail: 50, previous: true })).toBe("{\"pods\":[]}");
     expect(seen.at(-1)).toBe("/logs/e1/web?tail=50&previous=true");
     // a quoted flag reads as the flag: "false" must not ask for the crashed container
-    await tool(m, "service_logs").run({ env: "e1", service: "web", previous: "false" });
+    await tool(m, "service_logs").run({ env: "e1", name: "web", previous: "false" });
     expect(seen.at(-1)).toBe("/logs/e1/web");
-    await tool(m, "service_logs").run({ env: "e1", service: "web", previous: "true" });
+    await tool(m, "service_logs").run({ env: "e1", name: "web", previous: "true" });
     expect(seen.at(-1)).toBe("/logs/e1/web?previous=true");
-    expect((tool(m, "service_logs").inputSchema as any).required).toEqual(["env", "service"]);
+    await expect(tool(m, "service_logs").run({ name: "web" })).rejects.toThrow("`env` is required");
     // workspace: env defaults through the workspace's session
     const t = platformTools("workspace", "w1");
     routes["GET /v1/workspaces/w1"] = json({ team: "acme", session: "ses-1", environment: "e9", packages: [] });
-    await tool(t, "service_logs").run({ service: "web" });
+    await tool(t, "service_logs").run({ name: "web" });
     expect(seen.at(-1)).toBe("/logs/e9/web");
-    await expect(tool(t, "service_logs").run({ service: "nope" })).rejects.toThrow('404: {"error":"no such service"}');
+    await expect(tool(t, "service_logs").run({ name: "nope" })).rejects.toThrow('404: {"error":"no such service"}');
   } finally {
     delete process.env.KL_LOGS_URL;
   }
 });
 
-test("every workspace and env param says it takes the id, not the name", () => {
+test("every workspace and env param takes the id or the name, and no sentence says otherwise", () => {
   for (const kind of ["main", "workspace"] as const)
-    for (const t of platformTools(kind, "ws-1"))
+    for (const t of platformTools(kind, "ws-1")) {
+      expect(t.description).not.toContain("Do not use the name");
       for (const k of ["workspace", "env"]) {
         const p = (t.inputSchema.properties as any)[k];
-        if (p) expect(`${t.name}.${k}: ${p.description ?? ""}`).toContain("id (");
+        if (p && t.name !== "intercept") expect(`${t.name}.${k}: ${p.description ?? ""}`).toContain("id or name");
       }
+    }
 });
 
-test("all is main's table plus the workspace-only tools, each aimed by a required workspace or env", () => {
+test("all is main's table plus the workspace-only tools: every tool once, aimed by a required workspace or env per action", async () => {
   const main = platformTools("main").map((t) => t.name);
   const all = platformTools("all");
   const names = all.map((t) => t.name);
   expect(new Set(names).size).toBe(names.length);
-  for (const n of main) expect(names).toContain(n);
-  for (const n of ["packages_add", "packages_remove", "packages_update"]) expect((tool(all, n).inputSchema as any).required).toContain("workspace");
-  expect((tool(all, "intercept").inputSchema as any).required).toEqual(["env", "service", "workspace"]);
-  expect((tool(all, "release").inputSchema as any).required).toEqual(["env", "service"]);
+  expect(new Set(names)).toEqual(new Set([...main, "intercept", "release"]));
+  for (const a of ["add", "remove", "update"]) await expect(tool(all, `packages_${a}`).run(a === "update" ? {} : { packages: ["x"] })).rejects.toThrow("`workspace` is required");
+  await expect(tool(all, "intercept").run({ service: "s", workspace: "w" })).rejects.toThrow("`env` is required");
+  await expect(tool(all, "intercept").run({ env: "e", service: "s" })).rejects.toThrow("`workspace` is required");
+  await expect(tool(all, "release").run({ service: "s" })).rejects.toThrow("`env` is required");
 });
 
 test("env_wait returns once every service is ready, at once on failing, and marks a timeout", async () => {
@@ -329,11 +363,9 @@ const CASES: [string, any, string, string, any?][] = [
   ["sandbox_get", { sandbox: "sbx-1" }, "GET", "/v1/sandboxes/sbx-1"],
   ["sandbox_logs", { sandbox: "sbx-1" }, "GET", "/v1/sandboxes/sbx-1/logs"],
   ["sandbox_list", { team: "acme", state: "running", limit: 5 }, "GET", "/v1/sandboxes?team=acme&state=running&limit=5"],
-  ["sandbox_terminate", { sandbox: "sbx-1" }, "POST", "/v1/sandboxes/sbx-1/terminate"],
   ["sandbox_delete", { sandbox: "sbx-1" }, "DELETE", "/v1/sandboxes/sbx-1"],
   ["pipeline_list", { owner: "acme" }, "GET", "/v1/pipelines/acme"],
   ["pipeline_get", { owner: "acme", pipeline: "ci", version: 2 }, "GET", "/v1/pipelines/acme/ci?version=2"],
-  ["pipeline_versions", { owner: "acme", pipeline: "ci" }, "GET", "/v1/pipelines/acme/ci/versions"],
   ["pipeline_delete", { owner: "acme", pipeline: "ci" }, "DELETE", "/v1/pipelines/acme/ci"],
   ["webhook_rotate", { owner: "acme", pipeline: "ci" }, "POST", "/v1/pipelines/acme/ci/webhook/rotate"],
   ["run_start", { owner: "acme", pipeline: "ci", inputs: { t: "x" }, version: 3, key: "k" }, "POST", "/v1/pipelines/acme/ci/runs", { inputs: { t: "x" }, version: 3, key: "k" }],
@@ -345,7 +377,6 @@ const CASES: [string, any, string, string, any?][] = [
   ["secret_delete", { owner: "acme", name: "DB_URL", mine: true }, "DELETE", "/v1/secrets/acme/mine/DB_URL"],
   ["workspace_env_set", { workspace: "w1", variables: { A: "${{ secrets.A }}" }, replace: true, restart_on_change: true }, "PUT", "/v1/workspaces/w1/env", { env: { A: "${{ secrets.A }}" }, restartOnEnvChange: true }],
   ["workspace_restart", { workspace: "w1" }, "POST", "/v1/workspaces/w1/restart"],
-  ["service_restart", { env: "e1", service: "api" }, "POST", "/v1/environments/e1/services/api/restart"],
   ["connector_list", { owner: "acme" }, "GET", "/v1/connectors?owner=acme"],
   ["session_create", { name: "fix", team: "acme", environment: "dev" }, "POST", "/v1/sessions", { name: "fix", team: "acme", environment: "dev" }],
   ["session_stop", { session: "s1" }, "POST", "/v1/sessions/s1/stop"],
@@ -369,9 +400,69 @@ for (const [name, args, method, url, body] of CASES) {
 }
 
 test("the component tools are in main and all, never in a workspace session", () => {
-  const names = CASES.map((c) => c[0]).concat(["sandbox_wait", "run_wait", "pipeline_save", "secret_set"]);
+  const names = ["sandbox", "volume", "snapshot", "pipeline", "run", "worktree", "workspace_vars", "webhook_rotate", "secret_set", "secret_list", "secret_delete", "connector_list"];
   for (const k of ["main", "all"] as const) for (const n of names) expect(platformTools(k, "w1").map((t) => t.name)).toContain(n);
   for (const n of names) expect(platformTools("workspace", "w1").map((t) => t.name)).not.toContain(n);
+});
+
+test("sandbox delete ends the sandbox first and ignores a refusal; pipeline get without a version adds the versions", async () => {
+  const t = platformTools("main");
+  routes["POST /v1/sandboxes/sbx-1/terminate"] = () => new Response("over", { status: 409 });
+  routes["DELETE /v1/sandboxes/sbx-1"] = () => new Response(null, { status: 204 });
+  expect(await tool(t, "sandbox_delete").run({ sandbox: "sbx-1" })).toBe("ok");
+  expect(calls.map((c) => `${c.method} ${c.url}`)).toEqual(["POST /v1/sandboxes/sbx-1/terminate", "DELETE /v1/sandboxes/sbx-1"]);
+  routes["POST /v1/sandboxes/sbx-2/terminate"] = () => new Response("down", { status: 500 });
+  await expect(tool(t, "sandbox_delete").run({ sandbox: "sbx-2" })).rejects.toThrow("500: down");
+  routes["GET /v1/pipelines/acme/ci"] = json({ name: "ci" });
+  routes["GET /v1/pipelines/acme/ci/versions"] = json([{ version: 1 }]);
+  expect(JSON.parse(await tool(t, "pipeline_get").run({ owner: "acme", pipeline: "ci" }))).toEqual({ name: "ci", versions: [{ version: 1 }] });
+});
+
+test("volume get answers history and refs; service update with restart restarts after the patch", async () => {
+  const t = platformTools("main");
+  routes["GET /v1/volumes/pg/history"] = json([{ id: "s1" }]);
+  routes["GET /v1/volumes/pg/refs"] = json({ main: "s1" });
+  expect(JSON.parse(await tool(t, "volume_get").run({ volume: "pg" }))).toEqual({ volume: "pg", history: [{ id: "s1" }], refs: { main: "s1" } });
+  routes["GET /v1/environments/e1"] = json({ services: [{ name: "api", image: "a:1" }] });
+  routes["PATCH /v1/environments/e1"] = json({});
+  routes["POST /v1/environments/e1/services/api/restart"] = json({}, 202);
+  await tool(t, "service_update").run({ env: "e1", service: { name: "api", image: "a:2" }, restart: true });
+  expect(calls.slice(-2).map((c) => `${c.method} ${c.url}`)).toEqual(["PATCH /v1/environments/e1", "POST /v1/environments/e1/services/api/restart"]);
+});
+
+test("wait: true polls the created object to its settled state, and a bound that runs out says timedOut", async () => {
+  const t = platformTools("main", undefined, 1);
+  let n = 0;
+  routes["POST /v1/workspaces"] = json({ id: "w9", state: "creating" }, 202);
+  routes["GET /v1/workspaces/w9"] = () => json({ id: "w9", state: ++n >= 3 ? "ready" : "creating" })();
+  expect(JSON.parse(await tool(t, "workspace_create").run({ name: "w", quota_gb: 5, wait: true })).state).toBe("ready");
+  expect(n).toBe(3);
+  routes["GET /v1/workspaces/w9"] = json({ id: "w9", state: "creating" });
+  const real = Date.now;
+  let clock = real();
+  Date.now = () => (clock += 400_000);
+  try {
+    expect(JSON.parse(await tool(t, "workspace_create").run({ name: "w", quota_gb: 5, wait: true, timeout: 300 })).timedOut).toBe(true);
+  } finally {
+    Date.now = real;
+  }
+  // no wait: the 202 document as it is
+  expect(JSON.parse(await tool(t, "workspace_create").run({ name: "w", quota_gb: 5 })).state).toBe("creating");
+});
+
+test("workspace create with source clones; env create with an environment source clones, else grows from the snapshot", async () => {
+  const t = platformTools("main");
+  routes["POST /v1/workspaces/w1/clone"] = json({}, 202);
+  await tool(t, "workspace_create").run({ name: "c", source: "w1", task: "try" });
+  expect(calls.at(-1)).toMatchObject({ url: "/v1/workspaces/w1/clone", body: { name: "c", task: "try" } });
+  await expect(tool(t, "workspace_create").run({ name: "c" })).rejects.toThrow("`quota_gb` is required unless `source`");
+  routes["GET /v1/environments/e1"] = json({ id: "e1" });
+  routes["POST /v1/environments/e1/clone"] = json({}, 202);
+  routes["POST /v1/environments"] = json({}, 202);
+  await tool(t, "env_create").run({ name: "e2", source: "e1" });
+  expect(calls.at(-1)!.url).toBe("/v1/environments/e1/clone");
+  await tool(t, "env_create").run({ name: "e3", source: "pg@2" });
+  expect(calls.at(-1)).toMatchObject({ url: "/v1/environments", body: { name: "e3", snapshot_id: "pg@2" } });
 });
 
 test("sandbox_create goes through the session when there is one, with its argv array as given", async () => {
@@ -439,7 +530,7 @@ test("secret_set sends the value and answers {name, updatedAt}, never the value,
   expect(calls[0]).toMatchObject({ method: "PUT", body: { value } });
   expect(JSON.parse(out)).toEqual({ name: "DB_URL", updatedAt: "2026-11-03T00:00:00Z" });
   expect(out).not.toContain(value);
-  expect(t.description).toContain("never printed back");
+  expect(t.description).toContain("never read back");
   routes["PUT /v1/secrets/acme/mine/DB_URL"] = () => new Response(null, { status: 204 });
   expect(JSON.parse(await t.run({ owner: "acme", name: "DB_URL", value, mine: true })).name).toBe("DB_URL");
   expect(calls.at(-2)!.url).toBe("/v1/secrets/acme/mine/DB_URL");

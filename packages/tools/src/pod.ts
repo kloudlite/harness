@@ -4,14 +4,17 @@
 //! description/schema replace the permissive fallback when it answers at construction.
 import type { ToolDef } from "./index.ts";
 import { api, apiJson, seg } from "./platform.ts";
+import { resource, type Action } from "./actions.ts";
 import { ensureRunning } from "./ensure.ts";
 
-export const POD_TOOLS = [
-  "read", "write", "edit", "patch", "glob", "grep", "exec",
-  "process_list", "process_output", "process_write", "process_wait", "process_kill",
-  "watch", "watch_poll", "watch_stop",
-  "container_build", "container_push",
-];
+export const POD_TOOLS = ["read", "write", "edit", "glob", "grep", "exec", "process", "watch", "container_build", "container_push"];
+
+/** The tools the pod serves one per verb, folded here into one tool per resource: `{action}` -> the pod's own tool.
+ * The pod keeps `patch` and `process_close_stdin` for its HTTP users; `close_stdin` stays an action, `patch` is not forwarded. */
+const FOLDED: Record<string, { description: string; pod: Record<string, string> }> = {
+  process: { description: "Detached processes of a workspace (a long exec job becomes one). Actions: list, output, wait, write, close_stdin, kill.", pod: { list: "process_list", output: "process_output", wait: "process_wait", write: "process_write", close_stdin: "process_close_stdin", kill: "process_kill" } },
+  watch: { description: "Watch paths of a workspace for changes. Actions: start, poll, stop.", pod: { start: "watch", poll: "watch_poll", stop: "watch_stop" } },
+};
 
 type Addr = { address: string; token?: string };
 type Listed = { name: string; description?: string; schema?: Record<string, unknown> };
@@ -146,7 +149,28 @@ export async function podTools(ws: string, o: { ensure?: typeof ensureRunning } 
     }
   }
 
-  return POD_TOOLS.filter((n) => listed.size === 0 || listed.has(n)).map((name) => {
+  /** One resource tool over the pod's own schemas; two actions that spell one key differently in prose share the first spelling. */
+  const folded = (name: string): ToolDef => {
+    const { description, pod } = FOLDED[name]!;
+    const seen: Record<string, any> = {};
+    const actions: Record<string, Action> = {};
+    for (const [act, podName] of Object.entries(pod)) {
+      if (listed.size && !listed.has(podName)) continue;
+      const sch: any = listed.get(podName)?.schema ?? {};
+      const properties: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries<any>(sch.properties ?? {})) {
+        const { description: _d, ...bare } = v;
+        const prior = seen[k];
+        properties[k] = prior && JSON.stringify(prior.bare) === JSON.stringify(bare) ? prior.v : v;
+        seen[k] ??= { bare, v };
+      }
+      actions[act] = { properties, required: sch.required ?? [], run: (a) => call(podName, a) };
+    }
+    return { ...resource(name, `${description} (This tool runs in workspace ${ws}.)`, actions) };
+  };
+
+  return POD_TOOLS.filter((n) => listed.size === 0 || (n in FOLDED ? Object.values(FOLDED[n]!.pod).some((p) => listed.has(p)) : listed.has(n))).map((name) => {
+    if (name in FOLDED) return folded(name);
     const t = listed.get(name);
     return {
       name,

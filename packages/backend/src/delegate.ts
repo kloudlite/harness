@@ -394,8 +394,8 @@ export function delegateTools(kind: "main" | "workspace", ws: string | undefined
   const ask: ToolDef = {
     name: "workspace_ask",
     description:
-      "Give a goal to the session of a workspace. The goal is the words of the person plus context that only you have (environment, decisions, facts from the answer of another workspace). Do not give paths, libraries or steps. Pass `for` (the id of your own task this serves) so the Plan panel can link them. It returns at once. The answer of the workspace arrives later as a `[from <ws>] ...` message. Do not wait or poll for it. This is the only way for main to get work done in a workspace.",
-    inputSchema: { type: "object", properties: { workspace: { type: "string", description: "The workspace id (`ws-…`, the `id` from workspace_list). Do not use the name." }, request: { type: "string" }, for: { type: "string", description: "The id of your own board task this ask serves." } }, required: ["workspace", "request"] },
+      "Give a goal to the session of a workspace: the person's words plus context only you have, no paths or steps. Pass `for` (the id of your own task) to link it. It returns at once; the answer arrives later as a `[from <ws>] ...` message, so do not poll.",
+    inputSchema: { type: "object", properties: { workspace: { type: "string", description: "The workspace id or name." }, request: { type: "string" }, for: { type: "string", description: "The id of your own board task this ask serves." } }, required: ["workspace", "request"] },
     async run(input: { workspace: string; request: string; for?: string }) {
       const key = input.workspace;
       const text = `[from main session] ${input.request}`;

@@ -22,10 +22,10 @@ export function boardWatcher(o: { key: string; file: string; ask: (board: string
   let inFlight = false;
   let last = -Infinity;
   return (e) => {
-    const ev = e as { type: string; toolName?: string };
+    const ev = e as { type: string; toolName?: string; args?: { action?: string } };
     if (ev.type === "agent_start") calls = 0;
     if (ev.type !== "tool_execution_end") return;
-    if (ev.toolName === "task_add" || ev.toolName === "task_update") {
+    if (ev.toolName === "task" && ev.args?.action !== "list") {
       calls = 0;
       return;
     }

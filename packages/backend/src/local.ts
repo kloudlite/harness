@@ -34,12 +34,12 @@ import { forgetSessions } from "./forget.ts";
 import { boardWatcher } from "./watch.ts";
 import { TeamWatch } from "./teamwatch.ts";
 import * as git from "./git.ts";
-import { BECAUSE_SCHEMA, TurnWords, consented } from "./consent.ts";
+import { BECAUSE_SCHEMA, TurnWords, consented, legacy } from "./consent.ts";
 import { toolDiff } from "./diff.ts";
 import { podfs } from "./podfs.ts";
 import { teamView as readTeam } from "./session.ts";
 import { mcpServer } from "./mcp.ts";
-import { boardText, boardTools, readBoards, readTasks, taskTools, tasksFile } from "./tasks.ts";
+import { boardText, readBoards, readTasks, taskTools, tasksFile } from "./tasks.ts";
 import { messagesFile, readMessages } from "./messages.ts";
 import { PROTOCOL } from "./wire.ts";
 import type { Backend, BenchEvent, CatalogModel, Decision, PermMode, PermissionRequest, Hello, LiveSessionMeta, SessionEvent, SessionHandle, SessionOpts, SessionState, TeamView, ThinkingLevel } from "./index.ts";
@@ -56,13 +56,17 @@ export const DESTRUCTIVE = new Set([
 /** Every tool `mustAsk` can be true for: each carries a required `because` (consent.ts). */
 export const GATED = DESTRUCTIVE;
 
-/** A gated tool with `because` in its schema, removed before the tool runs: no tool ever sees it. */
+/** A gated tool with `because` in its schema, removed before the tool runs: no tool ever sees it. A resource
+ * tool is gated for some of its actions only (`workspace delete`), so there `because` is optional in the
+ * schema and the gate asks for the person's card when a gated action arrives without it. */
 export function asking(t: ToolDef): ToolDef {
-  if (!GATED.has(t.name)) return t;
   const s: any = t.inputSchema ?? {};
+  const actions: string[] | undefined = s.properties?.action?.enum;
+  const gated = actions ? actions.some((action) => DESTRUCTIVE.has(legacy(t.name, { action }))) : GATED.has(t.name);
+  if (!gated) return t;
   return {
     ...t,
-    inputSchema: { ...s, type: "object", properties: { ...s.properties, because: BECAUSE_SCHEMA }, required: [...(s.required ?? []).filter((n: string) => n !== "because"), "because"] },
+    inputSchema: { ...s, type: "object", properties: { ...s.properties, because: BECAUSE_SCHEMA }, required: [...(s.required ?? []).filter((n: string) => n !== "because"), ...(actions ? [] : ["because"])] },
     run: (input: any) => {
       const { because: _, ...rest } = input ?? {};
       return t.run(rest);
@@ -73,7 +77,7 @@ export function asking(t: ToolDef): ToolDef {
 export const EDITS = new Set(["write", "edit", "patch"]);
 
 /** Whether a call needs a card. */
-export const mustAsk = (name: string): boolean => DESTRUCTIVE.has(name);
+export const mustAsk = (name: string, args?: unknown): boolean => DESTRUCTIVE.has(legacy(name, args));
 
 /** The person's own words: the first prompt carries the role card, which no view should show. */
 export function stripCard(key: string, text: string): string {
@@ -88,7 +92,7 @@ export function roleCard(key: string): string {
   if (k.kind === "main")
     return [
       "[role: main session]",
-      "You orchestrate. You create, clone, start and delete workspaces and environments. You give work to workspaces and watch their boards with workspace_tasks. Each workspace keeps its own tasks. Use task_add only for work you do yourself. When work crosses components, write the contract first and send every component ask at the same time; send the integration ask when every component is done.",
+      "You orchestrate. You create, clone, start and delete workspaces and environments. You give work to workspaces and watch their boards with `task` list and `workspace`. Each workspace keeps its own tasks. Use `task` add only for work you do yourself. When work crosses components, write the contract first and send every component ask at the same time; send the integration ask when every component is done.",
       "You never write the code yourself. Reports arrive as `[from <ws>] ...` messages.",
     ].join("\n");
   if (k.kind === "subagent")
@@ -100,9 +104,9 @@ export function roleCard(key: string): string {
     `[role: workspace session for ${k.ws}]`,
     "You work only in this workspace. Work comes from the person or as `[from main session] ...` messages.",
     "Your code lives directly in ~/workspace, which is the repo root: git init there, or clone into it with `git clone <url> .`. Never create a project or repo folder inside it.",
-    "Break the work into your own tasks with task_add and keep them updated with task_update: set a task running before its first step and done right after its check passes, one task at a time, so the person watching your board sees what you work on now. When work crosses components, write the contract first and start every component at the same time; depends_on is only for a real order, such as the integration task.",
+    "Break the work into your own tasks with `task` add and keep them updated with `task` update: set a task running before its first step and done right after its check passes, one task at a time, so the person watching your board sees what you work on now. When work crosses components, write the contract first and start every component at the same time; depends_on is only for a real order, such as the integration task.",
     "You never create, clone, restore or delete workspaces. Report to main with main_tell: done, blocked, or need (for a fact or action from another workspace). Write the report as short markdown: one line saying the result, then bullets; never one run-on paragraph.",
-    "Stop this workspace with workspace_stop only after you finished and main or the person said to stop.",
+    "Stop this workspace with `workspace` stop only after you finished and main or the person said to stop.",
   ].join("\n");
 }
 
@@ -129,12 +133,13 @@ function defaultModel(list: CatalogModel[]): ModelRef {
   return list.find((m) => m.provider === "deepseek" && m.id === "deepseek-v4-flash") ?? list[0] ?? { provider: "deepseek", id: "deepseek-v4-flash" };
 }
 
+/** `workspace delete` also forgets the sessions of the workspace it removed. */
 function forgetting(t: ToolDef, deps: DelegateDeps): ToolDef {
   return {
     ...t,
-    async run(input: { workspace: string }) {
+    async run(input: { action?: string; workspace: string }) {
       const r = await t.run(input);
-      if (typeof r === "string" && !r.startsWith("error") && !r.startsWith("platform tools unavailable")) await forgetSessions(input.workspace, deps.live, deps.changed ?? (() => {}));
+      if (input.action === "delete" && typeof r === "string" && !r.startsWith("error") && !r.startsWith("platform tools unavailable")) await forgetSessions(input.workspace, deps.live, deps.changed ?? (() => {}));
       return r;
     },
   };
@@ -161,24 +166,46 @@ function question(key: string, cards: Cards): ToolDef {
 export async function registryFor(k: SessionKind, deps: DelegateDeps, opts: SessionOpts, key = "main"): Promise<Registry> {
   const r = new Registry();
   if (k.kind === "main")
-    return r.add(...[webFetch, webSearch, ...platformTools("main").map((t) => (t.name === "workspace_delete" ? forgetting(t, deps) : t)), ...delegateTools("main", undefined, deps, opts, key), ...taskTools(tasksFile(key, deps.tasks)), ...boardTools(deps.tasks), ...scratchTools(scratchRoot(key)), ...opts.tools].map(asking), ...(deps.cards ? [question(key, deps.cards)] : []));
+    return r.add(...[webFetch, webSearch, ...platformTools("main").map((t) => (t.name === "workspace" ? forgetting(t, deps) : t)), ...delegateTools("main", undefined, deps, opts, key), ...taskTools(tasksFile(key, deps.tasks), deps.tasks), ...scratchTools(scratchRoot(key)), ...opts.tools].map(asking), ...(deps.cards ? [question(key, deps.cards)] : []));
   if (k.kind === "subagent") {
     // a subagent talks only to its workspace session (its last message is the tool result): nothing that
     // delegates, reports upward, asks the person, keeps a board, or holds the workspace's service/lifecycle
-    const no = new Set(["workspace_stop", "intercept", "release", "task_add", "task_update", "task_list", "workspace_tasks", "workspace_ask", "main_tell", "subagent"]);
-    return r.add(...[webFetch, webSearch, ...(await podTools(k.ws)), ...platformTools("workspace", k.ws).filter((t) => !no.has(t.name)), ...opts.tools].map(asking));
+    const no = new Set(["intercept", "release", "task", "workspace_ask", "main_tell", "subagent"]);
+    return r.add(...[webFetch, webSearch, ...(await podTools(k.ws)), ...platformTools("workspace", k.ws, undefined, true).filter((t) => !no.has(t.name)), ...opts.tools].map(asking));
   }
   return r.add(...[webFetch, webSearch, ...(await podTools(k.ws)), ...platformTools("workspace", k.ws), ...delegateTools("workspace", k.ws, deps, opts, key), ...taskTools(tasksFile(key, deps.tasks)), ...opts.tools].map(asking), ...(deps.cards ? [question(key, deps.cards)] : []));
 }
 
-/** Every tool the laptop MCP door (mcp.ts) serves: main's reach plus the workspace-only platform
- * tools and every pod tool, each aimed by a required `workspace`/`env`. No `asking`, no question
- * card: the MCP client's own approvals are the gate. Pod schemas come from one running workspace. */
+/** The pod's `read`/`write` for a path starting with `scratch:` go to the bench's scratch folder instead (no
+ * `workspace` needed); everything else is the pod's. One tool pair, not a second pair under another name. */
+function withScratch(pod: ToolDef | undefined, scratch: ToolDef | undefined): ToolDef[] {
+  if (!pod) return [];
+  const s: any = pod.inputSchema;
+  return [{
+    ...pod,
+    description: `${pod.description} A \`scratch:\` path is the session's scratch folder.`,
+    inputSchema: { ...s, required: (s.required ?? []).filter((n: string) => n !== "workspace") },
+    run: async (input: any) => {
+      const p = input?.path;
+      if (scratch && typeof p === "string" && p.startsWith("scratch:")) return scratch.run({ ...input, path: p.slice("scratch:".length) });
+      if (!input?.workspace) throw new Error(`${pod.name}: \`workspace\` is required, or a \`scratch:\` path`);
+      return pod.run(input);
+    },
+  }];
+}
+
+/** Every tool the laptop MCP door (mcp.ts) serves: main's reach plus every pod tool, each aimed by a
+ * required `workspace`/`env`. No `asking`, no question card: the MCP client's own approvals are the gate.
+ * Pod schemas come from one running workspace. */
 export async function mcpTools(deps: DelegateDeps): Promise<ToolDef[]> {
   const running = (await readTeam()).workspaces.find((w) => w.state === "ready")?.id;
-  return new Registry().add(webFetch, webSearch, ...(await anyPodTools(running)),
-     ...platformTools("all").map((t) => (t.name === "workspace_delete" ? forgetting(t, deps) : t)), ...delegateTools("main", undefined, deps, { tools: [] } as unknown as SessionOpts, "main"), ...taskTools(tasksFile("main", deps.tasks)), ...boardTools(deps.tasks), // the bench's own scratch folder: renamed, since `read`/`write` here are the pod's
-    ...scratchTools(scratchRoot("main")).map((t) => ({ ...t, name: `scratch_${t.name}`, description: `On this session's scratch folder, not a workspace. ${t.description}` }))).all();
+  const pod = await anyPodTools(running);
+  const scratch = scratchTools(scratchRoot("main"));
+  const byName = (n: string) => pod.find((t) => t.name === n);
+  const rest = pod.filter((t) => t.name !== "read" && t.name !== "write");
+  return new Registry().add(webFetch, webSearch, ...rest, ...withScratch(byName("read"), scratch.find((t) => t.name === "read")), ...withScratch(byName("write"), scratch.find((t) => t.name === "write")),
+     ...platformTools("all").map((t) => (t.name === "workspace" ? forgetting(t, deps) : t)), ...delegateTools("main", undefined, deps, { tools: [] } as unknown as SessionOpts, "main"), ...taskTools(tasksFile("main", deps.tasks), deps.tasks),
+    ...scratch.filter((t) => t.name === "bash").map((t) => ({ ...t, name: "scratch_bash", description: "Run a shell command in this session's scratch folder, not a workspace. The network works; no credentials. Returns { output, exit_code } (last 50 KiB)." }))).all();
 }
 
 /** The permission gate, on both doors a call comes through: `agent.beforeToolCall` for a
@@ -188,7 +215,7 @@ export async function mcpTools(deps: DelegateDeps): Promise<ToolDef[]> {
 export function installGate(agent: any, permission: SessionOpts["permission"], words?: () => { typed: string[]; self?: string }): void {
   const ask = async (ctx: any, signal: AbortSignal) => {
     const name = ctx.toolCall.name;
-    if (!mustAsk(name)) return undefined;
+    if (!mustAsk(name, ctx.args)) return undefined;
     const { because, ...args } = ctx.args ?? {};
     const w = words?.();
     if (w && consented(name, args, because, w.typed, w.self)) return undefined;
@@ -554,7 +581,7 @@ export class LocalBackend implements Backend {
       sessions: listSessions(),
       cwd: process.cwd(),
       home: homedir(),
-      tools: [webFetch.name, webSearch.name, ...platformTools("main").map((t) => t.name), "workspace_ask", "task_add", "task_update", "task_list", "workspace_tasks", "bash", "read", "write", "question"],
+      tools: [webFetch.name, webSearch.name, ...platformTools("main").map((t) => t.name), "workspace_ask", "task", "bash", "read", "write", "question"],
       asks: this.#cards.pending(),
       mode: this.#mode,
     };

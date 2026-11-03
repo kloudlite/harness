@@ -46,15 +46,16 @@ test("a platform tool refuses before its handler runs", async () => {
 
 test("service tools say what a flat call lacked, and take a JSON-string array", async () => {
   const tools = platformTools("all");
-  const upd = tools.find((t) => t.name === "service_update")!;
-  await expect(upd.run({ env: "env-1", name: "api", image: "x:1" })).rejects.toThrow("unknown argument `name`, `image`");
-  const add = tools.find((t) => t.name === "packages_add")!;
+  const upd = tools.find((t) => t.name === "service")!;
+  await expect(upd.run({ action: "update", env: "env-1", name: "api", image: "x:1" })).rejects.toThrow("unknown argument `name`, `image`");
+  const pk = tools.find((t) => t.name === "packages")!;
+  const add = { run: (i: any) => pk.run({ action: "add", ...i }) };
   // past the check (a string became an array) the call fails only on the missing api url
   await expect(add.run({ workspace: "ws-1", packages: '["git"]' })).rejects.toThrow("platform tools unavailable");
 });
 
 test("env_wait takes seconds or milliseconds", () => {
-  const w = platformTools("main").find((t) => t.name === "env_wait")!;
+  const w = platformTools("main").find((t) => t.name === "env")!;
   expect(Object.keys((w.inputSchema as any).properties)).toEqual(expect.arrayContaining(["timeout", "timeout_ms"]));
 });
 

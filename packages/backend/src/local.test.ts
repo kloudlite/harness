@@ -2,7 +2,6 @@ import { expect, jest, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { READ_ONLY, DESTRUCTIVE as MCP_DESTRUCTIVE } from "./mcp.ts";
 import { LocalBackend, DESTRUCTIVE, asking, baseHandle, ROUTE_TIMEOUT_MS, mustAsk, roleCard, stripCard, shareable, installGate, mcpTools, registryFor, sessionCwd, sessionKind, seen } from "./local.ts";
 import { toolDiff } from "./diff.ts";
 import { Cards } from "./cards.ts";
@@ -15,7 +14,7 @@ test("hello carries what the TUI reads at boot", async () => {
   const h = await new LocalBackend().hello();
   expect(h.protocol).toBe(PROTOCOL);
   expect(h.cwd).toBe(process.cwd());
-  expect(h.tools).toContain("workspace_create");
+  expect(h.tools).toContain("workspace");
   expect(h.tools).toContain("workspace_ask");
   expect(h.tools).toContain("bash");
   expect(h.tools.slice(0, 2)).toEqual(["web_fetch", "web_search"]);
@@ -37,19 +36,23 @@ test("fs wraps git.ts", async () => {
 });
 
 test("only destructive house actions ask", () => {
-  const destructive = ["workspace_delete", "worktree_drop", "env_delete", "env_restore", "service_remove", "volume_delete", "snapshot_delete", "session_delete", "session_stop", "pipeline_delete", "pipeline_version_delete", "secret_delete", "sandbox_delete", "run_cancel"];
+  const destructive: [string, any][] = [["workspace", { action: "delete" }], ["worktree", { action: "drop" }], ["env", { action: "delete" }], ["env", { action: "restore" }], ["service", { action: "remove" }], ["volume", { action: "delete" }], ["snapshot", { action: "delete" }], ["session", { action: "delete" }], ["session", { action: "stop" }], ["pipeline", { action: "delete" }], ["pipeline", { action: "delete", version: 2 }], ["secret_delete", {}], ["sandbox", { action: "delete" }], ["run", { action: "cancel" }]];
   expect(DESTRUCTIVE.size).toBe(14);
-  for (const n of destructive) expect(mustAsk(n)).toBe(true);
-  for (const n of ["write", "edit", "patch", "read", "exec", "bash", "web_fetch", "workspace_stop", "env_stop", "container_build", "container_push", "packages_remove", "service_update", "intercept"]) expect(mustAsk(n)).toBe(false);
+  for (const [n, a] of destructive) expect(mustAsk(n, a)).toBe(true);
+  const quiet: [string, any][] = [["write", {}], ["edit", {}], ["read", {}], ["exec", {}], ["bash", {}], ["web_fetch", {}], ["workspace", { action: "stop" }], ["workspace", { action: "get" }], ["env", { action: "stop" }], ["container_build", {}], ["container_push", {}], ["packages", { action: "remove" }], ["service", { action: "update" }], ["intercept", {}], ["process", { action: "wait" }]];
+  for (const [n, a] of quiet) expect(mustAsk(n, a)).toBe(false);
 });
 
-test("the deletes carry a required because", () => {
-  for (const n of ["workspace_delete", "env_delete", "volume_delete", "snapshot_delete"]) {
-    const t = platformTools("main").find((x) => x.name === n)!;
-    const asked: any = asking(t).inputSchema;
-    expect(asked.required).toContain("because");
+test("a resource tool with a gated action offers `because` (optional); a plain gated tool requires it", () => {
+  const tools = platformTools("main");
+  for (const n of ["workspace", "env", "volume", "snapshot"]) {
+    const asked: any = asking(tools.find((x) => x.name === n)!).inputSchema;
+    expect(asked.required).toEqual(["action"]);
     expect(asked.properties.because).toBeDefined();
   }
+  expect((asking(tools.find((x) => x.name === "secret_delete")!).inputSchema as any).required).toContain("because");
+  // a tool with no gated action is left alone
+  expect((asking(tools.find((x) => x.name === "packages")!).inputSchema as any).properties.because).toBeUndefined();
 });
 
 test("pod edit ({old,new}) has no local diff; pi edit still does", () => {
@@ -75,7 +78,10 @@ test("registry per session kind", async () => {
   const deps = { live: new Map(), busy: new Set<string>(), open: async () => null as never, permit: async () => ({}), cards: new Cards(() => {}) };
   const opts: any = { tools: [] };
   const main = (await registryFor({ kind: "main" }, deps, opts)).names();
-  expect(main).toContain("workspace_create");
+  const acts = (reg: { get(n: string): { inputSchema: any } }, n: string) => reg.get(n).inputSchema.properties.action.enum as string[];
+  expect(main).toContain("workspace");
+  expect(acts(await registryFor({ kind: "main" }, deps, opts), "workspace")).toContain("create");
+  expect(acts(await registryFor({ kind: "main" }, deps, opts), "packages")).toEqual(["list"]);
   expect(main).toContain("workspace_ask");
   expect(main).toContain("question");
   for (const n of ["bash", "read", "write"]) expect(main).toContain(n);
@@ -83,29 +89,28 @@ test("registry per session kind", async () => {
   const wsReg = await registryFor({ kind: "workspace", ws: "w1" }, deps, opts);
   const ws = wsReg.names();
   expect(ws).toContain("exec");
-  expect(ws).toContain("packages_add");
-  expect(ws).not.toContain("workspace_create");
+  expect(ws).toContain("packages");
+  expect(acts(wsReg, "workspace")).toEqual(["stop", "snapshot"]);
   expect(ws).not.toContain("workspace_ask");
   expect(wsReg.get("read").description).not.toContain("scratch");
   expect(ws).toContain("main_tell");
-  expect((wsReg.get("packages_add").inputSchema as any).properties.workspace).toBeUndefined();
+  expect((wsReg.get("packages").inputSchema as any).properties.workspace).toBeUndefined();
   // a stop never asks, so it carries no card fields; main's still names the workspace
-  const stop: any = wsReg.get("workspace_stop").inputSchema;
+  const stop: any = wsReg.get("workspace").inputSchema;
   expect(stop.properties.because).toBeUndefined();
   expect(stop.properties.workspace).toBeUndefined();
-  const mstop: any = (await registryFor({ kind: "main" }, deps, opts)).get("workspace_stop").inputSchema;
-  expect(mstop.required).toEqual(["workspace"]);
+  await expect((await registryFor({ kind: "main" }, deps, opts)).get("workspace").run({ action: "stop" })).rejects.toThrow("`workspace` is required");
   expect(ws).toContain("intercept");
   expect(ws).toContain("subagent");
   expect(main).not.toContain("subagent");
   // a subagent talks only to its workspace session: none of these, everything else the workspace has
   const sub = (await registryFor({ kind: "subagent", ws: "w1" }, deps, opts)).names();
-  for (const n of ["subagent", "workspace_ask", "main_tell", "workspace_stop", "intercept", "release", "question", "task_add", "task_update", "task_list", "workspace_tasks"]) expect(sub).not.toContain(n);
-  for (const n of ws.filter((n) => !["subagent", "main_tell", "workspace_stop", "intercept", "release", "question", "task_add", "task_update", "task_list", "workspace_tasks"].includes(n))) expect(sub).toContain(n);
+  for (const n of ["subagent", "workspace_ask", "main_tell", "intercept", "release", "question", "task"]) expect(sub).not.toContain(n);
+  for (const n of ws.filter((n) => !["subagent", "main_tell", "intercept", "release", "question", "task"].includes(n))) expect(sub).toContain(n);
+  expect(acts(await registryFor({ kind: "subagent", ws: "w1" }, deps, opts), "workspace")).toEqual(["snapshot"]);
   expect(sub).toContain("exec");
-  expect(sub).toContain("packages_add");
+  expect(sub).toContain("packages");
   expect(sub).toContain("web_search");
-  expect(sub).not.toContain("workspace_create");
 });
 
 test("a subagent role card names its workspace and the commit-do-not-push rule", () => {
@@ -116,8 +121,8 @@ test("main keeps only the orchestrator's tools", async () => {
   delete process.env.KL_API_URL;
   const deps = { live: new Map(), busy: new Set<string>(), open: async () => null as never, permit: async () => ({}) };
   const main = (await registryFor({ kind: "main" }, deps, { tools: [] } as any)).names();
-  for (const n of ["packages_add", "packages_remove", "packages_update", "intercept", "release", "subagent"]) expect(main).not.toContain(n);
-  for (const n of ["packages_list", "workspace_create", "workspace_delete", "workspace_ask"]) expect(main).toContain(n);
+  for (const n of ["intercept", "release", "subagent"]) expect(main).not.toContain(n);
+  for (const n of ["packages", "workspace", "workspace_ask"]) expect(main).toContain(n);
 });
 
 /** An agent that records what reached `prompt`. */
@@ -382,13 +387,13 @@ test("every session has task tools writing its own board", async () => {
   const deps = { live: new Map(), busy: new Set<string>(), open: async () => null as never, permit: async () => ({}), cards: new Cards(() => {}), tasks };
   const opts: any = { tools: [] };
   const ws = await registryFor({ kind: "workspace", ws: "w1" }, deps, opts, "w1:agent-1");
-  expect(ws.names()).toEqual(expect.arrayContaining(["task_add", "task_update", "task_list"]));
-  expect((await registryFor({ kind: "main" }, deps, opts)).names()).toContain("task_add");
-  await (ws.get("task_add") as any).run({ title: "mine" });
+  expect(ws.names()).toContain("task");
+  expect((await registryFor({ kind: "main" }, deps, opts)).names()).toContain("task");
+  await (ws.get("task") as any).run({ action: "add", title: "mine" });
   expect(readTasks(join(tasks, "w1.json")).map((t) => t.title)).toEqual(["mine"]);
   expect(readTasks(join(tasks, "main.json"))).toEqual([]);
   // boards: main first even when empty, then each non-empty board by name
-  await (ws.get("task_add") as any).run({ title: "again" });
+  await (ws.get("task") as any).run({ action: "add", title: "again" });
   writeFileSync(join(tasks, "ws-a.json"), "[]");
   expect(readBoards(tasks).map((b) => [b.session, b.tasks.length])).toEqual([["main", 0], ["w1", 2]]);
 });
@@ -399,16 +404,36 @@ test("teamView() carries the boards (main first) and the message log", async () 
   expect(Array.isArray(v.messages)).toBe(true);
 });
 
-test("the MCP door serves every platform and pod tool with no `because`, plus main's delegation", async () => {
+const BENCH_TOOLS = [
+  "workspace", "env", "session", "sandbox", "service", "volume", "snapshot", "pipeline", "run", "worktree", "packages", "workspace_vars",
+  "process", "watch", "task", "read", "write", "edit", "exec", "glob", "grep", "container_build", "container_push", "builder_status",
+  "connector_list", "regions", "quota", "secret_set", "secret_list", "secret_delete", "request_create", "request_get", "requests_list",
+  "intercept", "release", "webhook_rotate", "workspace_ask", "web_fetch", "web_search", "scratch_bash",
+];
+
+test("the bench tool list is the spec's 40 names, each described in under 300 characters, with no `because`", async () => {
   const deps = { live: new Map(), busy: new Set<string>(), open: async () => null as never, permit: async () => ({}), tasks: mkdtempSync(join(tmpdir(), "kl-mcp-")) };
   const tools = await mcpTools(deps);
   const names = tools.map((t) => t.name);
-  for (const n of [...platformTools("all").map((t) => t.name), ...POD_TOOLS, "workspace_ask", "web_fetch", "web_search", "scratch_bash", "scratch_read"]) expect(names).toContain(n);
-  for (const t of tools) expect((t.inputSchema as any).properties?.because).toBeUndefined();
+  expect([...names].sort()).toEqual([...BENCH_TOOLS].sort());
+  expect(names.length).toBe(40);
+  for (const t of tools) {
+    expect(`${t.name}: ${t.description.length}`).toBe(`${t.name}: ${Math.min(t.description.length, 299)}`);
+    expect((t.inputSchema as any).properties?.because).toBeUndefined();
+  }
+  for (const n of [...platformTools("all").map((t) => t.name), ...POD_TOOLS]) expect(names).toContain(n);
   expect((tools.find((t) => t.name === "exec")!.inputSchema as any).required).toContain("workspace");
   expect(names).not.toContain("question");
-  // A renamed tool must not silently lose its annotation: every name in the tables is served.
-  for (const n of [...READ_ONLY, ...MCP_DESTRUCTIVE]) expect(names).toContain(n);
+  for (const gone of ["patch", "scratch_read", "scratch_write", "workspace_tasks", "task_add", "workspace_create", "env_get", "process_wait"]) expect(names).not.toContain(gone);
+});
+
+test("read and write take a `scratch:` path with no workspace; any other path needs one", async () => {
+  const deps = { live: new Map(), busy: new Set<string>(), open: async () => null as never, permit: async () => ({}), tasks: mkdtempSync(join(tmpdir(), "kl-mcp-")) };
+  const tools = await mcpTools(deps);
+  const [read, write] = [tools.find((t) => t.name === "read")!, tools.find((t) => t.name === "write")!];
+  expect(await write.run({ path: "scratch:notes.md", content: "hello" })).toContain("wrote 5 bytes");
+  expect(await read.run({ path: "scratch:notes.md" })).toBe("hello");
+  await expect(read.run({ path: "a.txt" })).rejects.toThrow("`workspace` is required");
 });
 
 // A fake agent whose prompt() records what it was sent; a turn is agent_start, a board change, agent_end.

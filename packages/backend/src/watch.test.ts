@@ -31,11 +31,11 @@ test("two tool ends do nothing; the third asks once and marks the task running b
   expect(readTasks(r.file)[0]).toMatchObject({ state: "running", by: "watcher" });
 });
 
-test("a task_update end resets the count; a running task means no call", async () => {
+test("a task end resets the count; a running task means no call", async () => {
   const r = rig();
   r.w(end());
   r.w(end());
-  r.w(end("task_update"));
+  r.w(end("task"));
   r.w(end());
   r.w(end());
   await tick();

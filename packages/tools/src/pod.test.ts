@@ -42,7 +42,7 @@ test("schema comes from the pod, only for fixed names, token is sent", async () 
 test("pod not ready falls back to the permissive schema and call says not ready", async () => {
   handler = () => j({ error: "workspace not ready" }, 409);
   const t = await podTools("w1");
-  expect(t.length).toBe(17);
+  expect(t.length).toBe(10);
   expect(t[0]!.inputSchema).toEqual({ type: "object", additionalProperties: true });
   await expect(t[0]!.run({})).rejects.toThrow("workspace not ready");
 });
@@ -117,14 +117,14 @@ test("anyPodTools: schemas from the sample, each call reaches the named workspac
     : u.endsWith(":7788/tools") ? j({ tools: [{ name: "read", description: "Read a file", schema: { type: "object", properties: { path: {} }, required: ["path"] } }] })
     : j({ at: u });
   const t = await anyPodTools("w1");
-  expect(t.length).toBe(17);
+  expect(t.length).toBe(10);
   const read = t.find((x) => x.name === "read")!;
   expect(read.inputSchema).toEqual({ type: "object", properties: { workspace: { type: "string", description: "Workspace id" }, path: {} }, required: ["workspace", "path"] });
   expect(read.description).toBe("Read a file Runs in the workspace named by `workspace`.");
   expect(await read.run({ workspace: "w2", path: "a" })).toContain("http://10.0.0.2:7788/tools/read");
   const posted = log.filter((l) => l.url.endsWith("/tools/read")).map((l) => l.url);
   expect(posted).toEqual(["http://10.0.0.2:7788/tools/read"]);
-  await expect(read.run({ workspace: "off", path: "a" })).rejects.toThrow("stopped; start it with `workspace_start`");
+  await expect(read.run({ workspace: "off", path: "a" })).rejects.toThrow("stopped; start it with `workspace` action start");
   await expect(read.run({ path: "a" })).rejects.toThrow("workspace is required");
 });
 
@@ -185,8 +185,8 @@ test("a second NotReady after the wake throws: one retry only", async () => {
 
 test("an ensure failure surfaces instead of the NotReady", async () => {
   handler = () => j({ error: "idle" }, 409);
-  const t = await podTools("w1", { ensure: (async () => { throw new Error("w1 is stopped; start it with `workspace_start`"); }) as any });
-  await expect(t[0]!.run({})).rejects.toThrow("workspace_start");
+  const t = await podTools("w1", { ensure: (async () => { throw new Error("w1 is stopped; start it with `workspace` action start"); }) as any });
+  await expect(t[0]!.run({})).rejects.toThrow("action start");
 });
 
 test("call() is activity: no x-kl-watch header, and inflight returns to empty", async () => {
@@ -208,4 +208,28 @@ test("the client waits longer than the tool, whichever spelling the timeout has"
   expect(waitMs({ timeout: 300 }, 1)).toBe(300_000);
   expect(waitMs({ timeout_ms: "2m" }, 120_000)).toBe(120_000);
   expect(waitMs({}, 120_000)).toBe(120_000);
+});
+
+test("process and watch fold the pod's per-verb tools; patch and process_close_stdin are not tools of the harness", async () => {
+  const obj = (properties: object, required: string[] = []) => ({ type: "object", properties, required });
+  handler = (u) =>
+    u.endsWith("/v1/workspaces/w1/tools") ? j({ address: "10.0.0.5:7788" })
+    : u.endsWith("/tools") ? j({ tools: [
+        { name: "patch", description: "p", schema: obj({ diff: {} }) },
+        { name: "process_wait", description: "w", schema: obj({ id: { type: "string", description: "wait id" }, since: { type: "integer" } }, ["id"]) },
+        { name: "process_output", description: "o", schema: obj({ id: { type: "string", description: "output id" } }, ["id"]) },
+        { name: "process_close_stdin", description: "c", schema: obj({ id: { type: "string" } }, ["id"]) },
+        { name: "watch", description: "s", schema: obj({ paths: {} }) },
+        { name: "watch_poll", description: "p", schema: obj({ id: { type: "string" } }, ["id"]) },
+      ] })
+    : j({ ok: 1 });
+  const t = await podTools("w1");
+  expect(t.map((x) => x.name)).toEqual(["process", "watch"]);
+  const proc = t[0]!;
+  expect((proc.inputSchema as any).properties.action.enum).toEqual(["output", "wait", "close_stdin"]);
+  await proc.run({ action: "wait", id: "p1", since: 3 });
+  expect(log.at(-1)!.url).toBe("http://10.0.0.5:7788/tools/process_wait");
+  await expect(proc.run({ action: "wait" })).rejects.toThrow("`id` is required");
+  await t[1]!.run({ action: "poll", id: "w1" });
+  expect(log.at(-1)!.url).toBe("http://10.0.0.5:7788/tools/watch_poll");
 });

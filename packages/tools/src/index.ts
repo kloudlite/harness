@@ -45,3 +45,5 @@ export { POD_TOOLS, anyPodTools, podTools, podFence, type PodFence, podExec, pod
 export { scratchTools, scratchRoot } from "./scratch.ts";
 export { ensureRunning } from "./ensure.ts";
 export { checkArgs, guarded } from "./args.ts";
+export { resource, type Action } from "./actions.ts";
+export { INSTRUCTIONS } from "./instructions.ts";

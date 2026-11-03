@@ -15,6 +15,14 @@ export const BECAUSE_SCHEMA = {
 
 export type Because = { asked?: unknown; reason?: unknown };
 
+/** The per-verb name of a call on a resource tool (`workspace` + `delete` = `workspace_delete`; a pipeline delete with
+ * `version` is `pipeline_version_delete`), so the rules below keep one line per gated verb. */
+export function legacy(name: string, args: any): string {
+  const action = args?.action;
+  if (typeof action !== "string") return name;
+  return name === "pipeline" && action === "delete" && args.version !== undefined ? "pipeline_version_delete" : `${name}_${action}`;
+}
+
 const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
 const image = (tag: unknown) => (typeof tag === "string" ? tag.split("/").pop()!.split(/[:@]/)[0] || undefined : undefined);
 
@@ -27,8 +35,8 @@ function program(cmd: unknown): string | undefined {
 
 /** What the quote must name for this call; undefined means no rule, so the call asks. `self` is the
  * workspace a workspace session's tool defaults to when its `workspace` argument is absent. */
-export function target(name: string, args: any, self?: string): string | string[] | undefined {
-  switch (name) {
+export function target(tool: string, args: any, self?: string): string | string[] | undefined {
+  switch (legacy(tool, args)) {
     case "workspace_stop":
     case "workspace_delete":
       return args?.workspace ?? self;

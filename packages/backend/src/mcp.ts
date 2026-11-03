@@ -5,19 +5,29 @@
 //! this door does not have.
 //!
 //! No bench permission cards and no `because` here: the client's own approvals stand in for them.
-import type { ToolDef } from "@kloudlite-tui/tools";
+import { INSTRUCTIONS, type ToolDef } from "@kloudlite-tui/tools";
 
 /** Tool annotations (MCP `annotations`): hosted clients decide on them. ChatGPT asks for confirmation on
- * every tool that is not `readOnlyHint`, and Claude shows the hint beside the tool. One table, so
- * a tool added without a line here is a write that is not destructive, the safe-to-ask default. A rename
- * fails the test beside this file (every name must be a tool `mcpTools` serves). */
-export const READ_ONLY = new Set([
-  "read", "glob", "grep", "process_list", "process_output", "watch_poll", "workspace_list", "workspace_get", "packages_list",
-  "session_current", "env_list", "env_get", "env_wait", "service_logs", "volume_list", "volume_history", "volume_refs",
-  "builder_status", "quota", "regions", "requests_list", "request_get", "task_list", "workspace_tasks", "scratch_read",
-]);
-export const DESTRUCTIVE = new Set(["workspace_delete", "env_delete", "volume_delete", "snapshot_delete", "service_remove", "worktree_drop", "process_kill"]);
-export const annotations = (name: string) => ({ readOnlyHint: READ_ONLY.has(name), destructiveHint: DESTRUCTIVE.has(name) });
+ * every tool that is not `readOnlyHint`, and Claude shows the hint beside the tool. One table of
+ * (tool, action), so a tool or action added without a line here is a write that is not destructive, the
+ * safe-to-ask default. A rename fails the test beside this file. */
+const READ_ACTIONS: Record<string, string[]> = {
+  workspace: ["list", "get", "wait"], env: ["list", "get", "wait"], session: ["current", "list"], sandbox: ["get", "list", "wait", "logs"],
+  service: ["logs"], volume: ["list", "get"], pipeline: ["list", "get"], run: ["list", "get", "wait", "logs"], packages: ["list"],
+  workspace_vars: ["get"], process: ["list", "output", "wait"], watch: ["poll"], task: ["list"],
+};
+const READ_PLAIN = new Set(["read", "glob", "grep", "builder_status", "quota", "regions", "requests_list", "request_get", "connector_list", "secret_list"]);
+const DESTRUCTIVE_ACTIONS: Record<string, string[]> = {
+  workspace: ["delete"], env: ["delete", "restore"], volume: ["delete"], snapshot: ["delete"], service: ["remove"], worktree: ["drop"],
+  process: ["kill"], sandbox: ["delete"], pipeline: ["delete"], session: ["delete"], run: ["cancel"],
+};
+export const isReadOnly = (name: string, action?: string): boolean => (action === undefined ? READ_PLAIN.has(name) : !!READ_ACTIONS[name]?.includes(action));
+export const isDestructive = (name: string, action?: string): boolean => (action === undefined ? name === "secret_delete" : !!DESTRUCTIVE_ACTIONS[name]?.includes(action));
+/** A tool's hints cover all its actions: read-only only if every action is, destructive if any one is. */
+export const annotations = (t: Pick<ToolDef, "name" | "inputSchema">) => {
+  const acts: (string | undefined)[] = (t.inputSchema as any)?.properties?.action?.enum ?? [undefined];
+  return { readOnlyHint: acts.every((a) => isReadOnly(t.name, a)), destructiveHint: acts.some((a) => isDestructive(t.name, a)) };
+};
 
 type Msg = { jsonrpc?: string; id?: string | number | null; method?: string; params?: any };
 
@@ -33,11 +43,11 @@ export function mcpServer(tools: () => Promise<ToolDef[]>): (msg: Msg) => Promis
     if (id === undefined || id === null) return null; // a notification (`notifications/initialized`, a cancel)
     switch (method) {
       case "initialize":
-        return reply(id, { protocolVersion: params?.protocolVersion ?? "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "kl", version: "1" } });
+        return reply(id, { protocolVersion: params?.protocolVersion ?? "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "kl", version: "1" }, instructions: INSTRUCTIONS });
       case "ping":
         return reply(id, {});
       case "tools/list":
-        return reply(id, { tools: (await list()).map((t) => ({ name: t.name, description: t.description, inputSchema: t.inputSchema, annotations: annotations(t.name) })) });
+        return reply(id, { tools: (await list()).map((t) => ({ name: t.name, description: t.description, inputSchema: t.inputSchema, annotations: annotations(t) })) });
       case "tools/call": {
         const t = (await (last ?? list())).find((t) => t.name === params?.name);
         if (!t) return fail(id, -32602, `unknown tool: ${params?.name}`);

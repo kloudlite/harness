@@ -29,9 +29,9 @@ describe("ensureRunning", () => {
     await ensureRunning("workspaces", "w1", { api: f.api as any, sleep });
     expect(f.calls).toEqual(["GET /v1/workspaces/w1", "POST /v1/workspaces/w1/start", "GET /v1/workspaces/w1", "GET /v1/workspaces/w1"]);
   });
-  test("explicitly stopped is an error naming workspace_start", async () => {
+  test("explicitly stopped is an error naming the start action", async () => {
     const f = fakeApi([doc({ state: "stopped" })]);
-    await expect(ensureRunning("workspaces", "w1", { api: f.api as any, sleep })).rejects.toThrow("stopped; start it with `workspace_start`");
+    await expect(ensureRunning("workspaces", "w1", { api: f.api as any, sleep })).rejects.toThrow("stopped; start it with `workspace` action start");
     expect(f.calls).toEqual(["GET /v1/workspaces/w1"]);
   });
   test("timeout names the last condition reason", async () => {
