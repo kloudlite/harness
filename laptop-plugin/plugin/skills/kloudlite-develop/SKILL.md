@@ -47,7 +47,7 @@ Every scenario ends with its cleanup. To check a result, use `kloudlite-verify`.
 **Shape:** 2.
 **Steps:**
 1. `session_current`. If the session has the environment, go to step 3.
-2. `session_connect` {"environment": "env-…"}. To make a session for this work: `session_create` {"name": "orders", "environment": "env-…"}, then, only where `session_use` exists (the laptop door; see Hosts in the `kloudlite` skill), `session_use` {"name": "orders"} to drive it. Elsewhere you cannot drive another session: tell the user to open it, or use `session_connect` on the current one after the user agrees.
+2. `session_connect` {"environment": "env-…"}. To make a session for this work: `session_create` {"name": "orders", "environment": "env-…"}, then `session_use` {"name": "orders"} to drive it. In the harness (no `session_use`; see Hosts in the `kloudlite` skill) you cannot drive another session: tell the user to open it, or use `session_connect` on the current one after the user agrees.
 3. A workspace joins only by being created in the session: `workspace_create` with the session picked. A standalone workspace stays out; clone the repo into a new managed one.
 4. `exec` {"workspace": "ws-…", "cmd": "getent hosts db"}.
 

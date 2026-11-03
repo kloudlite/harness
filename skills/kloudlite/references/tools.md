@@ -7,7 +7,7 @@ Every tool, with its arguments. `workspace` is a `ws-` id of a `ready` workspace
 | Tool | Arguments | Answers |
 |---|---|---|
 | `session_current` | none | The session, its team, its environment |
-| `session_use` | `team?`, `name?`, `environment?`, `new_environment?` | Laptop door only. Picks the session; can connect or create an environment |
+| `session_use` | `team?`, `name?`, `environment?`, `new_environment?` | Picks the session among your sessions in the connected owner (laptop door and remote server; not the harness); can connect or create an environment |
 | `session_pick` | `id` | Picks the session when several exist (the only tool until then) |
 | `session_connect` | `environment` | Connects the session to an environment; releases its intercepts on the old one |
 | `session_disconnect` | none | Disconnects from the environment |

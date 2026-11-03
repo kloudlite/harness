@@ -50,7 +50,7 @@ Read your row. The task skills never name a host.
 | Remote connector (claude.ai, ChatGPT) | `/mcp` over OAuth | no | no | the one agent |
 | Kloudlite harness | split by role: main, workspace, subagent | no | no | the role skills |
 
-`session_use` exists only on the laptop door (`kloudlite mcp`). The harness, the plugin (it uses the remote server) and the remote connector drive their own session and have no way to switch; `workspace_create` always uses it. There, a task that needs another session is for the user to open.
+`session_use` exists on the laptop door (`kloudlite mcp`) and on the remote server (the plugin and a remote connector), where it picks among your sessions in the owner you connected. Only the harness drives one fixed session and cannot switch; `workspace_create` always uses the current session. In the harness, a task that needs another session is for the user to open.
 
 Use a tool, not a command. Two things have no tool: connecting a provider (the web console) and `kloudlite env`, the tunnel to the laptop. For those, give the user the exact command, or run it only on a host with a shell.
 

@@ -65,7 +65,7 @@ A check in a workspace uses the workspace's files and changes nothing. A sandbox
 **Shape:** 4.
 **Steps:**
 1. `env_clone` {"env": "env-staging…", "name": "shop-pr-42"}; `env_wait`.
-2. `session_create` {"name": "review-42", "environment": "env-copy…"} so the user's session does not move, and, where `session_use` exists (the laptop door), `session_use` {"name": "review-42"} to drive it and back at the end. Without `session_use` (the harness, a remote connector) `workspace_create` always lands in the current session, which may be on staging: do not create the review workspace there. Tell the user to open `review-42`, and stop.
+2. `session_create` {"name": "review-42", "environment": "env-copy…"} so the user's session does not move, and `session_use` {"name": "review-42"} to drive it and back at the end. In the harness (no `session_use`) `workspace_create` always lands in the current session, which may be on staging: do not create the review workspace there. Tell the user to open `review-42`, and stop.
 3. A review workspace in that session: `workspace_create` {"name": "api-pr-42", …}; clone the repo; `exec` {"cmd": "git fetch origin pull/42/head:pr-42 && git switch pr-42"} (GitLab: `merge-requests/42/head`).
 4. Run the tests (scenario 1) or `sandbox_create` in the review session (scenario 2, with `git fetch origin pull/42/head:pr-42 && git switch pr-42` after the clone). For a behaviour check, `intercept` the changed service from the review workspace, drive requests, `release`.
 5. Tell the user the result. Delete what you made, after the user says yes: `workspace_delete`, `session_delete` {"session": "review-42"}, `env_delete` of the copy. The user's own workspace and session stay as they were.
