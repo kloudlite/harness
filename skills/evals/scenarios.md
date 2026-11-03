@@ -34,7 +34,7 @@ For a manual run on the dev region: give the prompt, check the tool sequence. `*
 | kloudlite-automate 3. Start by hand and follow | run it now | run(start), run(wait), run(logs) |
 | kloudlite-automate 4. Schedule | every night at 02:00 IST | pipeline(get), pipeline(save: schedule 30 20 * * *) |
 | kloudlite-automate 5. Webhook | start it from a GitHub push | pipeline(save: webhook), (URL shown once), webhook_rotate on leak |
-| kloudlite-automate 6. After another pipeline | ship after the tests pass | pipeline(save: triggers.after) |
+| kloudlite-automate 6. After another pipeline | release after the tests pass | pipeline(save: triggers.after) |
 | kloudlite-automate 7. Inputs | let me choose the branch | pipeline(save: inputs), run(start: inputs) |
 | kloudlite-automate 8. Order and conditions | lint and test in parallel, then build | pipeline(save: needs, if) |
 | kloudlite-automate 9. Matrix | test on node 20 and 22 | pipeline(save: matrix) |

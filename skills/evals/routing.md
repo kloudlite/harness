@@ -74,7 +74,7 @@ Tie-breaker for "stop": one lifecycle verb on a named object (stop, start, delet
 | roll back to v3 | kloudlite-automate | New version from an old one |
 | every night at 02:00 IST | kloudlite-automate | Schedule, UTC conversion |
 | start it from a GitHub push | kloudlite-automate | Webhook |
-| ship after the tests pass | kloudlite-automate | After another pipeline |
+| release after the tests pass | kloudlite-automate | After another pipeline |
 | let me choose the branch | kloudlite-automate | Inputs |
 | lint and test in parallel, then build | kloudlite-automate | needs and if |
 | test on node 20 and 22 | kloudlite-automate | Matrix |

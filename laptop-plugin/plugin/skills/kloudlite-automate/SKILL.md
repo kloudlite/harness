@@ -1,6 +1,6 @@
 ---
 name: kloudlite-automate
-description: Gives the steps to write, save, version, start, schedule and debug pipelines on Kloudlite. Use when work must run without a person at a terminal, repeat, or follow another event: "make a pipeline that runs the tests", "run it now", "run this every night at 02:00 IST", "start it from a GitHub push", "ship after the tests pass", "let me choose the branch", "lint and test in parallel, then build", "test on node 20 and 22", "the job needs the npm token", "run the e2e tests against a fresh copy of staging", "build the image in CI", "pass the dataset to the next job", "why did run 12 fail", "let GitHub Actions start this pipeline", "cancel the run", "roll back to v3". Covers definitions, versions, triggers, needs and if, matrix, secrets, git, registry pushes, volumes, runs, logs. Not for a one-time check or test run (use kloudlite-verify), not for editing code or running a server (use kloudlite-develop), not for why a sandbox failed (use kloudlite-verify). Read the kloudlite skill first.
+description: Gives the steps to write, save, version, start, schedule and debug pipelines on Kloudlite. Use when work must run without a person at a terminal, repeat, or follow another event: "make a pipeline that runs the tests", "run it now", "run this every night at 02:00 IST", "start it from a GitHub push", "release after the tests pass", "let me choose the branch", "lint and test in parallel, then build", "test on node 20 and 22", "the job needs the npm token", "run the e2e tests against a fresh copy of staging", "build the image in CI", "pass the dataset to the next job", "why did run 12 fail", "let GitHub Actions start this pipeline", "cancel the run", "roll back to v3". Covers definitions, versions, triggers, needs and if, matrix, secrets, git, registry pushes, volumes, runs, logs. Not for a one-time check or test run (use kloudlite-verify), not for editing code or running a server (use kloudlite-develop), not for why a sandbox failed (use kloudlite-verify). Read the kloudlite skill first.
 ---
 
 # Automate with pipelines
@@ -88,12 +88,12 @@ Read the `kloudlite` skill first. It holds the definitions and the safety rules.
 
 ### 6. After another pipeline
 
-**Trigger:** "ship after the tests pass".
+**Trigger:** "release after the tests pass".
 **Steps:**
-1. In `ship`: `"triggers": {"after": {"pipeline": "api-ci", "result": "success"}}`. `result` is `success`, `failure` or `cancelled`; absent means any end.
+1. In `release`: `"triggers": {"after": {"pipeline": "api-ci", "result": "success"}}`. `result` is `success`, `failure` or `cancelled`; absent means any end.
 2. The target must exist, same owner. `pipeline` action `save`.
 
-**Done when:** a successful `api-ci` run starts a `ship` run with `event` `pipeline`.
+**Done when:** a successful `api-ci` run starts a `release` run with `event` `pipeline`.
 **If it fails:** a pipeline cannot follow itself; a chain stops at depth 5, and the ended run's `triggered` names the refusal.
 
 ### 7. Inputs
