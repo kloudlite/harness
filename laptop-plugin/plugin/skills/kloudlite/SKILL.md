@@ -1,165 +1,179 @@
 ---
 name: kloudlite
-description: Load first for any request about Kloudlite, or that names a workspace, environment, session, intercept, sandbox, volume, snapshot, pipeline, secret, variable or connector - "set up my project on Kloudlite", "delete all workspaces", "what is running in my environment", "connect Kloudlite to Claude". Gives the definitions, the tools, the safety rules and the setup steps when the Kloudlite tools are missing. Task steps are in kloudlite-develop (code against real services), kloudlite-verify (checks in sandboxes) and kloudlite-automate (pipelines).
+description: Gives the Kloudlite definitions, the rules for picking and building workspaces, environments and sessions, the tool groups, the safety rules and the setup steps. Load first when the Kloudlite tools are present (session_current, workspace_list) and the task is to run, test, build or change code; when a request names a workspace, environment, session, intercept, sandbox, volume, snapshot, pipeline, secret, variable or connector; for status, logs, stop, start, delete and quota questions ("what do I have", "logs of db", "delete the review workspace"); and when a tool answers "not logged in", "403 ... paused", or the server lists only session_pick. Not for steps of a task - use kloudlite-develop (set up, run against real services, intercept), kloudlite-verify (one-time checks in sandboxes) or kloudlite-automate (pipelines).
 ---
 
 # Kloudlite
 
-This skill gives the definitions and the rules. The task skills give the steps: `kloudlite-develop`, `kloudlite-verify` and `kloudlite-automate`. They do not repeat the definitions. Read this skill first.
+This skill gives the definitions and the rules. The task skills give the steps: `kloudlite-develop`, `kloudlite-verify`, `kloudlite-automate`. They do not repeat the definitions. Read this skill first.
 
-In a request, the words workspace, environment, session, service, intercept, sandbox, volume, snapshot, pipeline, secret and connector mean Kloudlite objects. "Delete all workspaces" means: list the Kloudlite workspaces with `workspace_list`, then obey "Safety rules".
+The words workspace, environment, session, service, intercept, sandbox, volume, snapshot, pipeline, secret and connector mean Kloudlite objects. When the Kloudlite tools are present, code runs in a workspace, not on the user's computer, whatever the request says.
 
 ## Components
 
-All work runs in the context of one team: a person's own team or a shared team. A team is not a component. These are the nine components.
+All work runs in the context of one team: a person's own team or a shared team. A team is not a component. Nine components:
 
-1. **Workspace.** A development machine in the cloud. It has a home (`/home/kl`) that is kept while it is stopped, source code in `~/workspace`, packages from nixpkgs, a tool server for programs and SSH for terminals. It is standalone, or managed: created in a session, which starts, stops and deletes it. Only a managed workspace reaches an environment. A clone or a restore is a new standalone workspace.
-2. **Environment.** A set of services that run together, each from a container image, for example an API, a database and a cache. Each service is reachable by its name on its ports, for example `postgres://db:5432`. One disk holds the data of the services that mount a folder. Many sessions can connect to one environment.
-3. **Session.** A network group. It joins a set of workspaces and sandboxes to one environment, or to none. Its workspaces reach the services of that environment by name. A session belongs to the person who created it. Other members work in their own sessions on the same environment.
-4. **Intercept.** Sends all traffic of one environment service to a workspace of the session. The service pauses, and the code in the workspace answers its callers. Callers keep the same name and port. An intercept is for the whole environment: every caller of the service reaches the workspace.
-5. **Sandbox.** A short-lived, isolated machine that runs one command and ends when the command exits. Its files are gone when it ends, and it cannot start again. A sandbox created in a session reaches the session's environment.
-6. **Volume.** The saved storage of one workspace or one environment: its disk and the chain of snapshots taken of it. A snapshot is a read-only copy of the disk at one time. A named volume numbers its snapshots: `name@1`, `name@2`. A reference is `name` (the newest version), `name@N`, or a snapshot id.
-7. **Pipeline.** A versioned JSON definition of jobs. Each job runs its steps in its own sandbox. A run starts one version by hand, on a schedule, from a webhook call, or after another pipeline ends.
-8. **Secrets and variables.** A variable is a `NAME=value` pair in the `env` of a workspace, service, sandbox or job. A secret is a named value of an owner. A variable refers to it with the whole value `${{ secrets.NAME }}`. Nobody can read a secret value back.
-9. **Connector.** A link from an owner to a code host (GitHub, GitLab) or to a container registry. A git connector gives read-only `git clone` over HTTPS to workspaces, sandboxes and pipeline jobs. A registry connector gives image pushes and private image pulls. The user connects a provider in the web console.
+1. **Workspace.** A development machine in the cloud: a home kept while stopped, source in `~/workspace`, packages from nixpkgs, a tool server for programs, SSH for terminals. Standalone, or managed by a session.
+2. **Environment.** A set of services that run together, each from a container image, reachable by name and port (`db:5432`). One disk holds the data of mounted folders.
+3. **Session.** A network group that joins workspaces and sandboxes to one environment, or none. Private to its creator; teammates use their own sessions on the same environment.
+4. **Intercept.** Sends all traffic of one environment service to a workspace of the session; the service pauses; callers keep the same name and port. Environment-wide.
+5. **Sandbox.** A short-lived isolated machine that runs one command and ends when it exits. In a session it reaches the environment. Files are gone at the end.
+6. **Volume.** The saved storage of one workspace or environment: its disk and the chain of snapshots. A named volume numbers its snapshots `name@N`. A reference is `name` (newest), `name@N`, or a snapshot id.
+7. **Pipeline.** A versioned JSON definition of jobs; each job runs its steps in its own sandbox; a run starts one version by hand, on a schedule, from a webhook, or after another pipeline.
+8. **Secrets and variables.** A variable is `NAME=value` in the `env` of a workspace, service, sandbox or job. A secret is a named value of an owner; a variable refers to it as the whole value `${{ secrets.NAME }}`. No one reads a value back.
+9. **Connector.** A link from an owner to a code host (GitHub, GitLab) or a container registry: read-only clone over HTTPS; image push and private pull. Connected in the web console.
 
-How they relate:
+Three facts decide every topology choice:
+
+1. **Managed vs standalone.** A workspace created in a session is managed: it reaches the environment, and the session starts, stops and deletes it. A standalone workspace never joins a session. `workspace_clone` and `workspace_restore` make standalone workspaces.
+2. **A sandbox ends.** It is for one command; nothing in it survives. A sandbox in a session is a managed member and reaches the environment.
+3. **An intercept is environment-wide.** Every caller of the service, every teammate's session included, reaches the workspace. One workspace per service.
 
 ```
 team ─┬─ session ── joins ──> workspaces, sandboxes ──> environment (0 or 1)
-      │                         intercept: environment service ──> workspace of the session
+      │                         intercept: service ──> workspace of the session
       ├─ environment ── services (image, ports, env, mounts)
-      ├─ volume ── snapshots, name@N <── workspace, environment, pipeline job (saveTo, fromSnapshot)
+      ├─ volume ── snapshots, name@N <── workspace, environment, job (saveTo, fromSnapshot)
       ├─ pipeline ── versions ── runs ── jobs (one sandbox each)
       ├─ secrets ──> env of a workspace, service, sandbox or job
-      └─ connectors ──> git clone (workspace, sandbox, job); image push and pull
+      └─ connectors ──> git clone; image push and pull
 ```
 
-## Ids and names
+## Hosts
 
-| Object | Id starts with |
-|---|---|
-| Workspace | `ws-` |
-| Environment | `env-` |
-| Session | `ses-` |
-| Sandbox | `sbx-` |
+Read your row. The task skills never name a host.
 
-1. Get the id from `workspace_list`, `env_list` or `session_current`.
-2. Give the id in the `workspace` or `env` argument of a tool. A name does not work there.
-3. Use the name when you write to the user.
-4. `volume_history`, `volume_refs` and `volume_delete` take the volume `id` from `volume_list`. Restore and clone take a reference in `snapshot_id`.
-5. The `kloudlite` command takes a name, `team/name`, or an id.
+| Host | Tools | Local commands | Local files | Who orchestrates |
+|---|---|---|---|---|
+| Claude Code, plugin, kl mode on | `mcp__plugin_kloudlite_kl__*` | refused (`kl mode: …`) | refused | main session + one `kl-workspace` agent per workspace (`orchestrate`, `develop`) |
+| Claude Code, plugin, kl mode off | the same | yes | yes | the one agent |
+| MCP client with `kloudlite mcp` | server `kl`, all scopes in one list | only with a shell tool | only with file tools | the one agent |
+| Remote connector (claude.ai, ChatGPT) | `/mcp` over OAuth | no | no | the one agent |
+| Kloudlite harness | split by role: main, workspace, subagent | no | no | the role skills |
+
+Use a tool, not a command. Two things have no tool: connecting a provider (the web console) and `kloudlite env`, the tunnel to the laptop. For those, give the user the exact command, or run it only on a host with a shell and kl mode off. If a local command is refused (`kl mode: use the kl tools; nothing runs on this laptop`), do not go around it: give `/kloudlite:off` or the command.
+
+## How to work
+
+1. **Orient first.** Call `session_current`, `workspace_list`, then `env_get` of the session's environment. Three calls, every task, before any create. Say in one line what exists.
+2. **Reuse before create.** A workspace that holds the repo, an environment that runs the app, a session on it: reuse them. Create only what is missing, and name it in the answer ("created workspace `api` and environment `shop-dev`"). Never a second object for the same job.
+3. **Derive the set-up from the repository.** Read `docker-compose.yml`, `.env.example`, `README`, `Procfile`, `package.json`, `go.mod`, `pyproject.toml`, `Cargo.toml`: they give services, ports, variables and packages. Ask the user only what the repo does not say (which registry, which environment to share).
+4. **Names.** Workspace: the repo or component (`api`, `web`). Environment: the app and purpose (`shop-dev`, `shop-pr-42`). Session: the piece of work (`orders`, `review-42`). Lowercase, hyphens, unique per owner.
+5. **Pick the shape** (below). Decide the topology before the first create, say it in one line, then build it.
+6. **Create what the task needs; tear down what you created.** Clones, environment copies, sandboxes, review workspaces and intercepts made for a task go at the end of the task. Objects the user had stay. The answer lists both.
+7. **Lifecycle calls return at once.** Poll `workspace_get` until `ready` or `stopped`; call `env_wait` for an environment. Stop at `error` or `deleted`. A `failing` service needs its `message` and a fix, not more waiting. Back off: 2 s, 4 s, 8 s, 15 s.
+8. **Packages are tools; services belong in the environment.** No database, queue or broker in a workspace. `references/services.md` gives image, ports and mounts.
+9. **Service data.** A service that writes data gets a mount in the same call that creates it. A service without `mounts` loses its data on each restart, and data written before a mount is lost. Example: `{"name": "db", "image": "postgres:16", "ports": [5432], "mounts": [{"folder": "pg-data", "path": "/var/lib/postgresql/data"}]}`. A service that keeps all its data in another service needs none: say so.
+10. **Processes.** Run a dev server detached (`exec` with `detach: true`). Read it with `process_output`. Confirm it listens on its port before an intercept. `process_kill` it when done. At most 32 processes.
+11. **Intercept etiquette.** In a shared environment, intercept; do not copy. Agree who intercepts what. Release when done. Copy the environment only for data changes, risky migrations or experiments (shape 4).
+12. **Secrets.** Never print a secret value. Set it with `secret_set`, never in a command line or a chat message, and never echo what the user typed. Refer by name. A rotation marks the readers; the restart is the user's choice.
+13. **Quota and errors.** A `409` that names a limit does not pass on a retry: tell the user, and offer `request_create` only when asked. Report every error as it is. Never go around it through another object, session or tool. `references/errors.md` gives the action for each.
+14. **Destructive actions** need an explicit request that names the targets. List the targets by name first. A refusal is final.
+15. **Answer shape.** Result first, then the objects created and removed, then the next step. Never a dump of tool output.
+
+## Pick the shape
+
+The example app in every skill: a shop with `web`, `api`, `worker`, `db` (Postgres) and `cache` (Redis).
+
+| Shape | Use when | Build |
+|---|---|---|
+| 1. One standalone workspace | A library, CLI, script, or a fix that needs no running service | `workspace_create` with packages from the repo; clone through the connector |
+| 2. One managed workspace, session, environment | One component that needs real services | `env_create` with the services (or reuse); a session on it; `workspace_create` in the session |
+| 3. One managed workspace per component, one session | A change across `web`, `api` and `worker` | One environment with every service; one session; a workspace per component; each intercepts its own service |
+| 4. Copies | Risky data changes, experiments, PR review in a shared environment | `env_clone` for the environment; `workspace_clone` for a disposable standalone copy; `worktree_add` for a second branch in one workspace |
+
+Ask in order. Does the work need a running service? No: shape 1. How many components change? One: shape 2; several: shape 3. Would it disturb a shared environment, or try several options? Yes: shape 4. Is it a one-time check? Use a sandbox, not a workspace (`kloudlite-verify`).
+
+Parallel work: only a managed workspace reaches the environment, and a clone is standalone. So "two features at once against the services" is two managed workspaces in the session (each clones the repo) or two worktrees in one managed workspace. A clone keeps or explores a machine's state without services.
+
+## Ids and states
+
+| Object | Id starts with | States |
+|---|---|---|
+| Workspace | `ws-` | `creating`, `ready`, `stopped`, `error`, `deleted` |
+| Environment | `env-` | `creating`, `running`, `stopped`, `error`, `deleted` |
+| Session | `ses-` | `running`, `starting`, `idle`, `stopped` |
+| Sandbox | `sbx-` | `phase`: `pending`, `starting`, `running`, `terminated`; with `reason` `Exited`, `exit_code` is the result |
+
+Get ids from `workspace_list`, `env_list` or `session_current`. Tools take the id, not the name; write the name to the user. `volume_history`, `volume_refs` and `volume_delete` take the volume `id` from `volume_list`. Restore and clone take a reference in `snapshot_id`.
+
+A session goes `idle` after 30 minutes without use, and its workspaces stop. A start, a create in the session, or a connect wakes it. What the user stopped stays stopped.
 
 ## Tools
 
-The tools come from `kloudlite mcp` or the laptop plugin (`mcp__plugin_kloudlite_kl__<name>`). They act on one session. A tool that starts work returns at once: poll `workspace_get` until `state` is `ready`, and call `env_wait` for an environment.
+The tools act on one session. Every code, run, package and image tool takes `workspace`, the id of a `ready` workspace. `references/tools.md` lists every tool with its arguments.
 
 | Group | Tools |
 |---|---|
-| Session | `session_current`, `session_use`, `session_connect`, `session_disconnect` |
-| Workspaces | `workspace_list`, `workspace_get`, `workspace_create`, `workspace_clone`, `workspace_restore`, `workspace_start`, `workspace_stop`, `workspace_delete`, `workspace_snapshot`, `worktree_add`, `worktree_drop` |
+| Session | `session_current`, `session_use`, `session_connect`, `session_disconnect`, `session_create`, `session_stop`, `session_start`, `session_delete`, `session_ttl` |
+| Workspaces | `workspace_list`, `workspace_get`, `workspace_create`, `workspace_clone`, `workspace_restore`, `workspace_start`, `workspace_stop`, `workspace_delete`, `workspace_snapshot`, `worktree_add`, `worktree_drop`, `workspace_env_set`, `workspace_restart`, `workspace_ttl` |
 | Code | `read`, `write`, `edit`, `patch`, `glob`, `grep` |
 | Run | `exec`, `process_list`, `process_output`, `process_write`, `process_kill`, `watch`, `watch_poll`, `watch_stop` |
 | Packages | `packages_list`, `packages_add`, `packages_remove`, `packages_update` |
 | Images | `container_build`, `container_push`, `builder_status` |
-| Environments | `env_list`, `env_get`, `env_wait`, `env_create`, `env_clone`, `env_start`, `env_stop`, `env_delete`, `env_snapshot`, `env_restore`, `service_add`, `service_update`, `service_remove`, `service_logs` |
+| Environments | `env_list`, `env_get`, `env_wait`, `env_create`, `env_clone`, `env_start`, `env_stop`, `env_delete`, `env_snapshot`, `env_restore`, `service_add`, `service_update`, `service_remove`, `service_logs`, `service_restart`, `env_ttl` |
 | Intercepts | `intercept`, `release` |
 | Volumes | `volume_list`, `volume_history`, `volume_refs`, `volume_delete`, `snapshot_delete` |
 | Account | `quota`, `regions`, `requests_list`, `request_get`, `request_create` |
+| Sandboxes | `sandbox_create`, `sandbox_get`, `sandbox_wait`, `sandbox_logs`, `sandbox_list`, `sandbox_terminate`, `sandbox_delete` |
+| Pipelines | `pipeline_list`, `pipeline_get`, `pipeline_save`, `pipeline_versions`, `pipeline_delete`, `webhook_rotate`, `run_start`, `run_list`, `run_get`, `run_wait`, `run_logs`, `run_cancel` |
+| Secrets and connectors | `secret_set`, `secret_list`, `secret_delete`, `connector_list` |
 | Web | `web_fetch`, `web_search` |
 
-Every code, run, package and image tool takes `workspace`, the id of a `ready` workspace. With several sessions and none picked, the server lists only `session_pick`: ask the user which session, then call it.
+With several sessions and none picked, the server lists only `session_pick`: ask the user which, call it, continue.
 
-These components have no tool. Use the `kloudlite` command on the user's computer, with `--json` for output that you parse:
+## Reads, lifecycle and deletes
 
-| Component | Commands |
-|---|---|
-| Sandbox | `kloudlite sessions create-sandbox`, `kloudlite sandboxes get`, `logs`, `wait`, `list`, `terminate`, `delete` |
-| Pipeline | `kloudlite pipelines create`, `update`, `get`, `versions`, `run`, `runs`, `get-run`, `logs`, `wait-run`, `cancel-run`, `rotate-webhook`, `delete` |
-| Secret | `kloudlite secrets set`, `list`, `delete` |
-| Connector | `kloudlite connectors list`, `remove` |
-| Session lifecycle | `kloudlite sessions create`, `stop`, `start`, `delete` |
-| Restart for new variables | `kloudlite workspaces restart`, `kloudlite environments restart --service NAME` |
+These need no scenario.
 
-If the host refuses local commands (the laptop plugin in kl mode answers `kl mode: use the kl tools; nothing runs on this laptop`), do not go around it. Tell the user to type `/kloudlite:off`, or give the exact command for the user to run.
-
-## States
-
-| Object | States | Up when |
-|---|---|---|
-| Workspace | `creating`, `ready`, `stopped`, `error`, `deleted` | `ready` |
-| Environment | `creating`, `running`, `stopped`, `error`, `deleted` | `running`, and every service ready (`env_wait`) |
-| Session | `running`, `starting`, `idle`, `stopped` | `running` |
-| Sandbox (`phase`) | `pending`, `starting`, `running`, `terminated` | `terminated` with `reason` `Exited`: `exit_code` is the result |
-
-Stop a poll at `error` or `deleted`: that state does not change to the one you want. An environment service with `failing: true` does not come up by waiting: read its `message`, fix the cause, and change the service again.
-
-Idle stop: after 30 minutes without use, a session goes `idle` and its workspaces stop. A start of a workspace, a create in the session, or a connect of an environment wakes the session again. An object that the user stopped stays stopped.
-
-## Services
-
-**Packages are tools. Services belong in the environment.**
-
-- Packages give the tools to develop: compilers, runtimes, test tools, CLIs. Examples: `go`, `nodejs`, `python3`, `rustc`, `postgresql` for the `psql` client.
-- Never install, download or run a server (MongoDB, PostgreSQL, Redis, Kafka, RabbitMQ, Elasticsearch, MinIO) in a workspace. Add it to the environment with `service_add` and its public image.
-- A package entry is `attr` or `attr@version` (`latest`, `N`, `N.N`, `N.N.N`). A version that is not in the cache answers `422` with the versions that are.
-
-**Service data.** A service without `mounts` loses what it writes on each restart. Before each `service_add` or `service_update`:
-
-1. Find what the service writes and must keep: records, uploads, queues, indexes. Read the image documentation or its Dockerfile `VOLUME` lines.
-2. Give each such directory a mount in the same call: `{"folder": "mongo-data", "path": "/data/db"}`. Data written before a mount is lost.
-3. A service that keeps all its data in another service needs no mount. Say so in your answer.
-
-Example service: `{"name": "mongodb", "image": "mongo:7", "ports": [27017], "mounts": [{"folder": "mongo-data", "path": "/data/db"}]}`.
-
-**Service images.** For standard software, use a public image. For code that the user owns, run the code in a workspace and intercept the service. Build an image with `container_build` only when the user asks to publish one.
+- **What do I have:** the three orient calls, plus `env_list`.
+- **Status:** `workspace_get`, `env_get`, `env_wait`. Intercepts in force: `env_get`, `services[].interceptedBy`.
+- **Logs of a service:** `service_logs` with `tail`, `since`, `previous` (after a crash). It names the workspace when an intercept holds the service.
+- **Start and stop:** `workspace_start`, `workspace_stop`, `env_start`, `env_stop`. A stop of something the user did not name needs a name first.
+- **Delete:** safety rule 1, then `workspace_delete`, `env_delete`, `volume_delete`, `snapshot_delete`.
+- **Quota:** `quota` shows the ceilings and the use. A raise is `request_create` (`kind`: `quota`, `access`, `region` or `other`, with `reason`), only when the user asks.
 
 ## Safety rules
 
-1. **Destructive actions.** A delete (`workspace_delete`, `env_delete`, `service_remove`, `volume_delete`, `snapshot_delete`, `worktree_drop`, `kloudlite ... delete`), an `env_restore`, and a stop of something the user did not name need an explicit request that names the targets. List the targets by name. If the user did not name them in this turn, ask in one line first. If the host shows its own confirmation, that is the confirmation.
-2. **Snapshots only when asked.** Take a snapshot only when the user asks. The platform already keeps the data safe after a crash.
-3. **No secret values in output.** Never print, echo, log or repeat a secret value. Pass a value to `kloudlite secrets set` on stdin only. Refer to secrets by name.
-4. **Packages are tools, services are in the environment.** See "Services".
-5. **Refused calls.** If the user refuses a call or a confirmation, that is the answer. Do not try again. Do not get the same result in another way.
-6. **No backdoors.** If a call fails, tell the user the error as it is. Do not go around it through another workspace, session or tool.
-7. **Limits.** A `409` that names a limit (`workspaces: 5 of 5 in use; request more under Quota`) does not pass on a retry. Tell the user. Offer `request_create` (`kind`: `quota`, `access`, `region` or `other`, with `reason`) only when the user asks for it.
-8. **Shared environment.** Intercept the shared team environment. Make a copy of an environment only for a task that needs one (see `kloudlite-develop`). Release each intercept when the work is done.
-9. **Short answers.** Give the result first. Do not repeat tool output.
+1. **Destructive actions.** `workspace_delete`, `env_delete`, `service_remove`, `volume_delete`, `snapshot_delete`, `worktree_drop`, `env_restore`, any delete of a sandbox, pipeline or secret, and a stop of something the user did not name need a request that names the targets. List them by name. If the user did not name them in this turn, ask in one line first. A host confirmation counts as the confirmation.
+2. **Snapshots only when asked.** The platform already keeps data safe after a crash.
+3. **No secret values in output.** Never print, echo, log or repeat one.
+4. **Refused calls.** If the user refuses a call, that is the answer. Do not retry or get the same result another way.
+5. **No backdoors.** If a call fails, tell the user the error. Do not go around it.
+6. **Limits.** See "How to work", rule 13.
+7. **Shared environment.** Intercept it, release when done, copy only for a task that needs one.
+8. **Short answers.** Result first. Do not repeat tool output.
 
-## Setup
+## Tie-breakers
 
-Kloudlite is not available when you have no Kloudlite tool: no `session_current` or `workspace_list` tool, by any prefix (`mcp__kl__`, `mcp__plugin_kloudlite_kl__`). Then do not guess and do not call an API. Tell the user these steps. Do not run an installer or a login yourself unless the user tells you to.
+| Phrase | Skill | Rule |
+|---|---|---|
+| "run the tests", "check it works", "try it" | `kloudlite-verify` | Once, now, isolated, a result to read |
+| "run the tests every night / on every push / after the build" | `kloudlite-automate` | Repeats without a person |
+| "run my server", "hit it with real traffic", "fix the bug" | `kloudlite-develop` | Edits code or keeps a process running |
+| "why did it fail" | verify for a sandbox, automate for a pipeline run | Which record it is |
+| "set up", "give me a workspace with Postgres" | `kloudlite-develop` | Creates the shape |
+| "what do I have", "status of X", "logs of db", "delete X", "stop my session" | this skill alone | Reads, lifecycle and deletes need no scenario |
+| A change, then "and check it" | develop, then verify | Every develop scenario ends with "to check the result, use `kloudlite-verify`" |
 
-1. Install `kloudlite` (macOS and Linux; on Windows, use WSL):
+## Setup and recovery
 
-   ```sh
-   curl -fsSL https://dev.kloudlite.io/install.sh | sh
-   ```
+Act on the symptom you see.
 
-2. Sign in. The command opens the browser.
+| Symptom | What to do |
+|---|---|
+| No Kloudlite tool at all (no `session_current` or `workspace_list` under any prefix) | Do not guess and do not call an API. Tell the user the five steps below. Never run the installer or the login yourself unless told. |
+| A tool answers ``not logged in — run `kloudlite login` `` | Tell the user that command, then to restart the client. |
+| The server lists only `session_pick` | Ask which session, call it, continue. |
+| `403 your access to TEAM is paused` | A team admin must restore access. Stop. |
+| The plugin's kl mode refuses a local command | Say so; give `/kloudlite:off` or the exact command. |
 
-   ```sh
-   kloudlite login
-   ```
+The five steps:
 
-3. Connect the agent. Use one of these:
-   - Claude Code with the plugin, which adds the tools, the skills and kl mode. `-t` is the team and `-s` the session; leave out `-t` for your own team:
+1. Install `kloudlite` (macOS, Linux; WSL on Windows): `curl -fsSL https://dev.kloudlite.io/install.sh | sh`
+2. Sign in (opens the browser): `kloudlite login`
+3. Connect the agent. Claude Code with the plugin (tools, skills, kl mode): `kloudlite claude -t TEAM -s SESSION` (leave out `-t` for your own team). Another MCP client: `claude mcp add kl -- kloudlite mcp`, or the JSON `{"mcpServers": {"kl": {"command": "kloudlite", "args": ["mcp"]}}}`; for another team or session, `["mcp", "TEAM", "--session", "SESSION"]`. The remote connector uses its URL once it exists.
+4. Pick or create a session: `kloudlite sessions use NAME`, or `kloudlite sessions use --new-environment NAME`. With no session, `kloudlite mcp` creates `main`.
+5. Restart the client. It then lists the server `kl`.
 
-     ```sh
-     kloudlite claude -t TEAM -s SESSION
-     ```
-
-   - Any MCP client, with `kloudlite mcp` as a stdio server. For Claude Code without the plugin:
-
-     ```sh
-     claude mcp add kl -- kloudlite mcp
-     ```
-
-     A client with a JSON settings file takes `{"mcpServers": {"kl": {"command": "kloudlite", "args": ["mcp"]}}}`. For another team or session, use `["mcp", "TEAM", "--session", "SESSION"]`.
-
-4. Pick or create a session. `kloudlite sessions use NAME` picks one; `kloudlite sessions use --new-environment NAME` creates an environment and a session on it. With no session at all, `kloudlite mcp` creates the session `main`.
-5. Restart the client. The client then lists the server `kl` and its tools.
-
-After setup, call `session_current` and check that it names the session that the user expects. If it does not, call `session_use` with `name` (and `team` for a team session).
-
-If a tool answers ``not logged in — run `kloudlite login` ``, tell the user to run `kloudlite login` and restart the client. A `403` with `your access to TEAM is paused` needs a team admin.
+After setup, `session_current` must name the session the user expects. If not, call `session_use` with `name` (and `team` for a team session).

@@ -1,0 +1,37 @@
+# Errors
+
+The status comes first; the body is one sentence. Report it as it is, then take the action.
+
+| Error | Action |
+|---|---|
+| `409` `{dimension}: {used} of {limit} in use; request more under Quota` | Do not retry. Tell the user. Free something, or `request_create` kind `quota` when asked. |
+| `403 your access to {team} is paused` | A team admin must unpause. Stop. |
+| `403 you are no longer a member of {team}` | Stop. The user cannot act there. |
+| `404 not found` | The object does not exist or is not the user's. Check the id with the list tool. |
+| `422` name rule (`name must be 1-40 lowercase letters, digits or '-'…`) | Rename: lowercase, hyphens, starts with a letter, no `--`, not `ws`, `env`, `api`, `admin`, `system`, `kl`. |
+| `409 a workspace named "x" already exists here` (also environment, session) | Reuse it, or pick another name. |
+| `409` `"x" is ambiguous; qualify it as owner/name` | Use the id or `team/name`. |
+| `409 workspace is interrupted: its storage is moving; it resumes in seconds` | Wait and poll. |
+| `409 no storage disk has room for {n} GiB; retry later or ask an operator` | Smaller `quota_gb`, or tell the user. |
+| `409 a snapshot is already being cut for this workspace` | Wait, poll the volume history, do not repeat. |
+| `409 this snapshot is the base of a running worktree` | Keep it; tell the user. |
+| `409 the volume still has a workspace or environment` | Delete the owner first, if the user asked. |
+| `409 this session has no environment; connect one…` | `session_connect`. |
+| `409 that workspace is in session {name}; remove it there first` | Tell the user. |
+| `409 conflict, retry` / `the session changed; retry` | Read again, repeat once. |
+| `env_restore` `409` with `lost` | Name the services; call again with `discard` only after a yes. |
+| `422` for a package; the answer lists versions | Pick a listed version. |
+| `422 volume: this volume has no name yet; name it on its first push` | Ask for a name; give `volume`. |
+| `409 volume {name} already exists; delete it first` | Ask for another name. |
+| `409 volume {name} is used by {readers}` | A pipeline reads it. Tell the user. |
+| `404 volume {name} has no version {n}` / `has no ready version` | List with `volume_history`. |
+| `no git connector of {owner} covers {host}/{repo}` | The user connects the code host in the web console. |
+| `no registry is configured` | The user connects a registry in the web console. |
+| `422 pipeline {name} is invalid:` + lines | Fix every line, save again. |
+| `422 pipeline {name} cannot run:` + lines | A missing input or secret. Fix the cause, start again. |
+| `409 pipeline {name} changed; retry` | Read the newest version, apply the change, save. |
+| `409 this run has already finished` | Nothing to cancel. |
+| `403 only a team admin can change team pipelines` | Tell the user. |
+| `429 this token has {n} runs in flight` | Wait for a run to end. |
+| `kl mode: use the kl tools; nothing runs on this laptop` | Use a tool, or give `/kloudlite:off`. |
+| `not logged in — run kloudlite login` | The user runs it, then restarts the client. |

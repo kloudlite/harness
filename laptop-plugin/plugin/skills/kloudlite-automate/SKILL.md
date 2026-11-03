@@ -1,268 +1,227 @@
 ---
 name: kloudlite-automate
-description: Use when the user wants work to run without a person at a terminal on Kloudlite - "make a pipeline that runs the tests", "run this every night at 02:00", "start a build from a webhook", "release after the tests pass", "pass the dataset from one job to the next", "why did run 12 fail", "show the logs of the test job". Covers pipeline definitions, versions, triggers, needs and if, secrets, git, registry pushes, volumes, runs and logs. Not for a one-time check (use kloudlite-verify) or for editing code in a workspace (use kloudlite-develop). Read the kloudlite skill first.
+description: Gives the steps to write, save, version, start, schedule and debug pipelines on Kloudlite. Use when work must run without a person at a terminal, repeat, or follow another event: "make a pipeline that runs the tests", "run it now", "run this every night at 02:00 IST", "start it from a GitHub push", "release after the tests pass", "let me choose the branch", "lint and test in parallel, then build", "test on node 20 and 22", "the job needs the npm token", "run the e2e tests against a fresh copy of staging", "build the image in CI", "pass the dataset to the next job", "why did run 12 fail", "let GitHub Actions start this pipeline", "cancel the run", "roll back to v3". Covers definitions, versions, triggers, needs and if, matrix, secrets, git, registry pushes, volumes, runs, logs. Not for a one-time check or test run (use kloudlite-verify), not for editing code or running a server (use kloudlite-develop), not for why a sandbox failed (use kloudlite-verify). Read the kloudlite skill first.
 ---
 
 # Automate with pipelines
 
-## When to use
+Read the `kloudlite` skill first. It holds the definitions and the safety rules. Automate means: repeats without a person. Example app: `web`, `api`, `worker`, `db`, `cache`.
 
-- The user wants a pipeline: a definition written, saved, changed, or started by hand, on a schedule, from a webhook, or after another pipeline.
-- The user asks why a run failed, or wants its logs.
-
-Do not use this skill for:
-
-- A command that runs one time now: use `kloudlite-verify`.
-- Changing and running code interactively: use `kloudlite-develop`.
-
-## Components used
-
-The `kloudlite` skill defines each one.
-
-- Pipeline: the definition, its versions and its runs.
-- Sandbox: each job runs in its own sandbox.
-- Secrets and variables: job `secrets` and `env`.
-- Connector: git read access and registry logins for jobs.
-- Volume: `saveTo` and `fromSnapshot` carry a job's home between jobs and runs.
-- Environment: the services that jobs reach, shared or copied for the run.
-
-No tool manages pipelines. Use the `kloudlite pipelines` command on the user's computer (see "Tools" in the `kloudlite` skill). Write each definition to a JSON file in the user's project, for example `pipelines/ci.json`, so it lives in code.
+`references/definition.md` holds the key tables and the `needs`/`if` truth table. The rules below are enough to write most definitions. Every pipeline tool takes `owner`: the user's handle, or the team slug for a team. When the host has files, keep each definition in the user's repo (`pipelines/ci.json`), and send its text to `pipeline_save`.
 
 ## Definition rules
 
-These rules come from the validator. Obey them in every definition.
-
-- camelCase JSON. Every object refuses an unknown key: `need`, `timeout` or `uses` is an error that names the key.
-- Pipeline keys: `name` (required, `[a-z0-9-]`, at most 63 characters), `environment`, `triggers`, `inputs`, `jobs` (required, at least one).
-- Job keys: `needs`, `if`, `packages`, `image`, `fromSnapshot`, `saveTo`, `environment`, `matrix`, `timeoutMinutes` (default 60, 1 to 1440), `permissions`, `env`, `secrets`, `steps` (required). Job names: `[a-z0-9][a-z0-9-]{0,39}`.
-- Step keys: `name`, `run` (required), `env`, `cwd`. A step has no `if`. Each `run` runs with `sh -e -c`, so the first failing command fails the step. The first failing step stops the job.
-- `packages` and `image` are exclusive. With neither, the job gets the base image with `git`. With `packages`, list `git` yourself when a step clones.
-- `${{ inputs.X }}`, `${{ matrix.X }}`, `${{ needs.JOB.result }}`, `${{ event }}`, `${{ run.number }}` interpolate. A `${{ secrets.NAME }}` value must be the whole value of an `env` entry.
-- `webhook.body.*` is readable only in `env` and `if`. Read it into `env` and use `"$NAME"` in `run`.
+- camelCase JSON. Every object refuses an unknown key: `need`, `timeout` or `uses` is an error that names the key. A save reports every problem at once.
+- Pipeline keys: `name` (required, `[a-z0-9-]`, at most 63 characters), `environment`, `triggers`, `inputs`, `jobs` (required). Job keys: `needs`, `if`, `packages`, `image`, `fromSnapshot`, `saveTo`, `environment`, `matrix`, `timeoutMinutes` (default 60, 1 to 1440), `permissions`, `env`, `secrets`, `steps` (required). Step keys: `name`, `run` (required), `env`, `cwd`.
+- Each `run` runs with `sh -e -c`: the first failing command fails the step, and the first failing step stops the job. A step has no `if`.
+- `packages` and `image` are exclusive. With neither, the job gets the base image with `git`. With `packages`, list `git` when a step clones.
+- `${{ inputs.X }}`, `${{ matrix.X }}`, `${{ needs.JOB.result }}`, `${{ event }}`, `${{ run.number }}` interpolate. A `${{ secrets.NAME }}` must be the whole value of an `env` entry.
+- `webhook.body.*` is readable only in `env` and `if`. Read it into `env`; use `"$NAME"` in `run`.
 - Limits: 50 jobs, 100 steps per job, 64 KiB, 50 pipelines per owner, 100 versions.
-
-**Order and conditions.** A job with no `if` runs only when every job in its `needs` succeeded. An `if` that calls no status function adds that rule. `always()` runs after any end except a cancel. `failure()` is true when a needed job failed. `cancelled()` is true while the run is canceled. A job whose needs did not succeed is `skipped`. A failed job makes the run `failure`. Jobs with no `needs` run in parallel, up to 8 at a time.
+- A job with no `if` runs only when every job in `needs` succeeded. Jobs with no `needs` run in parallel, up to 8 at a time. A failed job fails the run.
 
 ## Scenarios
 
 ### 1. Write and save a pipeline
 
-**Trigger:** "Make a pipeline that runs the tests of acme/api."
-
+**Trigger:** "make a pipeline that runs the tests".
 **Steps:**
-
-1. Write `pipelines/ci.json`:
-
+1. Orient. `connector_list` {"owner": "acme"} to see that a git connector covers the repo (scenario 11). `pipeline_list` {"owner": "acme"} for a pipeline that already does the job.
+2. Write the definition:
    ```json
-   {
-     "name": "api-ci",
-     "jobs": {
-       "test": {
-         "packages": ["git", "nodejs@22"],
-         "permissions": { "git": "read" },
-         "timeoutMinutes": 30,
-         "steps": [
-           { "run": "git clone https://github.com/acme/api api" },
-           { "name": "install", "run": "npm ci", "cwd": "api" },
-           { "name": "test", "run": "npm test", "cwd": "api" }
-         ]
-       }
-     }
-   }
+   {"name": "api-ci", "jobs": {"test": {"packages": ["git", "nodejs@22"], "permissions": {"git": "read"}, "timeoutMinutes": 30,
+     "steps": [{"run": "git clone https://github.com/acme/api api"},
+               {"name": "install", "run": "npm ci", "cwd": "api"},
+               {"name": "test", "run": "npm test", "cwd": "api"}]}}}
    ```
-
-2. `kloudlite pipelines create --json --file pipelines/ci.json --owner TEAM`. Leave out `--owner` for the user's own team.
-3. `kloudlite pipelines versions api-ci --owner TEAM`. Version 1 is listed.
+3. `pipeline_save` {"owner": "acme", "definition": {…}}.
+4. `pipeline_versions` {"owner": "acme", "pipeline": "api-ci"}: version 1.
 
 **Done when:** the pipeline exists with version 1.
+**If it fails:** `422` lists every problem with job and step: fix all, save again. `secret NAME does not exist`: scenario 10.
+**Then:** scenario 3.
 
-**If it fails:** a `422` lists every problem with its job and step. Fix all of them and save again. `secret NAME does not exist`: see scenario 6.
+### 2. Change it as a new version; go back
 
-### 2. Change a pipeline
-
-**Trigger:** "Add a lint job before the tests."
-
+**Trigger:** "add a lint job", "roll back to v3".
 **Steps:**
+1. `pipeline_get` {"owner": "acme", "pipeline": "api-ci"}: start from the newest version.
+2. Add the job and `"needs": ["lint"]` on `test`. `pipeline_save`. An equal definition saves nothing.
+3. Roll back: `pipeline_get` with `version` 3, then `pipeline_save` that definition. It becomes the next number; versions are never rewritten.
 
-1. `kloudlite pipelines get api-ci --json --owner TEAM`. Start from the newest version.
-2. Edit the file. Add the job and `"needs": ["lint"]` on `test`.
-3. `kloudlite pipelines update api-ci --file pipelines/ci.json --owner TEAM`. A definition equal to the newest version saves nothing.
+**Done when:** `pipeline_versions` shows the new number.
+**If it fails:** `409 pipeline changed; retry`: read the newest version again, apply, save. 100 versions: `409`; delete an old one, only when the user asks.
 
-**Done when:** `kloudlite pipelines versions api-ci` shows the new number.
+### 3. Start by hand and follow
 
-**If it fails:** `409`: another save won. Read the newest version again, apply the change, and save.
-
-### 3. Start a run by hand and follow it
-
-**Trigger:** "Run the tests now."
-
+**Trigger:** "run it now".
 **Steps:**
+1. `run_start` {"owner": "acme", "pipeline": "api-ci", "inputs": {"branch": "main"}}; `version` for an older one; `key` makes a retry answer the first run. Note the run id.
+2. `run_wait` {"owner": "acme", "pipeline": "api-ci", "run": "…", "timeout": 900}. On `timedOut: true`, wait again.
+3. `run_logs` {"owner": "acme", "pipeline": "api-ci", "run": "…", "job": 0}. `job` is the index of the job in the run; while `complete` is false, call again with `offset` set to `next`.
 
-1. `kloudlite pipelines run api-ci --json --owner TEAM`. Add `--input KEY=VALUE` for each input, `--version N` for an older version. Note the run `id`.
-2. `kloudlite pipelines wait-run TEAM api-ci RUN --timeout-s 3600`. It exits non-zero unless the run succeeded.
-3. `kloudlite pipelines logs TEAM api-ci RUN test`. Use `--follow` to read a running job.
+**Done when:** the run is `success`, or you reported the failure (scenario 15).
+**If it fails:** `422` at start: the version cannot run (a missing input or deleted secret); nothing is recorded. Fix, start again.
 
-**Done when:** the run state is `success`, or you reported the failure (scenario 10).
+### 4. Schedule
 
-**If it fails:** `422` at start: the version cannot run (a missing input, a deleted secret). Nothing is recorded. Fix the cause and start again.
-
-### 4. Schedule a pipeline
-
-**Trigger:** "Run it every weekday at 03:00 UTC."
-
+**Trigger:** "every night at 02:00 IST".
 **Steps:**
+1. Convert to UTC. 02:00 IST is 20:30 UTC the day before: `"triggers": {"schedule": ["30 20 * * *"]}`. Five fields: minute, hour, day of month, month, weekday. No `@daily`, no names, no seconds.
+2. Every input needs a `default`: nobody gives a value to a trigger.
+3. `pipeline_save`. Tell the user the next tick in their time.
 
-1. Add to the definition: `"triggers": { "schedule": ["0 3 * * 1-5"] }`. Five fields in UTC: minute, hour, day of month, month, weekday. No `@daily`, no names, no seconds.
-2. Every input needs a `default`: a trigger has nobody to give a value.
-3. `kloudlite pipelines update api-ci --file pipelines/ci.json --owner TEAM`.
+**Done when:** the new version is saved; its runs show `event` `schedule`.
+**If it fails:** a tick missed while the platform is down is dropped, not replayed.
 
-**Done when:** the new version is saved. Its runs show `event` `schedule`.
+### 5. Webhook
 
-**If it fails:** a tick that the platform misses while it is down is dropped. Tell the user when the next tick is in their time.
-
-### 5. Start from a webhook
-
-**Trigger:** "Rebuild the index when the CMS calls us."
-
+**Trigger:** "start it from a GitHub push".
 **Steps:**
+1. `"triggers": {"webhook": true}`. Read body fields through `env`: `"env": {"DOC_ID": "${{ webhook.body.id }}"}`, then `"run": "reindex \"$DOC_ID\""`.
+2. `pipeline_save`. The answer shows the URL once: tell the user to store it in the calling system, and never repeat it.
+3. A leaked URL: `webhook_rotate` {"owner": "acme", "pipeline": "api-ci"}; the old URL stops at once and the answer shows the new one once.
+4. A `push` event is not a trigger here: the URL starts a run, and the job clones the code.
 
-1. Add `"triggers": { "webhook": true }`. Read body fields through `env`: `"env": { "DOC_ID": "${{ webhook.body.id }}" }`, then `"run": "reindex \"$DOC_ID\""`.
-2. Save with `kloudlite pipelines update` (or `create`). The answer shows the webhook URL once. Tell the user to store it as a secret of the calling system. Do not repeat it later.
-3. To replace a leaked URL: `kloudlite pipelines rotate-webhook NAME --owner TEAM`. The old URL stops at once.
+**Done when:** a `POST` with a JSON body starts a run with `event` `webhook`.
+**If it fails:** `webhook.body` in `run`, `cwd` or `image` is refused at save. 30 calls a minute, body at most 256 KiB.
 
-**Done when:** a `POST` to the URL with a JSON body starts a run with `event` `webhook`.
+### 6. After another pipeline
 
-**If it fails:** a `run`, `cwd` or `image` that reads `webhook.body` is refused at save. A pipeline takes 30 calls a minute and a body of at most 256 KiB.
-
-### 6. Use secrets in a job
-
-**Trigger:** "The deploy job needs DEPLOY_TOKEN."
-
+**Trigger:** "release after the tests pass".
 **Steps:**
+1. In `release`: `"triggers": {"after": {"pipeline": "api-ci", "result": "success"}}`. `result` is `success`, `failure` or `cancelled`; absent means any end.
+2. The target must exist, same owner. `pipeline_save`.
 
-1. `kloudlite secrets list --json --owner TEAM --scope team`. A pipeline job reads only the secrets of the pipeline owner (the team for a team).
-2. If the name is missing, ask the user to set it. Give the command, value on stdin only: `printf %s "$TOKEN" | kloudlite secrets set DEPLOY_TOKEN --owner TEAM --scope team`.
-3. In the job: `"secrets": ["DEPLOY_TOKEN"]`, or `"env": { "TOKEN": "${{ secrets.DEPLOY_TOKEN }}" }`.
-4. Save the pipeline.
+**Done when:** a successful `api-ci` run starts a `release` run with `event` `pipeline`.
+**If it fails:** a pipeline cannot follow itself; a chain stops at depth 5, and the ended run's `triggered` names the refusal.
 
-**Done when:** the save passes. The logs show `***` in place of the value.
+### 7. Inputs
 
-**If it fails:** a value shorter than 4 bytes is not masked. Tell the user to use a longer value.
-
-### 7. Clone code in a job
-
-**Trigger:** "The job must check out acme/web."
-
+**Trigger:** "let me choose the branch".
 **Steps:**
+1. `"inputs": {"branch": {"default": "main"}}`; `options` limits the values; `required` refuses a start without one.
+2. Use `${{ inputs.branch }}` in `env`, `image`, `packages`, `environment`, `fromSnapshot`, `if` and steps.
+3. `run_start` {"inputs": {"branch": "feature-x"}}. Every value is text.
 
-1. `kloudlite connectors list --owner TEAM`. A connector of the pipeline owner must cover the repository.
-2. In the job: `"permissions": { "git": "read" }`, and a step `{ "run": "git clone https://github.com/acme/web web" }`. Use HTTPS. Pin a commit in the script if needed (`git checkout SHA`).
+**Done when:** a run with `feature-x` shows it in the job.
+**If it fails:** a run can give only declared inputs; `inputs.nope` is an error at save.
+
+### 8. Order and conditions
+
+**Trigger:** "lint and test in parallel, then build".
+**Steps:**
+1. `lint` and `test` with no `needs` run together; `build` has `"needs": ["lint", "test"]`.
+2. A job runs only if every needed job succeeded. For cleanup after a failure: `"if": "always()"`. For a failure notice: `"if": "failure()"` (true when a needed job failed). `cancelled()` is true while the run is canceled.
+3. A job whose needs did not succeed is `skipped`. A failed job fails the run.
+
+**Done when:** a run shows the jobs in the expected order and states.
+**If it fails:** the truth table in `references/definition.md`. A step has no `if`: split it into a job.
+
+### 9. Matrix
+
+**Trigger:** "test on node 20 and 22".
+**Steps:**
+1. `"matrix": {"node": ["20", "22"]}` and `"packages": ["git", "nodejs@${{ matrix.node }}"]`.
+2. At most 64 combinations. Instances are named `test (20)`. `needs.test.result` is one result for all: `failure` if any failed.
+3. `saveTo` is not allowed with `matrix`.
+
+**Done when:** a run shows one job instance per value.
+**If it fails:** an empty axis or a repeated value is an error at save.
+
+### 10. Secrets in a job
+
+**Trigger:** "the job needs the npm token".
+**Steps:**
+1. `secret_list` {"owner": "acme"}. A job reads only the pipeline owner's secrets (the team for a team).
+2. A missing name: the user gives the value. `secret_set` {"owner": "acme", "name": "NPM_TOKEN", "value": "…"}, value never printed. The owner is the team, so the job can read it.
+3. In the job: `"secrets": ["NPM_TOKEN"]`, or `"env": {"TOKEN": "${{ secrets.NPM_TOKEN }}"}`. Never in `run`.
+4. `pipeline_save`.
+
+**Done when:** the save passes and the logs show `***`.
+**If it fails:** a value under 4 bytes is not masked: ask for a longer one. Deleting a referenced secret is a `409` naming the pipeline.
+
+### 11. Clone code
+
+**Trigger:** "check out the repo in the job".
+**Steps:**
+1. `connector_list`: a connector of the pipeline owner must cover the repo.
+2. `"permissions": {"git": "read"}` and a step `git clone https://github.com/acme/web web`. HTTPS only. Pin a commit in the script (`git checkout SHA`) if needed.
 
 **Done when:** the clone step succeeds.
+**If it fails:** `job KEY did not ask for permissions.git: read`: add it. `no git connector of OWNER covers HOST/REPO`: the web console. With GitHub, `git: read` reads every repo the app is installed on, a webhook run included: tell the user. Another host needs a token secret in the URL.
 
-**If it fails:**
+### 12. Jobs against an environment
 
-- `job KEY did not ask for permissions.git: read`: add the permission.
-- `no git connector of OWNER covers HOST/REPO`: the user connects the code host in the web console.
-- With GitHub, `git: read` reads every repository the app is installed on. Tell the user before a webhook pipeline gets it. Another git host needs a token secret in the clone URL.
-
-### 8. Publish an image after the tests pass
-
-**Trigger:** "When tests pass, tag the tested image as a release."
-
+**Trigger:** "run the e2e tests against a fresh copy of staging".
 **Steps:**
+1. `"environment": {"clone": "staging"}` on the pipeline or the job; `"environment": "staging"` uses the shared one as it is. A job's value beats the run's, which beats the pipeline's.
+2. One copy per run per distinct target, deleted when the run ends. Jobs with the same target share it.
+3. A run cannot change the environment: to run against another one, save a version that names it.
 
-1. Build and push the image from a workspace (`kloudlite-develop`, "Publish an image"), or let an earlier job push it.
-2. Add a job:
+**Done when:** the job reaches `db` by name.
+**If it fails:** the copy counts against the quota while it exists. `cloning NAME: …` in `detail`: check the environment's services.
 
-   ```json
-   "release": {
-     "needs": ["test"],
-     "image": "docker:27-cli",
-     "permissions": { "registry": "push" },
-     "steps": [
-       { "run": "docker buildx imagetools create -t \"$KL_REGISTRY/api:$KL_RUN_NUMBER\" \"$KL_REGISTRY/api:candidate\"" }
-     ]
-   }
-   ```
+### 13. Build and push an image
 
-   The platform logs in to each registry connector of the owner first. `KL_REGISTRY` is the first registry and its namespace.
-3. Save and run the pipeline.
+**Trigger:** "build the image in CI".
+**Steps:**
+1. `registry` connector needed: `connector_list`.
+2. A job with `"image": "docker:27-cli"` (the job image needs `docker`), `"permissions": {"registry": "push"}` and `docker buildx build --push -t "$KL_REGISTRY/api:$KL_RUN_NUMBER" .`. `KL_REGISTRY` is the first registry and its namespace.
+3. `needs` the tests. Save, run.
 
 **Done when:** the registry lists the new tag.
+**If it fails:** `registry: push needs docker in the job's image`. No registry connector: the web console.
 
-**If it fails:** `registry: push needs docker in the job's image`: use an image with `docker`. No registry connector: the user connects one in the web console.
+### 14. Data between jobs and runs
 
-### 9. Pass data between jobs and runs with a volume
-
-**Trigger:** "Download the dataset once, then train on it in the next job."
-
+**Trigger:** "pass the dataset to the next job", "start from last night's build".
 **Steps:**
-
-1. On the first job: `"saveTo": "dataset"`. When the job succeeds, its home is saved as the next version of the volume `dataset`.
-2. On the next job: `"needs": ["fetch"]` and `"fromSnapshot": "dataset"`. Its home starts as a copy of the newest version. Use `dataset@N` to pin a version.
-3. Read versions with `kloudlite volumes versions dataset --owner TEAM`.
+1. First job: `"saveTo": "dataset"`. On exit 0 its home is saved as the next version of the volume.
+2. Next job: `"needs": ["fetch"]`, `"fromSnapshot": "dataset"` (or `dataset@3`). Its home starts as a copy.
+3. `volume_list` / `volume_refs` show the versions.
 
 **Done when:** the run shows `saved` on the first job and the second job reads the files.
+**If it fails:** two jobs that save to one name need an order in `needs`. `volume dataset has no ready version`: tell the user. A save counts one `snapshots` unit of quota; a failed job saves nothing.
 
-**If it fails:**
+### 15. Debug a failed run
 
-- `saveTo` is not allowed with `matrix`, and it must be a literal name.
-- Two jobs that save to one name need an order in `needs`.
-- `fromSnapshot V: volume V has no ready version`: the name exists with no version. Tell the user.
-- A save counts one `snapshots` unit of the quota. A failed job saves nothing.
-
-### 10. Debug a failed run
-
-**Trigger:** "Why did the last run fail?"
-
+**Trigger:** "why did run 12 fail".
 **Steps:**
-
-1. `kloudlite pipelines runs TEAM api-ci --limit 5 --json`. Find the run.
-2. `kloudlite pipelines get-run TEAM api-ci RUN --json`. Read the run `detail`, and for each job `state`, `failedStep`, `exitCode` and `detail`.
-3. `kloudlite pipelines logs TEAM api-ci RUN JOB`. The log marks each step with `▶` and ends with `■` and the cause.
-4. Tell the user the failing job, step and the lines that show the cause. Propose the fix to the definition or the code.
+1. `run_list` {"owner": "acme", "pipeline": "api-ci", "state": "failure"}: find the run.
+2. `run_get` {"owner": "acme", "pipeline": "api-ci", "run": "…"}: the run `detail`, and per job `state`, `failedStep`, `exitCode`, `detail`.
+3. `run_logs` per failing job (`job` is its index): steps are marked `▶`, the end `■` with the cause.
+4. Tell the user the job, the step and the lines that show the cause, then the fix.
 
 **Done when:** the user knows the cause and the fix.
+**If it fails:** a `skipped` job: a needed job did not succeed or its `if` was false. A log past 90 days: `log expired`. `the clone of NAME did not start within 15 minutes`: the copy failed.
 
-**If it fails:**
+### 16. A token for CI
 
-- A job `skipped`: a needed job did not succeed, or the `if` was false. Add `always()` to `if` for a job that must run after a failure.
-- `cloning NAME: …` or `the clone of NAME did not start within 15 minutes`: the copy of the environment failed. Check the services of the environment.
-- A log older than 90 days reads `log expired`.
-
-### 11. Run jobs against an environment
-
-**Trigger:** "Run the integration job against a fresh copy of staging."
-
+**Trigger:** "let GitHub Actions start this pipeline".
 **Steps:**
+1. Tokens are made in the web console or the CLI, never by a tool and never by an API token. Give the user the steps: create a token granting `pipeline-runs` with verbs `run` and `read` on `api-ci` only, with an expiry.
+2. The caller sends it as a bearer to `POST /v1/pipelines/OWNER/api-ci/runs`. The user stores it as a secret of GitHub Actions.
+3. A token cannot read or write secrets or definitions with secret references.
 
-1. On the job or the pipeline: `"environment": { "clone": "staging" }`. Use `"environment": "staging"` for the shared environment as it is.
-2. Or per run: `kloudlite pipelines run api-ci --clone staging`, or `--environment staging`.
+**Done when:** the user has the token and a test call starts a run.
+**If it fails:** every refusal is the same generic `401`; check the grant, the owner and the expiry.
 
-**Done when:** the job reaches the services by name. The copy is deleted when the run ends.
+### 17. Cancel and clean up
 
-**If it fails:** a copy counts against the quota while it exists. Obey "Limits".
-
-### 12. Start after another pipeline
-
-**Trigger:** "Deploy when the build pipeline succeeds."
-
+**Trigger:** "cancel the run", "delete the old versions".
 **Steps:**
+1. Only on a named request. `run_cancel` {"owner": "acme", "pipeline": "api-ci", "run": "…"}; a running run stops at its next report, so read it again with `run_get`.
+2. Delete: `pipeline_delete` {"owner": "acme", "pipeline": "api-ci"} (finished runs stay; `409` while a run is queued or running).
 
-1. Add `"triggers": { "after": { "pipeline": "build", "result": "success" } }`. `result` is `success`, `failure` or `cancelled`; without it, any end starts a run.
-2. The pipeline `build` must exist, with the same owner. Save.
-
-**Done when:** a run of `build` that ends with `success` starts a run with `event` `pipeline`.
-
-**If it fails:** a pipeline cannot follow itself, and a chain stops at a depth of 5. The ended run lists the refusal in `triggered`.
+**Done when:** `run_get` shows `cancelled`, or the pipeline is gone.
+**If it fails:** `409 this run has already finished`.
 
 ## Rules
 
 - Obey the safety rules of the `kloudlite` skill.
-- Save every definition from a file in the user's project, never from a one-off string.
 - Never put a secret value in a definition. Use `secrets` or a whole-value `${{ secrets.NAME }}`.
 - Never put `webhook.body` in `run`, `cwd`, `image` or `packages`.
 - Give each job a `timeoutMinutes` that fits its work.
-- Delete a pipeline (`kloudlite pipelines delete`) or cancel a run (`kloudlite pipelines cancel-run`) only when the user asks and names it.
-- Show the webhook URL only once, in the answer to the save.
+- Delete a pipeline or cancel a run only when the user names it.
+- Show the webhook URL once, in the answer to the save.

@@ -1,158 +1,106 @@
 ---
 name: kloudlite-verify
-description: Use when the user wants to check or test code on Kloudlite without changing a workspace - "run the integration tests against the environment", "check that the API answers", "run this script once in a sandbox", "review PR 42 against a copy of staging", "what did that sandbox print", "clean up my sandboxes". Not for editing code or running a dev server in a workspace (use kloudlite-develop), not for pipelines that run on a schedule or trigger (use kloudlite-automate). Read the kloudlite skill first.
+description: Gives the steps to check code once on Kloudlite: quick checks in a workspace, clean runs in a sandbox against the session's environment, one-off scripts, reading what a sandbox printed, reviewing a pull request in a real environment, testing two changes together, and cleaning up sandboxes. Use when the user says "run the unit tests", "check it works", "try it", "run the integration tests against staging", "run this migration once and show me the output", "what did that sandbox print", "did it pass", "review PR 42 against a copy of staging", "test my api change with Priya's web change", "clean up my sandboxes", or "why did the sandbox fail". Not for editing code or keeping a server running (use kloudlite-develop), not for tests that repeat nightly, on a push or after a build (use kloudlite-automate), not for why a pipeline run failed (use kloudlite-automate). Read the kloudlite skill first.
 ---
 
 # Verify on Kloudlite
 
-## When to use
+Read the `kloudlite` skill first. It holds the definitions and the safety rules. Verify means: once, now, isolated, a result to read. Example app: `web`, `api`, `worker`, `db`, `cache`.
 
-- The user wants one command or a test suite to run once, isolated, against the services of the session's environment.
-- The user wants the output, the exit code or the record of a sandbox.
-- The user wants a pull request branch tested against a copy of an environment.
-- The user wants old sandboxes cleaned up.
-
-Do not use this skill for:
-
-- Work that edits code or keeps a process running: use `kloudlite-develop`.
-- Tests that must run again on a schedule, a webhook or after another pipeline: use `kloudlite-automate`.
-
-## Components used
-
-The `kloudlite` skill defines each one.
-
-- Sandbox: runs the command once and ends.
-- Session: joins the sandbox to the environment.
-- Environment: holds the services that the command calls, or a copy of them.
-- Workspace: the source of the files that the sandbox starts from.
-- Volume: a snapshot can be the source instead of a workspace.
-
-No tool creates a sandbox. Use the `kloudlite` command on the user's computer (see "Tools" in the `kloudlite` skill). Put `--json` before `--` to get output that you parse.
+A check in a workspace uses the workspace's files and changes nothing. A sandbox is for a run that must be clean or must not touch a workspace.
 
 ## Scenarios
 
-### 1. One-off check against the environment
+### 1. Quick check in the workspace
 
-**Trigger:** "Check that the api service answers its health route."
-
+**Trigger:** "run the unit tests", "check it works".
 **Steps:**
+1. Orient. Find the workspace that holds the code (`workspace_list`); it must be `ready`.
+2. `exec` {"workspace": "ws-…", "cmd": "npm test", "cwd": "api", "tail": 60, "quiet": true}. The call waits and answers the exit code.
+3. If the tests need a service (`db`), the workspace must be managed in a session with the environment (`kloudlite-develop`, scenario 3), or use scenario 2.
 
-1. `session_current` {}. Note the session name. The session must have an environment.
-2. `env_get` {"env": "env-…"}. Read the service name and its port.
-3. Create the sandbox in the session:
+**Done when:** the exit code is 0, or you told the user which tests failed with the lines that show it.
+**If it fails:** a command past 25 s: run it detached (`exec` with `detach: true`) and read `process_output`. A name that does not resolve: the workspace is not in the session.
+**Then:** scenario 2 for a clean run.
 
-   ```sh
-   kloudlite sessions create-sandbox --json --session SESSION --package curl --timeout-s 120 -- sh -c 'curl -fsS http://api:8080/healthz'
-   ```
+### 2. Clean run in a sandbox against the environment
 
-   Note the sandbox `id` (`sbx-…`).
-4. `kloudlite sandboxes wait SBX --timeout-s 180`. It exits with the code of the command.
-5. `kloudlite sandboxes logs SBX`. Read the output.
-
-**Done when:** the sandbox is `terminated` with `reason` `Exited`, and `exit_code` is 0. Tell the user the result and the relevant output lines.
-
-**If it fails:**
-
-- A service name does not resolve: the session has no environment, or the environment is stopped. Check with `session_current` and `env_get`.
-- `reason` `Timeout`: the command ran past `--timeout-s` (default 300). Run it again with a larger value.
-- `reason` `Failed`: read `message` in `kloudlite sandboxes get SBX --json`.
-
-### 2. Integration tests from a workspace
-
-**Trigger:** "Run the integration tests against the real services."
-
+**Trigger:** "run the integration tests against staging".
 **Steps:**
+1. `session_current`: the session needs an environment. `env_get`: service names and ports.
+2. A sandbox starts empty, so it gets the code with `git clone` through the connector (`connector_list` must show a code host). It tests what is pushed: the branch must be on the remote. For uncommitted work use scenario 1.
+3. `sandbox_create` {"command": "git clone --branch main https://github.com/acme/api api && cd api && npm ci && npm run test:integration", "packages": ["git", "nodejs@22"], "variables": {"DATABASE_URL": "postgres://postgres@db:5432/postgres"}, "timeout_s": 1800}. It runs in the session, so it reaches `db`. Note the id `sbx-…`. A secret is `"${{ secrets.NAME }}"` as the whole value of a variable, never a value.
+4. `sandbox_wait` {"sandbox": "sbx-…", "timeout": 900}. On `timedOut: true`, wait again.
+5. `sandbox_logs` {"sandbox": "sbx-…"}, then `sandbox_get`: read `exit_code`.
 
-1. `workspace_list` {}. Find the workspace that holds the code. The sandbox copies its live files, so changes that are not committed are tested too.
-2. `packages_list` {"workspace": "ws-…"}. Give the same packages to the sandbox.
-3. Create the sandbox:
+**Done when:** `phase` is `terminated`, `reason` is `Exited`, and `exit_code` is 0, or you told the user what failed.
+**If it fails:** `reason` `Timeout`: raise `timeout_s`. `reason` `Failed`: read `message`. `no git connector of OWNER covers HOST/REPO`: the user connects the host in the web console. `409` with a limit: running sandboxes count against the quota (rule 13 of the `kloudlite` skill).
+**Cleanup:** the sandbox ends with its command; the record stays 90 days.
 
-   ```sh
-   kloudlite sessions create-sandbox --json --session SESSION --from-workspace api --package nodejs@22 --cpu 2 --memory-gb 4 --timeout-s 1800 --env DATABASE_URL=postgres://postgres@db:5432/postgres -- sh -c 'cd ~/workspace && npm ci && npm run test:integration'
-   ```
+### 3. One-off script
 
-4. `kloudlite sandboxes logs SBX --follow`. It prints until the command ends.
-5. `kloudlite sandboxes get SBX --json`. Read `exit_code`.
-
-**Done when:** `exit_code` is 0, or you told the user which tests failed, with their lines from the output.
-
-**If it fails:**
-
-- `from_workspace and from_snapshot are exclusive`: give only one source.
-- A test needs a secret: give it as `--env NAME='${{ secrets.NAME }}'`, never as a value.
-- `409` with a limit: a running sandbox counts against the quota. Obey "Limits" in the `kloudlite` skill.
-
-### 3. Read the output and the record of a sandbox
-
-**Trigger:** "What did my last sandbox print?"
-
+**Trigger:** "run this migration once and show me the output".
 **Steps:**
+1. Read the script. A destructive migration needs the user's yes first, by name.
+2. `sandbox_create` {"command": "psql \"$DATABASE_URL\" -c 'select count(*) from orders'", "packages": ["postgresql"], "variables": {"DATABASE_URL": "postgres://postgres@db:5432/postgres", "PGPASSWORD": "${{ secrets.DB_PASSWORD }}"}, "timeout_s": 300}. A secret is the whole value of a variable, so the password goes in `PGPASSWORD`, not in the URL. For a script file, clone it as in scenario 2, or put it in the command.
+3. `sandbox_wait`, `sandbox_logs`, `sandbox_get` as in scenario 2.
 
-1. `kloudlite sandboxes list --json --limit 10`. Find the sandbox by its time or command.
-2. `kloudlite sandboxes get SBX --json`. Read `phase`, `reason`, `exit_code`, `message` and the times.
-3. `kloudlite sandboxes logs SBX`. The output of an ended sandbox is its last 256 KiB.
+**Done when:** you showed the user the output and the exit code.
+**If it fails:** a migration that half-ran is not undone by a retry: read the output, tell the user, do not run it again without a yes.
 
-**Done when:** you told the user the result and the cause of a failure.
+### 4. Read a sandbox's record
 
-**If it fails:** the record stays for 90 days. An older sandbox has no record.
-
-### 4. Review a pull request against a copy of the environment
-
-**Trigger:** "Test PR 42 against a copy of staging."
-
+**Trigger:** "what did that sandbox print", "did it pass".
 **Steps:**
+1. `sandbox_list` {"limit": 10}: find it by time or command (`q`, `state` narrow it).
+2. `sandbox_get`: `phase`, `reason`, `exit_code`, `message`, the times.
+3. `sandbox_logs`: an ended sandbox keeps its last 256 KiB.
 
-1. `env_list` {}. Find the id of `staging`.
-2. `env_clone` {"env": "env-staging…", "name": "staging-pr-42"}.
-3. `env_wait` {"env": "env-copy…"}.
-4. Make a session for the review, so the user's own session is not changed:
+**Done when:** you told the user the result and, for a failure, the cause.
+**If it fails:** an older record than 90 days is gone.
 
-   ```sh
-   kloudlite sessions create TEAM/review-pr-42 --json --environment staging-pr-42
-   ```
+### 5. Review a pull request in a real environment
 
-   Leave out `TEAM/` for the user's own team.
-5. Fetch the branch in the workspace that holds the repository: `exec` {"workspace": "ws-…", "cmd": "git fetch origin pull/42/head:pr-42 && git switch pr-42"}. For GitLab, the ref is `merge-requests/42/head`.
-6. Run the tests in the review session:
-
-   ```sh
-   kloudlite sessions create-sandbox --json --session TEAM/review-pr-42 --from-workspace api --package nodejs@22 --timeout-s 1800 -- sh -c 'cd ~/workspace && npm ci && npm test'
-   ```
-
-7. `kloudlite sandboxes wait SBX`, then `kloudlite sandboxes logs SBX`.
-8. Switch the workspace back: `exec` {"workspace": "ws-…", "cmd": "git switch -"}.
-9. Tell the user the result. Ask if the session `review-pr-42` and the environment `staging-pr-42` can be deleted. Only after a yes: `kloudlite sessions delete TEAM/review-pr-42`, then `env_delete` {"env": "env-copy…"}.
-
-**Done when:** the user has the test result of the branch against the copy, and the copy is deleted or kept by the user's choice.
-
-**If it fails:**
-
-- `git fetch` fails with `no git connector of OWNER covers HOST/REPO`: the user connects the code host in the web console.
-- Step 5 is refused because the workspace has changes that are not committed: do not stash or discard them. Tell the user, or use a clone of the workspace (`workspace_clone`) for the branch.
-- The copy does not come up: read the `message` of the failing service in `env_get`.
-
-### 5. Clean up sandboxes
-
-**Trigger:** "Clean up my sandboxes."
-
+**Trigger:** "review PR 42 against a copy of staging".
+**Shape:** 4.
 **Steps:**
+1. `env_clone` {"env": "env-staging…", "name": "shop-pr-42"}; `env_wait`.
+2. `session_create` {"name": "review-42", "environment": "env-copy…"} so the user's session does not move, and `session_use` {"name": "review-42"} to drive it; `session_use` back at the end.
+3. A review workspace in that session: `workspace_create` {"name": "api-pr-42", …}; clone the repo; `exec` {"cmd": "git fetch origin pull/42/head:pr-42 && git switch pr-42"} (GitLab: `merge-requests/42/head`).
+4. Run the tests (scenario 1) or `sandbox_create` in the review session (scenario 2, with `git fetch origin pull/42/head:pr-42 && git switch pr-42` after the clone). For a behaviour check, `intercept` the changed service from the review workspace, drive requests, `release`.
+5. Tell the user the result. Delete what you made, after the user says yes: `workspace_delete`, `session_delete` {"session": "review-42"}, `env_delete` of the copy. The user's own workspace and session stay as they were.
 
-1. `kloudlite sandboxes list --json --all`. List the sandboxes and their `phase`.
-2. Tell the user which sandboxes run and which ended. Ask which to remove, by id.
-3. For a running standalone sandbox the user names: `kloudlite sandboxes terminate SBX`.
-4. For an ended standalone sandbox the user names: `kloudlite sandboxes delete SBX`. This removes its record.
+**Done when:** the user has the branch's result against the copy and the copy is deleted or kept by the user's choice.
+**If it fails:** `no git connector of OWNER covers HOST/REPO`: the web console. The copy does not come up: `message` of the failing service in `env_get`.
 
-**Done when:** the sandboxes the user named are ended or their records are deleted.
+### 6. Integration test across two changes
 
-**If it fails:** `409` with `SBX is managed by session NAME; use the session`: a sandbox of a session ends with its command, its time limit, or the session. Wait for it, or delete the session only if the user asks.
+**Trigger:** "test my api change with Priya's web change".
+**Shape:** 3.
+**Steps:**
+1. Both changes run in the same environment. Your session intercepts `api` from your workspace. Priya's session intercepts `web` from hers. Check with `env_get` that `interceptedBy` shows both. Never take her service: one workspace per service.
+2. Drive a request through `web` to `api`: `exec` {"cmd": "curl -fsS http://web:3000/orders"} in your workspace, or `sandbox_create` in the session.
+3. Read both processes' output. `release` yours when done; she releases hers.
+
+**Done when:** the request crossed both changes and you told the user the result.
+**If it fails:** the intercept is refused with her session's name: ask her to release, or copy the environment (`env_clone`). An intercept is environment-wide: warn the user that every caller, hers included, reaches your workspace.
+
+### 7. Clean up
+
+**Trigger:** "clean up my sandboxes".
+**Steps:**
+1. `sandbox_list` (all). Show which run and which ended.
+2. Ask which to remove, by id.
+3. A running standalone one: `sandbox_terminate`. An ended one: `sandbox_delete` (removes its record).
+
+**Done when:** the named sandboxes are ended or deleted.
+**If it fails:** `409 SBX is managed by session NAME; use the session`: it ends with its command, its limit, or the session. Wait, or delete the session only if the user asks.
 
 ## Rules
 
 - Obey the safety rules of the `kloudlite` skill.
-- Use a sandbox for a run that must not change a workspace. Use a workspace for work that must be kept.
-- Create sandboxes in a session when the command needs the services. A standalone sandbox (`kloudlite sandboxes create`) reaches no environment.
-- Always give `--timeout-s`. A sandbox that never ends holds quota until its time limit.
-- Give tools with `--package`. Never run a server inside a sandbox to stand in for an environment service.
-- Never pass a secret value with `--env`. Use `NAME='${{ secrets.NAME }}'`.
-- A sandbox cannot intercept a service. To receive a service's traffic, use a workspace (`kloudlite-develop`).
+- Give `timeout_s` always. A sandbox that never ends holds quota to its limit.
+- Create sandboxes in the session when the command needs services. A standalone one reaches no environment.
+- Give tools with `packages`. Never run a server in a sandbox to stand in for a service.
+- A sandbox cannot intercept. To receive a service's traffic, use a workspace (`kloudlite-develop`).
 - Delete a copy of an environment or a review session only when the user says so.

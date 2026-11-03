@@ -1,260 +1,251 @@
 ---
 name: kloudlite-develop
-description: Use when the user wants to set up or work on a project on Kloudlite - "set up this repo on Kloudlite", "give me a workspace with Postgres", "run my API against the real database", "intercept the api service", "debug this with real traffic", "work on two features at once", "reproduce this bug on a copy", "checkpoint my workspace", "reset the environment data", "stop my session", "rotate the database password". Not for one-off checks or test runs in a sandbox (use kloudlite-verify), not for pipelines (use kloudlite-automate). Read the kloudlite skill first.
+description: Gives the steps to set up a project on Kloudlite, run code against real services, intercept a service, work on several components or branches at once, and keep state. Use when the user says "set up this repo", "give me a workspace with Postgres", "I need Postgres and Redis", "run my API against the real database", "intercept api", "send real traffic to my code", "debug this with real traffic", "add a feature across api, worker and web", "fix the bug", "try two approaches", "reproduce it without breaking staging", "bump Postgres to 16", "set DATABASE_URL on api", "rotate the DB password", "checkpoint before the refactor", "reset the data", "build and push the image", "stop everything"; or when the Kloudlite tools are present and the task edits code or keeps a process running. Not for a one-time test or check (use kloudlite-verify), not for repeating or triggered work (use kloudlite-automate), not for status, logs or deletes (the kloudlite skill alone). Read the kloudlite skill first.
 ---
 
 # Develop on Kloudlite
 
-## When to use
+Read the `kloudlite` skill first. It holds the definitions, the shapes and the safety rules; this skill does not repeat them. In kl mode, the main session hands code changes to the `kl-workspace` agents through `orchestrate` and `develop`; this skill still gives the set-up and topology steps.
 
-- The user sets up a project: a workspace with the code and tools, an environment with the services, a session that joins them.
-- The user changes code and runs it against the real services of an environment, with or without an intercept.
-- The user works in parallel, reproduces a bug on a copy, saves or restores state, or does housekeeping on a session or a secret.
-
-Do not use this skill for:
-
-- A test or a one-off command in a sandbox: use `kloudlite-verify`.
-- A pipeline definition, run or log: use `kloudlite-automate`.
-
-## Components used
-
-The `kloudlite` skill defines each one.
-
-- Session: joins the workspaces to the environment.
-- Workspace: holds the code, the packages and the running process.
-- Environment: holds the services.
-- Intercept: sends a service's traffic to a workspace.
-- Volume: holds the snapshots that save and restore state.
-- Secrets and variables: give values to services and workspaces.
-- Connector: gives `git clone` of the repository.
+Every scenario ends with its cleanup. To check a result, use `kloudlite-verify`. Example app: `web`, `api`, `worker`, `db` (Postgres), `cache` (Redis).
 
 ## Scenarios
 
-### 1. Set up a project
+### 1. Workspace for a repository
 
-**Trigger:** "Set up github.com/acme/api on Kloudlite with Postgres."
-
+**Trigger:** "set up this repo", "give me a workspace for acme/api".
+**Shape:** 1.
 **Steps:**
+1. Orient (`session_current`, `workspace_list`). Reuse a workspace that holds the repo.
+2. Read the repo's `package.json`, `go.mod` or `pyproject.toml` for packages. If there is no workspace yet, `workspace_create` {"name": "api", "quota_gb": 20, "packages": ["git", "nodejs@22"]}.
+3. `workspace_get` until `ready`.
+4. `exec` {"workspace": "ws-…", "cmd": "git clone https://github.com/acme/api .", "quiet": true}. The directory must be empty; else clone into a folder and give `cwd` later.
+5. `read` {"workspace": "ws-…", "paths": ["AGENTS.md"]}. Add packages it names with `packages_add`.
 
-1. `session_current` {}. Note the session and its environment. If it has an environment with the services, go to step 6.
-2. If a service needs a password, ask the user to store it as a secret. Give the command for the user to run, so that the value never passes through you. For a team environment, the service reads only the team's secrets:
+**Done when:** the workspace is `ready` and the code is in `~/workspace`.
+**If it fails:** `no git connector of OWNER covers HOST/REPO`: the user connects the host in the web console; only `github.com` and the configured GitLab answer. `422` for a package: pick a listed version. `409` with a limit: the `kloudlite` skill, rule 13.
+**Then:** scenario 2 if the code needs services.
 
-   ```sh
-   printf %s "$PASSWORD" | kloudlite secrets set DB_PASSWORD --owner TEAM --scope team
-   ```
+### 2. Environment from the repository
 
-   For the user's own team, leave out `--owner` and `--scope`.
-3. `env_create` {"name": "api-dev", "quota_gb": 10, "services": [{"name": "db", "image": "postgres:16", "ports": [5432], "env": {"POSTGRES_PASSWORD": "${{ secrets.DB_PASSWORD }}"}, "mounts": [{"folder": "pg-data", "path": "/var/lib/postgresql/data"}]}]}. Obey "Service data" in the `kloudlite` skill for each service.
-4. `env_wait` {"env": "env-…"}. Continue when every service is ready.
-5. `session_connect` {"environment": "env-…"}.
-6. `workspace_create` {"name": "api", "quota_gb": 20, "packages": ["git", "nodejs@22"]}. In a session, the workspace is managed and reaches the environment.
-7. `workspace_get` {"workspace": "ws-…"}. Poll until `state` is `ready`.
-8. `exec` {"workspace": "ws-…", "cmd": "git clone https://github.com/acme/api .", "quiet": true}. The working directory must be empty; else clone into a folder and give `cwd` in later calls.
-9. `read` {"workspace": "ws-…", "path": "AGENTS.md"}. If it has a Setup section, add its packages with `packages_add` {"workspace": "ws-…", "packages": ["…"]}.
-10. `exec` {"workspace": "ws-…", "cmd": "getent hosts db"}. The service name resolves.
-
-**Done when:** the workspace is `ready`, the code is in `~/workspace`, and `db` resolves from the workspace.
-
-**If it fails:**
-
-- `git clone` asks for a password or fails with `no git connector of OWNER covers HOST/REPO`: no connector covers the repository. Run `kloudlite connectors list --owner TEAM` to show the user the connectors. The user connects GitHub or GitLab in the web console. Only `github.com` and the configured GitLab host are answered.
-- `422` for a package: the answer lists the versions in the cache. Pick one of them.
-- `env_wait` shows a service `failing: true`: read its `message`, fix the service with `service_update`, and wait again.
-- `409` with a limit: obey "Limits" in the `kloudlite` skill.
-
-### 2. Run code against the real services
-
-**Trigger:** "Run the API against the database."
-
+**Trigger:** "stand up the app's dependencies", "I need Postgres and Redis".
+**Shape:** 2.
 **Steps:**
+1. `env_list`. Reuse an environment that already runs the app.
+2. Read `docker-compose.yml`, `.env.example` and the README. List each service, its image, ports and variables. Take mounts from `references/services.md` of the `kloudlite` skill; every service that writes data gets one.
+3. A password is a secret. `secret_set` {"owner": "acme", "name": "DB_PASSWORD", "value": "…"} with a value the user gives or approves, never printed, and `owner` the team: an environment reads only the team's secrets.
+4. `env_create` {"name": "shop-dev", "quota_gb": 10, "services": [{"name": "db", "image": "postgres:16", "ports": [5432], "env": {"POSTGRES_PASSWORD": "${{ secrets.DB_PASSWORD }}"}, "mounts": [{"folder": "pg-data", "path": "/var/lib/postgresql/data"}]}, {"name": "cache", "image": "redis:7", "ports": [6379]}]}.
+5. `env_wait` {"env": "env-…"}.
 
-1. `env_get` {"env": "env-…"}. Read each service name and port.
-2. `exec` {"workspace": "ws-…", "cmd": "npm run dev", "env": {"DATABASE_URL": "postgres://postgres@db:5432/postgres"}, "detach": true}. Note the process `id`. Never put a secret value in `env`: give the workspace a `${{ secrets.NAME }}` variable with `kloudlite workspaces set-env` instead.
-3. `process_output` {"workspace": "ws-…", "id": "…"}. Read from the `since` offset that the last answer gave.
+**Done when:** `env_wait` shows every service ready.
+**If it fails:** a service `failing`: read its `message` and `service_logs`, fix with `service_update`, wait again. `422` on a name: errors reference.
+**Then:** scenario 3.
 
-**Done when:** the output shows the process connected to the service.
+### 3. Session that joins them
 
-**If it fails:** a name that does not resolve means the workspace is not in the session or the session has no environment. Check with `session_current`.
-
-### 3. Intercept one service
-
-**Trigger:** "Send the api service's traffic to my workspace."
-
+**Trigger:** "connect my workspace to staging".
+**Shape:** 2.
 **Steps:**
+1. `session_current`. If the session has the environment, go to step 3.
+2. `session_connect` {"environment": "env-…"}. To make a session for this work: `session_create` {"name": "orders", "environment": "env-…"}, then `session_use` {"name": "orders"} to drive it.
+3. A workspace joins only by being created in the session: `workspace_create` with the session picked. A standalone workspace stays out; clone the repo into a new managed one.
+4. `exec` {"workspace": "ws-…", "cmd": "getent hosts db"}.
 
-1. Start the code in the workspace on its port (scenario 2). Note the port, for example 3000.
-2. `env_get` {"env": "env-…"}. Read the ports of `api`, for example 8080.
-3. `intercept` {"env": "env-…", "service": "api", "workspace": "ws-…", "ports": [{"service": 8080, "workspace": 3000}]}. Leave out `ports` when the ports are the same.
-4. `env_get` {"env": "env-…"}. Poll until the `api` service shows `interceptedBy` and `proxy` `ready`.
-5. When the work is done: `release` {"env": "env-…", "service": "api"}.
+**Done when:** `db` resolves from the workspace.
+**If it fails:** no resolve: the workspace is standalone, or the session has no environment (`session_current`), or the environment is stopped (`env_start`).
+**Then:** scenario 4.
 
-**Done when:** `env_get` shows the intercept in force, and a request to `api:8080` from the environment reaches the workspace process.
+### 4. Run a component against real services
 
-**If it fails:**
-
-- Refused with the name of a holder: another workspace or session holds the service. Tell the user who holds it.
-- `proxy` `failed`: the switch could not be made and the service keeps its traffic. Check that the process listens on the port with `process_output`, then `release` and `intercept` again.
-- Traffic goes back to the service when the workspace stops or does not answer for 30 seconds. The intercept stays and takes hold again when the workspace is back.
-- The service has no ports, or the port is 7788: the intercept is refused.
-
-### 4. Intercept two services
-
-**Trigger:** "I am changing api and worker together."
-
+**Trigger:** "run my API against the real database".
+**Shape:** 2.
 **Steps:**
+1. `env_get`. Read each service's name and port.
+2. `exec` {"workspace": "ws-…", "cmd": "npm run dev", "env": {"DATABASE_URL": "postgres://postgres@db:5432/postgres"}, "detach": true}. Note the process `id`. Never put a secret value in `env` (scenario 11).
+3. `process_output` {"workspace": "ws-…", "id": "…"} from the `since` offset of the last answer.
+4. When done: `process_kill`.
 
-1. Use one workspace for each service (scenario 1, step 6 for each). One workspace can serve both when it runs both processes.
-2. Start each process (scenario 2).
-3. `intercept` {"env": "env-…", "service": "api", "workspace": "ws-api…"}.
-4. `intercept` {"env": "env-…", "service": "worker", "workspace": "ws-worker…"}.
-5. `env_get` {"env": "env-…"}. Both services show `interceptedBy`.
-6. When done, `release` each service.
+**Done when:** the output shows the process connected to `db`.
+**If it fails:** a name that does not resolve: scenario 3. The process exits: read its output, fix, start again. At most 32 processes.
 
-**Done when:** both services show the intercept in force, and traffic between them goes through the two workspaces.
+### 5. Intercept one service
 
-**If it fails:** as in scenario 3. One service takes only one workspace.
-
-### 5. Debug with real traffic
-
-**Trigger:** "Requests to api fail in the environment. Find out why."
-
+**Trigger:** "intercept api", "send real traffic to my code".
+**Shape:** 2.
 **Steps:**
+1. Start the code (scenario 4). Check it listens: `exec` {"workspace": "ws-…", "cmd": "ss -ltn | grep :3000"}.
+2. `env_get`. Read the ports of `api`, for example 8080.
+3. `intercept` {"env": "env-…", "service": "api", "workspace": "ws-…", "ports": [{"service": 8080, "workspace": 3000}]}. Leave out `ports` when the numbers match.
+4. `env_get` until `api` shows `interceptedBy` and `proxy` `ready`.
+5. Work. Then `release` {"env": "env-…", "service": "api"}.
 
-1. `service_logs` {"env": "env-…", "service": "api", "tail": 200}. Add `"previous": true` after a crash.
-2. Find the code path in the workspace with `grep` {"workspace": "ws-…", "pattern": "…"}.
-3. Add logging with `edit`, start the code (scenario 2), and intercept the service (scenario 3).
-4. `process_output` {"workspace": "ws-…", "id": "…"}. Read the real requests.
-5. Fix the code, check the output again, then `release` the service.
+**Done when:** `env_get` shows the intercept in force and a request to `api:8080` reaches the process. The intercept is released at the end.
+**If it fails:** refused with a holder's name: tell the user who holds it; one workspace per service. `proxy` `failed`: the service keeps its traffic; check the port with `process_output`, `release`, intercept again. A service with no ports, or port 7788, is refused. Traffic returns when the workspace stops or is silent for 30 s; the intercept stays and takes hold again.
+**Then:** scenario 7 to debug.
 
-**Done when:** the real requests succeed through the intercept, and the cause is told to the user.
+### 6. Change several components together
 
-**If it fails:** `service_logs` names the workspace when an intercept holds the service: read the workspace process output instead.
-
-### 6. Parallel work in clones
-
-**Trigger:** "Work on the login fix and the export feature at the same time."
-
+**Trigger:** "add shipped-order emails across api, worker and web".
+**Shape:** 3.
 **Steps:**
+1. Scenarios 2 and 3 once: one environment with `web`, `api`, `worker`, `db`, `cache`, one session.
+2. A managed workspace per component (scenario 1 for each, in the session). In kl mode, one `kl-workspace` agent each.
+3. Start each process (scenario 4) and intercept its own service (scenario 5).
+4. Change the contract first (api), then its callers. `env_get`: every service shows its intercept.
+5. At the end `release` each service, one by one.
 
-1. Commit the current work in the workspace: `exec` {"workspace": "ws-…", "cmd": "git add -A && (git diff --cached --quiet || git commit -m 'Save work')"}.
-2. `workspace_clone` {"workspace": "ws-…", "name": "api-export", "task": "export feature"}.
-3. `workspace_get` {"workspace": "ws-clone…"}. Poll until `ready`.
-4. In the clone, make a branch: `exec` {"workspace": "ws-clone…", "cmd": "git switch -c export"}. Do the work there.
-5. To bring the work back, push the branch to the repository remote and merge it in the original workspace with `git fetch` and `git merge`. A connector gives read access only: a push needs a write credential of the user in the workspace.
+**Done when:** a request through `web` reaches `api` and `worker` in their workspaces. Every intercept is released.
+**If it fails:** as scenario 5. Two components in one workspace is fine when one process serves both.
+**Then:** `kloudlite-verify` scenario 6 to test the changes together.
 
-**Done when:** each part is committed on its own branch and merged in the original workspace.
+### 7. Debug a failing request with real traffic
 
-**If it fails:** a clone is a standalone workspace and does not reach the environment. Run the tests that need services in the original workspace, or in a sandbox (`kloudlite-verify`). Do not delete a clone that holds work that is not merged.
-
-### 7. Reproduce a bug on a copy of an environment
-
-**Trigger:** "Reproduce the duplicate-order bug without touching the shared data."
-
+**Trigger:** "debug this with real traffic", "requests to api fail".
+**Shape:** 2.
 **Steps:**
+1. `service_logs` {"env": "env-…", "service": "api", "tail": 200}; add "previous": true after a crash.
+2. `grep` the code path in the workspace.
+3. Add logging with `edit`. Start the code (scenario 4), intercept (scenario 5).
+4. `process_output`: read the real requests.
+5. Fix, check, `release`.
 
-1. `env_clone` {"env": "env-…", "name": "api-repro"}. Give `snapshot_id` to copy a snapshot instead of the live state.
-2. `env_wait` {"env": "env-copy…"}.
-3. Tell the user that the next step moves the whole session to the copy and releases the session's intercepts on the shared environment.
-4. `session_connect` {"environment": "env-copy…"}.
-5. Reproduce and fix the bug (scenarios 2, 3 and 5).
-6. `session_connect` {"environment": "env-shared…"}. The session goes back to the shared environment.
-7. Ask the user if the copy `api-repro` can be deleted. Only after a yes: `env_delete` {"env": "env-copy…"}.
+**Done when:** the real requests succeed through the intercept and you told the user the cause.
+**If it fails:** `service_logs` names the workspace when an intercept holds the service: read the process output instead.
 
-**Done when:** the bug is reproduced and fixed on the copy, and the session is on the shared environment again.
+### 8. Parallel work
 
-**If it fails:** `409` with a limit: the copy counts against the quota. Obey "Limits".
-
-### 8. Checkpoint and restore a workspace
-
-**Trigger:** "Save my workspace as it is now." Then later: "Go back to that save."
-
+**Trigger:** "try two approaches", "work on two features at once".
+**Shape:** 3 or 4.
 **Steps:**
+1. Against the services: a second managed workspace in the session, which clones the repo, or `worktree_add` {"workspace": "ws-…", "name": "export"} in the same managed workspace; run each tree's process on its own port.
+2. Only one tree's process can hold the intercept of a service. Intercept one, `release`, intercept the other.
+3. Without services: `workspace_clone` {"workspace": "ws-…", "name": "api-try", "task": "approach B"}. A clone is standalone and does not reach the environment.
+4. Commit each part on its own branch: `exec` `git switch -c export && git commit …`. Merge in the original workspace with `git fetch` and `git merge`.
+5. Tear down: `worktree_drop` and `workspace_delete` for what you made, never one that holds unmerged work.
 
-1. `workspace_get` {"workspace": "ws-…"}. Read `volume`. `volume_list` {} shows if the volume has a `name`.
-2. `workspace_snapshot` {"workspace": "ws-…", "volume": "api-base", "message": "before the refactor"}. Give `volume` only on the first snapshot of the volume.
-3. `volume_history` {"volume": "<volume id>"}. Note the new version, for example `api-base@3`.
-4. To restore: `workspace_restore` {"name": "api-restored", "snapshot_id": "api-base@3"}. Add `team` for a team volume.
-5. `workspace_get` {"workspace": "ws-new…"}. Poll until `ready`.
+**Done when:** each part is on its branch and merged, and the extra trees and clones are gone.
+**If it fails:** the clone cannot reach `db`: use a second managed workspace.
 
-**Done when:** the snapshot is `ready` in the history, or the restored workspace is `ready` with the saved files.
+### 9. Reproduce a bug on a copy
 
-**If it fails:**
-
-- `422` that asks for `volume`: it is the first snapshot. Ask the user for the name.
-- `409` because another volume holds the name: ask the user for another name.
-- A restored workspace is standalone and does not reach the environment. Tell the user.
-
-### 9. Reset environment data
-
-**Trigger:** "Put the environment data back to the clean seed."
-
+**Trigger:** "reproduce it without breaking staging".
+**Shape:** 4.
 **Steps:**
+1. `env_clone` {"env": "env-staging…", "name": "shop-repro"}; add `snapshot_id` to copy a snapshot. `env_wait`.
+2. Tell the user the next step moves the whole session to the copy and releases the session's intercepts on staging.
+3. `session_connect` {"environment": "env-copy…"}. Reproduce and fix (scenarios 4, 5, 7).
+4. `session_connect` back to staging.
+5. `env_delete` {"env": "env-copy…"} after the user says yes.
 
-1. `env_get` {"env": "env-…"}. Read `volume`.
-2. `volume_history` {"volume": "<volume id>"}. Find the snapshot the user names, and note its `id`.
-3. Confirm the target with the user by name: the environment and the snapshot. Data written since is lost.
-4. `env_restore` {"env": "env-…", "snapshot_id": "<snapshot id>"}.
-5. If the answer is `409` with `lost`, tell the user which services lose data. Only after a yes: `env_restore` {"env": "env-…", "snapshot_id": "<snapshot id>", "discard": ["<each service in lost>"]}.
-6. `env_wait` {"env": "env-…"}.
+**Done when:** the bug is fixed on the copy, the session is on staging, the copy is deleted or kept by the user's choice.
+**If it fails:** `409` with a limit: the copy counts against the quota.
 
-**Done when:** the environment runs and its data is the data of the snapshot.
+### 10. Change a service
 
-**If it fails:** `422` that `discard` names services that lose nothing: give exactly the names in `lost`. With no clean snapshot, offer to take one after the user resets the data by hand (`env_snapshot` {"env": "env-…", "message": "clean seed"}), only when the user asks.
-
-### 10. Stop a session
-
-**Trigger:** "Stop everything for today."
-
+**Trigger:** "bump Postgres to 16", "open port 8081 on api".
 **Steps:**
+1. `env_get`. Copy the service as it is.
+2. `service_update` {"env": "env-…", "service": {the whole service with the change}}. It replaces by name, so keep `env` and `mounts`. A new data directory needs its mount in the same call.
+3. `env_wait`. On `failing`, `service_logs` and fix.
 
-1. `session_current` {}. Read the session name.
-2. Give the command, or run it when local commands work: `kloudlite sessions stop --session NAME`.
-3. To start again later: `kloudlite sessions start --session NAME`.
+**Done when:** every service is ready.
+**If it fails:** a major database upgrade can refuse an old data directory: read `service_logs`, tell the user; do not delete the data.
 
-**Done when:** `kloudlite sessions get NAME --json` shows `stopped`.
+### 11. Variables and secrets
 
-**If it fails:** a session also stops by itself after 30 minutes without use. Homes are kept in both cases.
-
-### 11. Rotate a secret
-
-**Trigger:** "Rotate the database password."
-
+**Trigger:** "set DATABASE_URL on api", "give the worker the SMTP password".
 **Steps:**
+1. A plain value: `service_update` with it in `env` (a service), or `workspace_env_set` {"workspace": "ws-…", "variables": {…}} for a workspace. It replaces the whole workspace env: read `workspace_get` first and send all of it.
+2. A secret: `secret_set` (scenario 2, step 3), then the whole value `"${{ secrets.SMTP_PASSWORD }}"` in `env`. A service reads the team's secrets; a workspace sees the member's own first, then the team's.
+3. A new variable marks the reader `restart_required`; nothing restarts by itself (scenario 12).
 
-1. Ask the user to set the new value. Give the command, with the value on stdin only:
+**Done when:** `env_get` or `workspace_get` shows the variable name. No value was printed.
+**If it fails:** `422` on a missing secret: set it first. `409` deleting a referenced secret names the readers.
 
-   ```sh
-   printf %s "$NEW_PASSWORD" | kloudlite secrets set DB_PASSWORD --owner TEAM --scope team
-   ```
+### 12. Rotate a secret
 
-2. `env_get` {"env": "env-…"} and `workspace_get` {"workspace": "ws-…"}. List each service and workspace that shows `restart_required`.
-3. Tell the user which ones show it. A restart stops their processes. The user chooses.
-4. Only for the ones the user picks: `kloudlite environments restart ENV --service db`, or `kloudlite workspaces restart WS`.
-
-**Done when:** the user picked; each restarted resource no longer shows `restart_required`.
-
-**If it fails:** the database inside the service keeps its old password in its data. Changing it there is a step of the database, not of Kloudlite. Tell the user.
-
-### 12. Publish an image
-
-**Trigger:** "Build and push the api image."
-
+**Trigger:** "rotate the DB password".
 **Steps:**
+1. `secret_set` {"owner": "acme", "name": "DB_PASSWORD", "value": "…"} with the new value, never printed.
+2. `env_get` and `workspace_get`: list every reader showing `restart_required`.
+3. Tell the user which they are and that a restart stops their processes.
+4. Only for the ones the user picks: `service_restart` {"env": "env-…", "service": "api"} or `workspace_restart` {"workspace": "ws-…"}.
 
-1. `container_build` {"workspace": "ws-…", "tags": ["api:1.4.0"]}. The build context is the working directory. The image goes to the owner's registry connector.
-2. To give it more tags: `container_push` {"workspace": "ws-…", "src": "api:1.4.0", "dst": ["api:latest"]}.
+**Done when:** the user chose, and each restarted reader no longer shows `restart_required`.
+**If it fails:** a database keeps its old password in its data. Changing it there is a step of the database; tell the user.
+
+### 13. Checkpoint and restore a workspace
+
+**Trigger:** "checkpoint before the refactor", "go back to this morning".
+**Steps:**
+1. Only on request. `workspace_get`: read `volume`.
+2. `workspace_snapshot` {"workspace": "ws-…", "volume": "api-base", "message": "before the refactor"}. Give `volume` only on the first snapshot.
+3. `volume_history` {"volume": "<id from volume_list>"}: note `api-base@3`.
+4. Restore: `workspace_restore` {"name": "api-restored", "snapshot_id": "api-base@3"}; add `team` for a team volume. `workspace_get` until `ready`.
+5. Say the result is standalone: it does not reach the environment. A managed one needs a new workspace in the session and a copy of the files.
+
+**Done when:** the snapshot is `ready` in the history, or the restored workspace is `ready` with the files.
+**If it fails:** `422` asking for `volume`: ask the user for a name. `409` name taken: ask for another.
+
+### 14. Reset environment data
+
+**Trigger:** "reset the data to last night's snapshot".
+**Steps:**
+1. `env_get`: read `volume`. `volume_history`: find the snapshot the user names. Take one first only if the user asks: `env_snapshot`.
+2. Name the environment and the snapshot; data written since is lost. Wait for a yes.
+3. `env_restore` {"env": "env-…", "snapshot_id": "…"}.
+4. On `409` with `lost`: list the services; only after a yes, repeat with "discard": [each name in `lost`].
+5. `env_wait`.
+
+**Done when:** the environment runs with the snapshot's data.
+**If it fails:** `422` for `discard` naming a service that loses nothing: give exactly the names in `lost`.
+
+### 15. Named volume for hand-off
+
+**Trigger:** "save this dataset as v2".
+**Steps:**
+1. `workspace_snapshot` {"workspace": "ws-…", "volume": "dataset", "message": "v2"}. The first snapshot names the volume; later ones number `dataset@N`.
+2. `volume_refs` {"volume": "<id>"}: the versions.
+3. Another workspace or a sandbox starts from `dataset@2` (`workspace_restore` with `snapshot_id`).
+
+**Done when:** `volume_refs` lists the version.
+**If it fails:** `409 volume dataset already exists`: another volume has the name.
+
+### 16. Publish an image
+
+**Trigger:** "build and push the api image".
+**Steps:**
+1. Only on request. `container_build` {"workspace": "ws-…", "tags": ["api:1.4.0"]}. The context is the working directory.
+2. More names: `container_push` {"workspace": "ws-…", "src": "api:1.4.0", "dst": ["api:latest"]}.
 
 **Done when:** the answer names the pushed image.
+**If it fails:** `no registry is configured`: the user connects a registry in the web console. `builder_status` says why a build waits.
 
-**If it fails:** `no registry is configured`: the owner has no registry connector. The user connects one in the web console. `builder_status` {} shows why a build waits.
+### 17. Stop for the day
+
+**Trigger:** "stop everything".
+**Steps:**
+1. `session_current`. `session_stop` {"session": "orders"}: the session and its workspaces stop; homes are kept.
+2. `env_stop` only when the user asks; a stopped session already lets an unused environment go idle.
+3. Release intercepts you made first (`release`).
+
+**Done when:** `session_current` shows `stopped`.
+**If it fails:** an idle session stops by itself after 30 minutes.
+
+### 18. Reach the environment from the laptop
+
+**Trigger:** "I want to run psql from my terminal".
+**Steps:**
+1. The user runs `kloudlite env` (the tunnel to the session's environment); you do not. Give the command and the service name and port from `env_get`, for example `psql -h db -p 5432`.
+2. On a host with a shell and kl mode off, you may run it for the user.
+
+**Done when:** the user connects.
+**If it fails:** the tunnel needs the environment daemon: `kloudlite doctor`.
 
 ## Rules
 
 - Obey the safety rules of the `kloudlite` skill.
-- In the laptop plugin with kl mode on, the main session does the session, environment and workspace steps itself, and gives every code and run step in a workspace to that workspace's `kl-workspace` agent (see the `orchestrate` skill).
-- Use the session's environment. Make a copy only for scenario 7, or when the user asks.
-- Run servers as environment services, never as workspace processes. Run only the user's own code in a workspace.
-- Do not build an image for each change. Use an intercept while you develop.
-- Release every intercept that you started when the work is done.
-- Never handle a secret value. The user types it into `kloudlite secrets set`.
-- A restart after a new secret or variable is the user's choice. Never restart on your own.
+- Use the session's environment. Copy it only for scenario 9, or when the user asks.
+- Run servers as environment services; run only the user's own code in a workspace.
+- Release every intercept you made. Delete what you created for the task; keep what the user had.
+- Never handle a secret value in output. A restart after a new variable is the user's choice.
