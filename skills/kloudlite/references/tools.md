@@ -7,11 +7,11 @@ Every tool, with its arguments. `workspace` is a `ws-` id of a `ready` workspace
 | Tool | Arguments | Answers |
 |---|---|---|
 | `session_current` | none | The session, its team, its environment |
-| `session_use` | `team?`, `name?`, `environment?`, `new_environment?` | Picks the session among your sessions in a connected team (laptop door and remote server; not the harness); can connect or create an environment |
+| `session_use` | `team?`, `name?`, `environment?` | Picks the session among your sessions in a connected team (laptop door and remote server; not the harness); can connect an existing environment |
 | `session_pick` | `id` | Picks the session when several exist (the only tool until then) |
 | `session_connect` | `environment` | Connects the session to an environment; releases its intercepts on the old one |
 | `session_disconnect` | none | Disconnects from the environment |
-| `session_create` | `name`, `team?`, `environment?`, `ttl_secs?` | A new session; `session_use` drives it |
+| `session_create` | `name`, `team?`, `environment?` | A new session; `session_use` drives it |
 | `session_stop`, `session_start`, `session_delete` | `session` (id, name or `team/name`) | Lifecycle of a session |
 | `session_ttl` | `session`, `ttl_secs?` (600..2592000), `clear?` | Sets or removes the unused-time limit; one of the two is required |
 
