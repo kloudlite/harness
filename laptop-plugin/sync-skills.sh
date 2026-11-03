@@ -4,7 +4,7 @@
 # when a copy differs from its source. Run after editing any of these skills.
 set -eu
 cd "$(dirname "$0")"
-SKILLS="kloudlite kloudlite-develop kloudlite-verify kloudlite-automate orchestrate develop"
+SKILLS="kloudlite kloudlite-develop kloudlite-verify kloudlite-automate"
 rm -rf plugin/skills
 for s in $SKILLS; do
   mkdir -p "plugin/skills/$s"

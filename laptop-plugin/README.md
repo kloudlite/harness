@@ -1,8 +1,8 @@
 # Kloudlite plugin for Claude Code
 
-Gives Claude Code the Kloudlite skills and the session's tools. Claude Code runs nothing on your computer in kl mode.
+Gives Claude Code the Kloudlite skills and the session's tools.
 
-Needs the `kloudlite` CLI on `PATH` (hooks run `kloudlite mode`, the MCP server runs `kloudlite mcp`) and a session.
+Needs the `kloudlite` CLI on `PATH` (the MCP server runs `kloudlite mcp`) and a session: the one `kloudlite sessions use` selected, or `session_pick`/`session_use` in the tools.
 
 ## Install
 
@@ -12,8 +12,6 @@ claude plugin install kloudlite@kloudlite
 ```
 
 Inside Claude Code: `/plugin marketplace add kloudlite/harness`, then `/plugin install kloudlite@kloudlite`.
-
-`kloudlite claude` needs none of this: it writes the plugin it embeds and starts Claude Code with it.
 
 ## Update
 

@@ -1,13 +1,13 @@
 {
   "name": "kloudlite",
   "owner": { "name": "Kloudlite", "url": "https://github.com/kloudlite" },
-  "metadata": { "description": "Claude Code plugins for Kloudlite workspaces", "version": "0.1.0" },
+  "metadata": { "description": "Claude Code plugins for Kloudlite workspaces", "version": "0.2.0" },
   "plugins": [
     {
       "name": "kloudlite",
       "source": "./laptop-plugin/plugin",
-      "description": "Work on Kloudlite workspaces from Claude Code through the session's tools only. Needs the kloudlite CLI on PATH.",
-      "version": "0.1.0",
+      "description": "Work on Kloudlite workspaces from Claude Code through the session's tools, skills and agents. Needs the kloudlite CLI on PATH.",
+      "version": "0.2.0",
       "author": { "name": "Kloudlite" },
       "homepage": "https://github.com/kloudlite/harness",
       "repository": "https://github.com/kloudlite/harness",

@@ -1,7 +1,7 @@
 {
   "name": "kloudlite",
-  "version": "0.1.0",
-  "description": "Kloudlite workspaces through kloudlite mcp, with kl mode: no local tools. Needs the kloudlite CLI on PATH (hooks run kloudlite mode, the MCP server runs kloudlite mcp).",
+  "version": "0.2.0",
+  "description": "Kloudlite workspaces, environments and sessions from Claude Code: the kl MCP server, the skills and the workspace agents. Needs the kloudlite CLI on PATH (the MCP server runs kloudlite mcp).",
   "author": { "name": "Kloudlite" },
   "homepage": "https://github.com/kloudlite/harness",
   "repository": "https://github.com/kloudlite/harness",

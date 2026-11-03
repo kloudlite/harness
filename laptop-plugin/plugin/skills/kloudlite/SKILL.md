@@ -43,17 +43,16 @@ team ─┬─ session ── joins ──> workspaces, sandboxes ──> enviro
 
 Read your row. The task skills never name a host.
 
-| Host | Tools | Local commands | Local files | Who orchestrates |
+| Host | Tools | Local commands | Local files | Who works |
 |---|---|---|---|---|
-| Claude Code, plugin, kl mode on | `mcp__plugin_kloudlite_kl__*` | refused (`kl mode: …`) | refused | main session + one `kl-workspace` agent per workspace (`orchestrate`, `develop`) |
-| Claude Code, plugin, kl mode off | the same | yes | yes | the one agent |
+| Claude Code with the plugin | `mcp__plugin_kloudlite_kl__*` | yes | yes | the one agent |
 | MCP client with `kloudlite mcp` | server `kl`, all scopes in one list | only with a shell tool | only with file tools | the one agent |
 | Remote connector (claude.ai, ChatGPT) | `/mcp` over OAuth | no | no | the one agent |
 | Kloudlite harness | split by role: main, workspace, subagent | no | no | the role skills |
 
 `session_use` exists only on the laptop door (`kloudlite mcp` and the plugin). The harness and the remote connector drive their own session and have no way to switch; `workspace_create` always uses it. There, a task that needs another session is for the user to open.
 
-Use a tool, not a command. Two things have no tool: connecting a provider (the web console) and `kloudlite env`, the tunnel to the laptop. For those, give the user the exact command, or run it only on a host with a shell and kl mode off. If a local command is refused (`kl mode: use the kl tools; nothing runs on this laptop`), do not go around it: give `/kloudlite:off` or the command.
+Use a tool, not a command. Two things have no tool: connecting a provider (the web console) and `kloudlite env`, the tunnel to the laptop. For those, give the user the exact command, or run it only on a host with a shell.
 
 ## How to work
 
@@ -168,13 +167,12 @@ Act on the symptom you see.
 | A tool answers ``not logged in — run `kloudlite login` `` | Tell the user that command, then to restart the client. |
 | The server lists only `session_pick` | Ask which session, call it, continue. |
 | `403 your access to TEAM is paused` | A team admin must restore access. Stop. |
-| The plugin's kl mode refuses a local command | Say so; give `/kloudlite:off` or the exact command. |
 
 The five steps:
 
 1. Install `kloudlite` (macOS, Linux; WSL on Windows): `curl -fsSL https://dev.kloudlite.io/install.sh | sh`
 2. Sign in (opens the browser): `kloudlite login`
-3. Connect the agent. Claude Code with the plugin (tools, skills, kl mode): `kloudlite claude -t TEAM -s SESSION` (leave out `-t` for your own team). Another MCP client: `claude mcp add kl -- kloudlite mcp`, or the JSON `{"mcpServers": {"kl": {"command": "kloudlite", "args": ["mcp"]}}}`; for another team or session, `["mcp", "TEAM", "--session", "SESSION"]`. The remote connector uses its URL once it exists.
+3. Connect the agent. Claude Code with the plugin (tools, skills, agents): install it from the marketplace, `/plugin marketplace add kloudlite/harness`, then `/plugin install kloudlite@kloudlite`; the session is the one `kloudlite sessions use` selected, or `session_pick`/`session_use`. Another MCP client: `claude mcp add kl -- kloudlite mcp`, or the JSON `{"mcpServers": {"kl": {"command": "kloudlite", "args": ["mcp"]}}}`; for another team or session, `["mcp", "TEAM", "--session", "SESSION"]`. The remote connector uses its URL once it exists.
 4. Pick or create a session: `kloudlite sessions use NAME`, or `kloudlite sessions use --new-environment NAME`. With no session, `kloudlite mcp` creates `main`.
 5. Restart the client. It then lists the server `kl`.
 

@@ -5,7 +5,7 @@ description: Gives the steps to set up a project on Kloudlite, run code against 
 
 # Develop on Kloudlite
 
-Read the `kloudlite` skill first. It holds the definitions, the shapes and the safety rules; this skill does not repeat them. In kl mode, the main session hands code changes to the `kl-workspace` agents through `orchestrate` and `develop`; this skill still gives the set-up and topology steps.
+Read the `kloudlite` skill first. It holds the definitions, the shapes and the safety rules; this skill does not repeat them.
 
 Every scenario ends with its cleanup. To check a result, use `kloudlite-verify`. Example app: `web`, `api`, `worker`, `db` (Postgres), `cache` (Redis).
 
@@ -89,7 +89,7 @@ Every scenario ends with its cleanup. To check a result, use `kloudlite-verify`.
 **Shape:** 3.
 **Steps:**
 1. Scenarios 2 and 3 once: one environment with `web`, `api`, `worker`, `db`, `cache`, one session.
-2. A managed workspace per component (scenario 1 for each, in the session). In kl mode, one `kl-workspace` agent each.
+2. A managed workspace per component (scenario 1 for each, in the session).
 3. Start each process (scenario 4) and intercept its own service (scenario 5).
 4. Change the contract first (api), then its callers. `env_get`: every service shows its intercept.
 5. At the end `release` each service, one by one.
@@ -239,7 +239,7 @@ Every scenario ends with its cleanup. To check a result, use `kloudlite-verify`.
 **Trigger:** "I want to run psql from my terminal".
 **Steps:**
 1. The user runs `kloudlite env` (the tunnel to the session's environment); you do not. Give the command and the service name and port from `env_get`, for example `psql -h db -p 5432`.
-2. On a host with a shell and kl mode off, you may run it for the user.
+2. On a host with a shell, you may run it for the user.
 
 **Done when:** the user connects.
 **If it fails:** the tunnel needs the environment daemon: `kloudlite doctor`.
