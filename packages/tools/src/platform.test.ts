@@ -318,3 +318,134 @@ test("the push tools pass the volume name and the restore tool the team", async 
   await tool(platformTools("main"), "workspace_restore").run({ name: "w2", snapshot_id: "pg@2", team: "acme" });
   expect(calls[2].body).toEqual({ name: "w2", snapshot_id: "pg@2", team: "acme" });
 });
+
+// ---- component tools: one test per tool (route, args, error mapping)
+const ok = () => json({ ok: 1 });
+const CASES: [string, any, string, string, any?][] = [
+  ["sandbox_create", { command: "make test", image: "i:1", packages: ["go"], variables: { A: "1" }, timeout_s: 60, team: "acme" }, "POST", "/v1/sandboxes", { team: "acme", cmd: ["sh", "-c", "make test"], image: "i:1", packages: ["go"], env: { A: "1" }, timeout_secs: 60 }],
+  ["sandbox_get", { sandbox: "sbx-1" }, "GET", "/v1/sandboxes/sbx-1"],
+  ["sandbox_logs", { sandbox: "sbx-1" }, "GET", "/v1/sandboxes/sbx-1/logs"],
+  ["sandbox_list", { team: "acme", state: "running", limit: 5 }, "GET", "/v1/sandboxes?team=acme&state=running&limit=5"],
+  ["sandbox_terminate", { sandbox: "sbx-1" }, "POST", "/v1/sandboxes/sbx-1/terminate"],
+  ["sandbox_delete", { sandbox: "sbx-1" }, "DELETE", "/v1/sandboxes/sbx-1"],
+  ["pipeline_list", { owner: "acme" }, "GET", "/v1/pipelines/acme"],
+  ["pipeline_get", { owner: "acme", pipeline: "ci", version: 2 }, "GET", "/v1/pipelines/acme/ci?version=2"],
+  ["pipeline_versions", { owner: "acme", pipeline: "ci" }, "GET", "/v1/pipelines/acme/ci/versions"],
+  ["pipeline_delete", { owner: "acme", pipeline: "ci" }, "DELETE", "/v1/pipelines/acme/ci"],
+  ["webhook_rotate", { owner: "acme", pipeline: "ci" }, "POST", "/v1/pipelines/acme/ci/webhook/rotate"],
+  ["run_start", { owner: "acme", pipeline: "ci", inputs: { t: "x" }, version: 3, key: "k" }, "POST", "/v1/pipelines/acme/ci/runs", { inputs: { t: "x" }, version: 3, key: "k" }],
+  ["run_list", { owner: "acme", pipeline: "ci", state: "failure" }, "GET", "/v1/pipelines/acme/ci/runs?state=failure"],
+  ["run_get", { owner: "acme", pipeline: "ci", run: "r1" }, "GET", "/v1/pipelines/acme/ci/runs/r1"],
+  ["run_logs", { owner: "acme", pipeline: "ci", run: "r1", job: 1, offset: 24 }, "GET", "/v1/pipelines/acme/ci/runs/r1/jobs/1/logs?offset=24"],
+  ["run_cancel", { owner: "acme", pipeline: "ci", run: "r1" }, "POST", "/v1/pipelines/acme/ci/runs/r1/cancel"],
+  ["secret_list", { owner: "acme" }, "GET", "/v1/secrets/acme"],
+  ["secret_delete", { owner: "acme", name: "DB_URL", mine: true }, "DELETE", "/v1/secrets/acme/mine/DB_URL"],
+  ["workspace_env_set", { workspace: "w1", variables: { A: "${{ secrets.A }}" }, restart_on_change: true }, "PUT", "/v1/workspaces/w1/env", { env: { A: "${{ secrets.A }}" }, restartOnEnvChange: true }],
+  ["workspace_restart", { workspace: "w1" }, "POST", "/v1/workspaces/w1/restart"],
+  ["service_restart", { env: "e1", service: "api" }, "POST", "/v1/environments/e1/services/api/restart"],
+  ["connector_list", { owner: "acme" }, "GET", "/v1/connectors?owner=acme"],
+  ["session_create", { name: "fix", team: "acme", environment: "dev" }, "POST", "/v1/sessions", { name: "fix", team: "acme", environment: "dev" }],
+  ["session_stop", { session: "s1" }, "POST", "/v1/sessions/s1/stop"],
+  ["session_start", { session: "s1" }, "POST", "/v1/sessions/s1/start"],
+  ["session_delete", { session: "s1" }, "DELETE", "/v1/sessions/s1"],
+  ["session_ttl", { session: "s1", ttl_secs: 600 }, "PUT", "/v1/sessions/s1/ttl", { ttl_secs: 600 }],
+  ["workspace_ttl", { workspace: "w1" }, "PUT", "/v1/workspaces/w1/ttl", { ttl_secs: null }],
+  ["env_ttl", { env: "e1", ttl_secs: 86400 }, "PUT", "/v1/environments/e1/ttl", { ttl_secs: 86400 }],
+];
+for (const [name, args, method, url, body] of CASES) {
+  test(`${name} calls ${method} ${url} and maps a refusal`, async () => {
+    const t = tool(platformTools("main"), name);
+    expect(t).toBeDefined();
+    routes[`${method} ${url}`] = ok();
+    await t.run(args);
+    expect(calls.at(-1)).toMatchObject({ method, url, auth: "Bearer tok1" });
+    if (body) expect(calls.at(-1)!.body).toEqual(body);
+    routes[`${method} ${url}`] = () => new Response("nope", { status: 409 });
+    await expect(t.run(args)).rejects.toThrow("409: nope");
+  });
+}
+
+test("the component tools are in main and all, never in a workspace session", () => {
+  const names = CASES.map((c) => c[0]).concat(["sandbox_wait", "run_wait", "pipeline_save", "secret_set"]);
+  for (const k of ["main", "all"] as const) for (const n of names) expect(platformTools(k, "w1").map((t) => t.name)).toContain(n);
+  for (const n of names) expect(platformTools("workspace", "w1").map((t) => t.name)).not.toContain(n);
+});
+
+test("sandbox_create goes through the session when there is one, with its argv array as given", async () => {
+  process.env.KL_SESSION = "ses-1";
+  routes["POST /v1/sessions/ses-1/sandboxes"] = json({ id: "sbx-1" }, 202);
+  await tool(platformTools("main"), "sandbox_create").run({ command: ["echo", "hi"], team: "acme" });
+  expect(calls.at(-1)!.body).toEqual({ cmd: ["echo", "hi"] });
+});
+
+test("sandbox_logs returns the body as text, empty included", async () => {
+  routes["GET /v1/sandboxes/sbx-1/logs"] = () => new Response('{"a":1}\nline', { status: 200 });
+  expect(await tool(platformTools("main"), "sandbox_logs").run({ sandbox: "sbx-1" })).toBe('{"a":1}\nline');
+  routes["GET /v1/sandboxes/sbx-1/logs"] = () => new Response("", { status: 200 });
+  expect(await tool(platformTools("main"), "sandbox_logs").run({ sandbox: "sbx-1" })).toBe("");
+});
+
+test("sandbox_wait uses the server wait route until the sandbox ends, then times out with timedOut", async () => {
+  const t = tool(platformTools("main"), "sandbox_wait");
+  let n = 0;
+  routes["POST /v1/sandboxes/sbx-1/wait"] = () => json(++n < 3 ? { id: "sbx-1", phase: "running" } : { id: "sbx-1", phase: "terminated", exit_code: 0 })();
+  expect(JSON.parse(await t.run({ sandbox: "sbx-1" })).exit_code).toBe(0);
+  expect(n).toBe(3);
+  expect(calls[0].body.timeout_ms).toBeLessThanOrEqual(20000);
+  routes["POST /v1/sandboxes/sbx-1/wait"] = json({ id: "sbx-1", phase: "running" });
+  expect(JSON.parse(await t.run({ sandbox: "sbx-1", timeout: 0.01 })).timedOut).toBe(true);
+  routes["POST /v1/sandboxes/sbx-1/wait"] = () => new Response("not found", { status: 404 });
+  await expect(t.run({ sandbox: "sbx-1" })).rejects.toThrow("404");
+});
+
+test("run_wait polls the run to a final state and drops the definition; at the limit it says timedOut", async () => {
+  const t = tool(platformTools("main", undefined, 1), "run_wait");
+  const a = { owner: "acme", pipeline: "ci", run: "r1" };
+  let n = 0;
+  routes["GET /v1/pipelines/acme/ci/runs/r1"] = () => json({ id: "r1", state: ++n < 3 ? "running" : "success", definition: { big: 1 } })();
+  const d = JSON.parse(await t.run(a));
+  expect(d).toEqual({ id: "r1", state: "success" });
+  expect(n).toBe(3);
+  routes["GET /v1/pipelines/acme/ci/runs/r1"] = json({ id: "r1", state: "running" });
+  expect(JSON.parse(await t.run({ ...a, timeout: 0.02 })).timedOut).toBe(true);
+  routes["GET /v1/pipelines/acme/ci/runs/r1"] = () => new Response("gone", { status: 404 });
+  await expect(t.run(a)).rejects.toThrow("404: gone");
+});
+
+test("pipeline_save creates a missing pipeline and replaces an existing one", async () => {
+  const t = tool(platformTools("main"), "pipeline_save");
+  const definition = { name: "ci", jobs: {} };
+  routes["POST /v1/pipelines/acme"] = json({ latestVersion: 1 }, 201);
+  await t.run({ owner: "acme", definition });
+  expect(calls.map((c) => `${c.method} ${c.url}`)).toEqual(["GET /v1/pipelines/acme/ci", "POST /v1/pipelines/acme"]);
+  routes["GET /v1/pipelines/acme/ci"] = json({ name: "ci" });
+  routes["PUT /v1/pipelines/acme/ci"] = json({ latestVersion: 2 });
+  await t.run({ owner: "acme", definition: JSON.stringify(definition) });
+  expect(calls.at(-1)).toMatchObject({ method: "PUT", url: "/v1/pipelines/acme/ci", body: definition });
+  routes["PUT /v1/pipelines/acme/ci"] = () => new Response("invalid", { status: 422 });
+  await expect(t.run({ owner: "acme", definition })).rejects.toThrow("422: invalid");
+  await expect(t.run({ owner: "acme", definition: {} })).rejects.toThrow("needs a `name`");
+});
+
+test("secret_set sends the value and answers {name, updatedAt}, never the value, also on failure", async () => {
+  const t = tool(platformTools("main"), "secret_set");
+  const value = "s3cr3t-value-xyz";
+  routes["PUT /v1/secrets/acme/DB_URL"] = () => new Response(null, { status: 204 });
+  routes["GET /v1/secrets/acme"] = json([{ name: "DB_URL", updated_at: "2026-11-03T00:00:00Z", updated_by: "k" }]);
+  const out = await t.run({ owner: "acme", name: "DB_URL", value });
+  expect(calls[0]).toMatchObject({ method: "PUT", body: { value } });
+  expect(JSON.parse(out)).toEqual({ name: "DB_URL", updatedAt: "2026-11-03T00:00:00Z" });
+  expect(out).not.toContain(value);
+  expect(t.description).toContain("never printed back");
+  routes["PUT /v1/secrets/acme/mine/DB_URL"] = () => new Response(null, { status: 204 });
+  expect(JSON.parse(await t.run({ owner: "acme", name: "DB_URL", value, mine: true })).name).toBe("DB_URL");
+  expect(calls.at(-2)!.url).toBe("/v1/secrets/acme/mine/DB_URL");
+  routes["PUT /v1/secrets/acme/DB_URL"] = () => new Response("only a team admin can change team secrets", { status: 403 });
+  const err = await t.run({ owner: "acme", name: "DB_URL", value }).catch((e) => String(e.message));
+  expect(err).toBe("403: only a team admin can change team secrets");
+});
+
+test("ttl tools clear with null when ttl_secs is omitted, and the wait tools take a timeout", () => {
+  const t = platformTools("main");
+  for (const n of ["sandbox_wait", "run_wait"]) expect((tool(t, n).inputSchema as any).properties.timeout.description).toContain("maximum 900");
+});

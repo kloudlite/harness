@@ -399,8 +399,132 @@ function basePlatformTools(kind: "main" | "workspace" | "all", wsId?: string, ti
       async (a) => api("POST", "/v1/requests", strip({ owner: a.owner, kind: a.kind, reason: a.reason, quota: a.quota, access: a.access, region: a.region ? { region: a.region } : undefined, other: a.kind === "other" ? { title: a.title, body: a.body } : undefined })),
     ),
     def("regions", "List the regions a team can live in. A team has one region, set when it is made.", {}, [], async () => api("GET", "/v1/regions")),
+    ...componentTools(tickMs),
   ];
   if (kind !== "all") return main;
   const have = new Set(main.map((t) => t.name));
   return [...main, ...shared.filter((t) => !have.has(t.name))];
+}
+
+// ---- components with no workspace/environment id: sandboxes, pipelines and runs, secrets, connectors, session lifecycle, TTLs.
+// Main and `all` only: a workspace token's route list (WORKSPACE_TOOL_ROUTES) reaches none of these.
+
+const OWNER = { type: "string", description: "The owner: your handle, or a team slug." };
+const SBX = { type: "string", description: "The sandbox id (`sbx-…`, the `id` from sandbox_list)." };
+const SES = { type: "string", description: "The session id, name or `team/name`." };
+const PIPE = { type: "string", description: "The pipeline name." };
+const RUN = { type: "string", description: "The run id (the `id` of a run from run_list or run_start)." };
+const WAIT = { type: "number", description: "Seconds to wait (default 300, maximum 900). At the limit the answer has `timedOut: true`." };
+const MINE = { type: "boolean", description: "Your own secret in the team `owner` (any active member), not the team's shared one." };
+const TTL = { oneOf: [{ type: "integer" }, { type: "null" }], description: "Seconds of unused time before it is deleted, 600 to 2592000. Omit or null clears it." };
+const clampWait = (t: unknown) => Math.min(900, Math.max(0.001, Number(t) || 300));
+
+/** GET a plain-text body (logs): `api` would pretty-print JSON-looking text and turn an empty body into "ok". */
+async function getText(path: string): Promise<string> {
+  const r = await raw("GET", path);
+  if (r.unavailable) throw new Error(UNAVAILABLE);
+  if (r.status < 200 || r.status >= 300) throw new Error(httpError(r.status, r.text));
+  return r.text;
+}
+
+/** Poll a document with back-off (tick, then 1.5x up to 6 ticks) until `done`; the last view with `timedOut: true` at the limit. */
+async function pollDoc(path: string, done: (d: any) => boolean, timeoutS: unknown, tickMs: number, trim: (d: any) => any = (d) => d): Promise<string> {
+  const end = Date.now() + clampWait(timeoutS) * 1000;
+  let wait = tickMs;
+  for (;;) {
+    const d = JSON.parse(await api("GET", path));
+    if (done(d)) return JSON.stringify(trim(d), null, 2);
+    if (Date.now() >= end) return JSON.stringify({ ...trim(d), timedOut: true }, null, 2);
+    // ponytail: no abort signal reaches ToolDef.run (see settle); a cancelled turn waits out its timeout.
+    await new Promise((r) => setTimeout(r, Math.max(0, Math.min(wait, end - Date.now()))));
+    wait = Math.min(wait * 1.5, tickMs * 6);
+  }
+}
+
+function componentTools(tickMs: number): ToolDef[] {
+  const sbx = (a: any) => `/v1/sandboxes/${seg(a.sandbox)}`;
+  const pipe = (a: any) => `/v1/pipelines/${seg(a.owner)}/${seg(a.pipeline)}`;
+  const run = (a: any) => `${pipe(a)}/runs/${seg(a.run)}`;
+  const secret = (a: any) => `/v1/secrets/${seg(a.owner)}${a.mine ? "/mine" : ""}`;
+  const RUNREF = { owner: OWNER, pipeline: PIPE, run: RUN };
+  const RUNREQ = ["owner", "pipeline", "run"];
+  return [
+    // Sandbox
+    def("sandbox_create", "Start a sandbox: an isolated container that runs one command and ends when it exits. In a session it is created in the session and reaches the session's environment; otherwise it is standalone. `command` is a shell string (run with `sh -c`) or an argv array. It returns at once with the sandbox document in `pending`. Call sandbox_wait for the end, then sandbox_logs." , { command: { oneOf: [S, SL], description: "A shell string, or an argv array." }, image: S, packages: SL, variables: { type: "object", additionalProperties: S, description: "Environment variables for the command. A value of exactly `${{ secrets.NAME }}` reads a secret." }, timeout_s: { ...I, description: "The hard lifetime in seconds, 10 to 86400. Default 300." }, team: { type: "string", description: "The team slug for a standalone sandbox. A session uses its own team." } }, ["command"], async (a) => {
+      const cmd = Array.isArray(a.command) ? a.command : ["sh", "-c", String(a.command)];
+      const body = { cmd, image: a.image, packages: a.packages, env: a.variables, timeout_secs: a.timeout_s };
+      const ses = process.env.KL_SESSION;
+      return ses ? api("POST", `/v1/sessions/${seg(ses)}/sandboxes`, strip(body)) : api("POST", "/v1/sandboxes", strip({ team: a.team, ...body }));
+    }),
+    def("sandbox_get", "Read one sandbox. The `phase` is `pending`, `starting`, `running` or `terminated`; `reason` and `exit_code` say how it ended.", { sandbox: SBX }, ["sandbox"], async (a) => api("GET", sbx(a))),
+    def("sandbox_wait", "Wait until a sandbox ends, then return `{id, phase, reason, exit_code, message}`. `exit_code` is the command's own. `timedOut: true` means it was still running after `timeout` seconds.", { sandbox: SBX, timeout: WAIT }, ["sandbox"], async (a) => {
+      const end = Date.now() + clampWait(a.timeout) * 1000;
+      for (;;) {
+        const d = JSON.parse(await api("POST", `${sbx(a)}/wait`, { timeout_ms: Math.max(1, Math.min(20000, Math.round(end - Date.now()))) }));
+        if (d.phase === "terminated") return JSON.stringify(d, null, 2);
+        if (Date.now() >= end) return JSON.stringify({ ...d, timedOut: true }, null, 2);
+      }
+    }),
+    def("sandbox_logs", "Read the output of a sandbox's command as plain text: the live output while it runs, the last 256 KiB after it ended. Empty until the first output; 409 while it has not started.", { sandbox: SBX }, ["sandbox"], async (a) => getText(`${sbx(a)}/logs`)),
+    def("sandbox_list", "List your sandboxes, newest first, ended ones included. The first 50 unless `limit` (1 to 200).", { team: S, state: { type: "string", enum: ["waiting", "running", "ended", "stopped", "timed-out", "failed"] }, q: { type: "string", description: "Keep sandboxes whose id, image, packages or command contain this text." }, limit: I }, [], async (a) =>
+      api("GET", `/v1/sandboxes${qs({ team: a.team, state: a.state, q: a.q, limit: a.limit === undefined ? undefined : String(a.limit) })}`)),
+    def("sandbox_terminate", "Ask the platform to end a sandbox. The record stays, and the call is safe to repeat. It returns at once; poll sandbox_get or call sandbox_wait.", { sandbox: SBX }, ["sandbox"], async (a) => api("POST", `${sbx(a)}/terminate`)),
+    def("sandbox_delete", "Delete a sandbox's record. A sandbox still running dies with it.", { sandbox: SBX }, ["sandbox"], async (a) => api("DELETE", sbx(a))),
+
+    // Pipeline
+    def("pipeline_list", "List the pipelines of an owner, with the latest version and the triggers.", { owner: OWNER }, ["owner"], async (a) => api("GET", `/v1/pipelines/${seg(a.owner)}`)),
+    def("pipeline_get", "Read a pipeline: its latest definition, or version `version`.", { owner: OWNER, pipeline: PIPE, version: I }, ["owner", "pipeline"], async (a) => api("GET", `${pipe(a)}${qs({ version: a.version === undefined ? undefined : String(a.version) })}`)),
+    def("pipeline_save", "Save a pipeline definition (JSON, with its `name`) as a new version; the pipeline is created when it does not exist. A definition equal to the latest saves nothing. To roll back, save an old definition. A definition that cannot run is a 422 with every reason. When a save turns `triggers.webhook` on, the answer holds `webhookUrl` once: keep it secret and tell the person.", { owner: OWNER, definition: { type: "object", description: "The pipeline definition. Its `name` names the pipeline." } }, ["owner", "definition"], async (a) => {
+      const name = a.definition?.name;
+      if (typeof name !== "string" || !name) return "error: `definition` needs a `name`";
+      const r = await raw("GET", `/v1/pipelines/${seg(a.owner)}/${seg(name)}`);
+      if (r.unavailable) throw new Error(UNAVAILABLE);
+      if (r.status === 404) return api("POST", `/v1/pipelines/${seg(a.owner)}`, a.definition);
+      if (r.status < 200 || r.status >= 300) throw new Error(httpError(r.status, r.text));
+      return api("PUT", `/v1/pipelines/${seg(a.owner)}/${seg(name)}`, a.definition);
+    }),
+    def("pipeline_versions", "List the versions of a pipeline, oldest first: `{version, createdBy, createdAtMs, definitionSha256}`.", { owner: OWNER, pipeline: PIPE }, ["owner", "pipeline"], async (a) => api("GET", `${pipe(a)}/versions`)),
+    def("pipeline_delete", "Delete a pipeline and all its versions. Finished runs stay. 409 while a run is queued or running.", { owner: OWNER, pipeline: PIPE }, ["owner", "pipeline"], async (a) => api("DELETE", pipe(a))),
+    def("webhook_rotate", "Make a new webhook secret for a pipeline; the old URL stops at once. The answer holds the new `webhookUrl` once: keep it secret and tell the person. 409 when the webhook trigger is off.", { owner: OWNER, pipeline: PIPE }, ["owner", "pipeline"], async (a) => api("POST", `${pipe(a)}/webhook/rotate`)),
+    def("run_start", "Start a run of a pipeline by hand. It returns at once with the run in `queued`. Call run_wait. A run that cannot be planned is a 422 with every reason, and nothing is recorded.", { owner: OWNER, pipeline: PIPE, inputs: { type: "object", additionalProperties: S, description: "String values by input name." }, version: { ...I, description: "The version to run. Default: the newest." }, key: { type: "string", description: "A retry key: a second start with the same key answers the first run." } }, ["owner", "pipeline"], async (a) =>
+      api("POST", `${pipe(a)}/runs`, strip({ inputs: a.inputs, version: a.version, key: a.key }))),
+    def("run_list", "List runs, newest first, of one pipeline or (without `pipeline`) of every pipeline of the owner.", { owner: OWNER, pipeline: PIPE, state: { type: "string", enum: ["queued", "running", "success", "failure", "cancelled"] }, limit: I }, ["owner"], async (a) => {
+      const q = qs({ state: a.state, limit: a.limit === undefined ? undefined : String(a.limit) });
+      return api("GET", a.pipeline ? `${pipe(a)}/runs${q}` : `/v1/pipelines/${seg(a.owner)}/runs${q}`);
+    }),
+    def("run_get", "Read one run: `state` (`queued`, `running`, `success`, `failure`, `cancelled`), its jobs and their states.", RUNREF, RUNREQ, async (a) => api("GET", run(a))),
+    def("run_wait", "Wait until a run is `success`, `failure` or `cancelled`, then return the run (without its definition). `timedOut: true` means it was still going after `timeout` seconds. There is no server wait: the tool polls with back-off.", { ...RUNREF, timeout: WAIT }, RUNREQ, async (a) =>
+      pollDoc(run(a), (d) => ["success", "failure", "cancelled"].includes(d?.state), a.timeout, tickMs, ({ definition: _d, ...rest }) => rest)),
+    def("run_logs", "Read the output of one job of a run from a byte offset, one page of at most 1 MiB: `{data, next, complete, state}`. While `complete` is false, call again with `offset` = `next`.", { ...RUNREF, job: { ...I, description: "The job's index in the run (default 0)." }, offset: I }, RUNREQ, async (a) =>
+      api("GET", `${run(a)}/jobs/${a.job ?? 0}/logs${qs({ offset: a.offset === undefined ? undefined : String(a.offset) })}`)),
+    def("run_cancel", "Ask a run to stop. A queued run is cancelled at once; a running one stops at its next report, so poll run_get. 409 when it has already finished.", RUNREF, RUNREQ, async (a) => api("POST", `${run(a)}/cancel`)),
+
+    // Secrets and workspace variables
+    def("secret_set", "Store a secret value under a name (`A-Z`, `0-9`, `_`), replacing an existing one. The value is never printed back: not here, not by secret_list, not by any tool. Answers `{name, updatedAt}`. A pod reads it only through an env value that is exactly `${{ secrets.NAME }}`. A team's shared secret needs a team admin; set `mine` for your own in a team.", { owner: OWNER, name: S, value: S, mine: MINE }, ["owner", "name", "value"], async (a) => {
+      await api("PUT", `${secret(a)}/${seg(a.name)}`, { value: a.value });
+      // The route answers 204: the date comes from the names list, which never carries a value.
+      const list = await raw("GET", secret(a)).catch(() => undefined);
+      const row = list && !list.unavailable && Array.isArray(list.data) ? list.data.find((s: any) => s.name === a.name) : undefined;
+      return JSON.stringify({ name: a.name, updatedAt: row?.updated_at ?? new Date().toISOString() }, null, 2);
+    }),
+    def("secret_list", "List the names of an owner's secrets with when and by whom each was last set. Never a value.", { owner: OWNER, mine: MINE }, ["owner"], async (a) => api("GET", secret(a))),
+    def("secret_delete", "Delete one secret. 409 while a workspace, sandbox, service or pipeline references it; the answer names the referrers.", { owner: OWNER, name: S, mine: MINE }, ["owner", "name"], async (a) => api("DELETE", `${secret(a)}/${seg(a.name)}`)),
+    def("workspace_env_set", "Replace the whole variable set of a workspace: variables left out are removed, `{}` clears it. A value of exactly `${{ secrets.NAME }}` reads a secret. A running workspace keeps its old variables and is marked `restart_required`; call workspace_restart, or set `restart_on_change`.", { workspace: WS, variables: { type: "object", additionalProperties: S, description: "Variable name to value." }, restart_on_change: { type: "boolean", description: "Restart the workspace itself whenever its variables change from now on." } }, ["workspace", "variables"], async (a) =>
+      api("PUT", `/v1/workspaces/${seg(a.workspace)}/env`, strip({ env: a.variables, restartOnEnvChange: a.restart_on_change }))),
+    def("workspace_restart", "Restart a running workspace so that it reads its current variables and secrets. It returns at once; poll workspace_get. 409 when it is not running (its next start reads them anyway)." , { workspace: WS }, ["workspace"], async (a) => api("POST", `/v1/workspaces/${seg(a.workspace)}/restart`)),
+    def("service_restart", "Restart one service of an environment so that it reads its current variables and secrets. It returns at once; call env_wait. 409 when the environment is not running.", { env: ENV, service: S }, ["env", "service"], async (a) => api("POST", `/v1/environments/${seg(a.env)}/services/${seg(a.service)}/restart`)),
+
+    // Connectors
+    def("connector_list", "List the git, registry and model-hub connectors of an owner: name, provider, kind, account and state (`connected`, `expired`, `revoked`). Read only: connecting happens in the web console.", { owner: { ...OWNER, description: "Your handle or a team slug. Default: your own." } }, [], async (a) => api("GET", `/v1/connectors${qs({ owner: a.owner })}`)),
+
+    // Session lifecycle and time to live
+    def("session_create", "Create a session in a team, optionally connected to an environment of that team. The name is 1 to 40 lowercase letters, digits or `-`.", { name: S, team: { type: "string", description: "A team you belong to. Omit it for your own." }, environment: { type: "string", description: "An environment id or name of the same team." }, ttl_secs: { ...I, description: "Unused seconds before it is deleted, 600 to 2592000. Default: never." } }, ["name"], async (a) =>
+      api("POST", "/v1/sessions", strip({ name: a.name, team: a.team, environment: a.environment, ttl_secs: a.ttl_secs }))),
+    def("session_stop", "Stop a session and every workspace in it. Sandboxes and the environment are not touched. It returns at once.", { session: SES }, ["session"], async (a) => api("POST", `/v1/sessions/${seg(a.session)}/stop`)),
+    def("session_start", "Start a session: its environment, then its workspaces. It returns at once; poll workspace_get and env_wait.", { session: SES }, ["session"], async (a) => api("POST", `/v1/sessions/${seg(a.session)}/start`)),
+    def("session_delete", "Delete a session. Its workspaces are deleted (snapshots stay) and its sandboxes ended. Answers the ids removed.", { session: SES }, ["session"], async (a) => api("DELETE", `/v1/sessions/${seg(a.session)}`)),
+    def("session_ttl", "Set or clear how long a session may stay unused before it is deleted. An awake session is never deleted by it.", { session: SES, ttl_secs: TTL }, ["session"], async (a) => api("PUT", `/v1/sessions/${seg(a.session)}/ttl`, { ttl_secs: a.ttl_secs ?? null })),
+    def("workspace_ttl", "Set or clear how long a workspace may stay unused before it is deleted.", { workspace: WS, ttl_secs: TTL }, ["workspace"], async (a) => api("PUT", `/v1/workspaces/${seg(a.workspace)}/ttl`, { ttl_secs: a.ttl_secs ?? null })),
+    def("env_ttl", "Set or clear how long an environment may stay unused before it is deleted. An environment with a session connected is never deleted by it.", { env: ENV, ttl_secs: TTL }, ["env"], async (a) => api("PUT", `/v1/environments/${seg(a.env)}/ttl`, { ttl_secs: a.ttl_secs ?? null })),
+  ];
 }
