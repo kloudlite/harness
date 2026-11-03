@@ -1,1 +1,9 @@
-{ "name": "kloudlite", "description": "Kloudlite workspaces through kloudlite mcp, with kl mode: no local tools" }
+{
+  "name": "kloudlite",
+  "version": "0.1.0",
+  "description": "Kloudlite workspaces through kloudlite mcp, with kl mode: no local tools. Needs the kloudlite CLI on PATH (hooks run kloudlite mode, the MCP server runs kloudlite mcp).",
+  "author": { "name": "Kloudlite" },
+  "homepage": "https://github.com/kloudlite/harness",
+  "repository": "https://github.com/kloudlite/harness",
+  "keywords": ["kloudlite", "workspaces", "mcp", "sessions"]
+}

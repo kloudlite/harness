@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { mcpTools } from "./local.ts";
@@ -64,4 +64,20 @@ test("the two agents have the kl tools (and ToolSearch to load them) only, and n
     const own = text.includes("name: kl-workspace") ? "" : "|stop|push";
     for (const t of tools) expect(t).not.toMatch(new RegExp(`__(workspace_(list|create|clone|restore|start|delete${own})|env_(create|start|stop|delete|clone|push|restore.*))$`));
   }
+});
+
+test("the root marketplace names the plugin, its source is the plugin dir, and the names match", () => {
+  const root = join(import.meta.dir, "../../..");
+  const market = JSON.parse(readFileSync(join(root, ".claude-plugin/marketplace.json"), "utf8"));
+  const manifest = JSON.parse(readFileSync(join(PLUGIN, ".claude-plugin/plugin.json"), "utf8"));
+  expect(market.name).toBe("kloudlite");
+  expect(market.plugins.length).toBe(1);
+  const entry = market.plugins[0];
+  expect(entry.source.startsWith("./")).toBe(true);
+  expect(join(root, entry.source)).toBe(PLUGIN);
+  expect(entry.name).toBe(manifest.name);
+  expect(entry.version).toBe(manifest.version);
+  for (const k of ["version", "description", "author", "homepage", "repository", "keywords"]) expect(manifest[k]).toBeTruthy();
+  // one marketplace only: a second file with another source would drift
+  expect(existsSync(join(root, "laptop-plugin/.claude-plugin"))).toBe(false);
 });
