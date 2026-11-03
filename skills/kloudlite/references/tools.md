@@ -42,8 +42,9 @@ Every tool, with its arguments. `workspace` is a `ws-` id of a `ready` workspace
 | `edit` | `workspace`, `files` | Exact text replacements, all or none |
 | `patch` | `workspace`, a unified diff | Applies the diff |
 | `glob`, `grep` | `workspace`, pattern | Matching files, matching lines |
-| `exec` | `workspace`, `cmd`, `cwd?`, `env?`, `detach?`, `head?`, `tail?`, `quiet?` | Output and exit code; with `detach`, a process id |
+| `exec` | `workspace`, `cmd`, `cwd?`, `env?`, `soft_ms?`, `detach?`, `head?`, `tail?`, `quiet?` | Output and exit code; past `soft_ms` (25 s) `promoted: true` and a process `id`; with `detach`, a process id |
 | `process_list`, `process_output`, `process_write`, `process_kill` | `workspace`, process `id` | Detached processes; output from an offset |
+| `process_wait` | `workspace`, `id`, `max_wait_ms?` (20 s at most), `since?`, `since_err?` | Waits for the exit (or the wait), answers `state`, `exit_code`, the new output and `next`/`next_err`; repeat while `timed_out` |
 | `watch`, `watch_poll`, `watch_stop` | `workspace` | File or command watch |
 | `packages_list`, `packages_add`, `packages_remove`, `packages_update` | `workspace`, `packages` | Package entries `attr` or `attr@version` |
 | `container_build` | `workspace`, `tags` | Builds and pushes to the registry connector |

@@ -20,7 +20,7 @@ A check in a workspace uses the workspace's files and changes nothing. A sandbox
 3. If the tests need a service (`db`), the workspace must be managed in a session with the environment (`kloudlite-develop`, scenario 3), or use scenario 2.
 
 **Done when:** the exit code is 0, or you told the user which tests failed with the lines that show it.
-**If it fails:** a command that may run past 120 s (the default wait; at most 600 s): pass `timeout`, or run it detached (`exec` with `detach: true`) and read `process_output`. A name that does not resolve: the workspace is not in the session.
+**If it fails:** a command still running after 25 s answers `promoted: true` with a process `id`: call `process_wait` with that `id` (and `since`/`since_err` = `next`/`next_err`) until `state` is `exited`; `exit_code` is the result. A name that does not resolve: the workspace is not in the session.
 **Then:** scenario 2 for a clean run.
 
 ### 2. Clean run in a sandbox against the environment

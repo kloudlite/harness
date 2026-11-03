@@ -65,7 +65,7 @@ Use a tool, not a command. Two things have no tool: connecting a provider (the w
 7. **Lifecycle calls return at once.** Poll `workspace_get` until `ready` or `stopped`; call `env_wait` for an environment. Stop at `error` or `deleted`. A `failing` service needs its `message` and a fix, not more waiting. Back off: 2 s, 4 s, 8 s, 15 s.
 8. **Packages are tools; services belong in the environment.** No database, queue or broker in a workspace. `references/services.md` gives image, ports and mounts.
 9. **Service data.** A service that writes data gets a mount in the same call that creates it. A service without `mounts` loses its data on each restart, and data written before a mount is lost. Example: `{"name": "db", "image": "postgres:16", "ports": [5432], "mounts": [{"folder": "pg-data", "path": "/var/lib/postgresql/data"}]}`. A service that keeps all its data in another service needs none: say so.
-10. **Processes.** Run a dev server detached (`exec` with `detach: true`). Read it with `process_output`. Confirm it listens on its port before an intercept. `process_kill` it when done. At most 32 processes.
+10. **Processes.** Run a dev server detached (`exec` with `detach: true`). Read it with `process_output`. Confirm it listens on its port before an intercept. `process_kill` it when done. At most 32 processes. A plain `exec` still running after 25 s answers `promoted: true` and an `id`: call `process_wait` with it until `state` is `exited`.
 11. **Intercept etiquette.** In a shared environment, intercept; do not copy. Agree who intercepts what. Release when done. Copy the environment only for data changes, risky migrations or experiments (shape 4).
 12. **Secrets.** Never print a secret value. Set it with `secret_set`, never in a command line or a chat message, and never echo what the user typed. Refer by name. A rotation marks the readers; the restart is the user's choice.
 13. **Quota and errors.** A `409` that names a limit does not pass on a retry: tell the user, and offer `request_create` only when asked. Report every error as it is. Never go around it through another object, session or tool. `references/errors.md` gives the action for each.
@@ -109,7 +109,7 @@ The tools act on one session. Every code, run, package and image tool takes `wor
 | Session | `session_current`, `session_use`, `session_connect`, `session_disconnect`, `session_create`, `session_stop`, `session_start`, `session_delete`, `session_ttl` |
 | Workspaces | `workspace_list`, `workspace_get`, `workspace_create`, `workspace_clone`, `workspace_restore`, `workspace_start`, `workspace_stop`, `workspace_delete`, `workspace_snapshot`, `worktree_add`, `worktree_drop`, `workspace_env_get`, `workspace_env_set`, `workspace_restart`, `workspace_ttl` |
 | Code | `read`, `write`, `edit`, `patch`, `glob`, `grep` |
-| Run | `exec`, `process_list`, `process_output`, `process_write`, `process_kill`, `watch`, `watch_poll`, `watch_stop` |
+| Run | `exec`, `process_list`, `process_output`, `process_write`, `process_wait`, `process_kill`, `watch`, `watch_poll`, `watch_stop` |
 | Packages | `packages_list`, `packages_add`, `packages_remove`, `packages_update` |
 | Images | `container_build`, `container_push`, `builder_status` |
 | Environments | `env_list`, `env_get`, `env_wait`, `env_create`, `env_clone`, `env_start`, `env_stop`, `env_delete`, `env_snapshot`, `env_restore`, `service_add`, `service_update`, `service_remove`, `service_logs`, `service_restart`, `env_ttl` |

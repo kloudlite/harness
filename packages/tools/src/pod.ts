@@ -8,7 +8,7 @@ import { ensureRunning } from "./ensure.ts";
 
 export const POD_TOOLS = [
   "read", "write", "edit", "patch", "glob", "grep", "exec",
-  "process_list", "process_output", "process_write", "process_kill",
+  "process_list", "process_output", "process_write", "process_wait", "process_kill",
   "watch", "watch_poll", "watch_stop",
   "container_build", "container_push",
 ];
@@ -29,9 +29,9 @@ export const inflight = new Map<string, number>();
 
 class NotReady extends Error {}
 
-/** How long the tool will wait, as the pod reads it: `timeout_ms`, else `timeout` in seconds, else the default. The client waits this plus a margin, never less. */
+/** How long the tool will wait, as the pod reads it: `soft_ms` (exec's promotion point), else `timeout_ms`, else `timeout` in seconds, else the default. The client waits this plus a margin, never less. */
 export function waitMs(args: any, dflt: number): number {
-  const ms = Number(args?.timeout_ms);
+  const ms = Number(args?.soft_ms) > 0 ? Number(args?.soft_ms) : Number(args?.timeout_ms);
   if (ms > 0) return ms;
   const s = Number(args?.timeout);
   return s > 0 ? s * 1000 : dflt;
@@ -97,7 +97,8 @@ export async function podTools(ws: string, o: { ensure?: typeof ensureRunning } 
 
   async function call(name: string, args: any): Promise<string> {
     // A build waits on the builder and the registry: same long leash as a job, its own default.
-    const timeout = name === "exec" ? waitMs(args, 120_000) + 15_000
+    // exec promotes a job to a process at 25 s (crates/ide SOFT_MS) rather than running it to the end.
+    const timeout = name === "exec" ? waitMs(args, 25_000) + 15_000
       : name === "container_build" ? waitMs(args, 600_000) + 15_000
       : name === "container_push" ? 180_000 : 60_000;
     try {
