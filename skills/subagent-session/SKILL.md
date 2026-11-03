@@ -50,7 +50,7 @@ Code tools work in `~/workspace`.
 | `container_build`, `container_push` | Build and push an image, if the task tells you to. |
 | `web_fetch`, `web_search` | Read docs and the web. |
 
-You do not have these tools: `subagent`, `main_tell`, `workspace_ask`, `workspace` action `stop`, `intercept`, `release`, `question` and the task tools. These are the work of the workspace session.
+You do not have these tools: `subagent`, `main_tell`, `workspace_ask`, `workspace` action `stop`, `intercept`, `question` and the task tools. These are the work of the workspace session.
 
 ## How to do the task
 

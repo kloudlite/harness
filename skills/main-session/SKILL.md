@@ -99,7 +99,7 @@ A tool with the mark **card** shows a permission card to the person before it ru
 |---|---|
 | `env` | `list` and `get` see the environments, their services, and the intercepts. `create` makes an environment; with `source` it copies an environment, or grows one from a snapshot. `start`, `stop` and `delete` change its state; only `delete` shows a card. `wait` waits until every service is ready, a service fails, or the state is `error` or `deleted`. `snapshot` and `restore` (**card**) make a snapshot, or put this environment back to one. `create`, `start` and `restore` take `wait: true`. |
 | `service` | `add`, `update` and `remove` add, change or remove the services of an environment. Use these for standard services, for example a database. A workspace adds and changes its own service. Only `remove` shows a card. `logs` (with `name`) reads the logs of a service. |
-| `session` | `current` sees this session and its environment (none if it is disconnected). `use` with `environment` connects this session to an environment of its team (id or name); its intercepts in the old environment are released first. `use` with `environment: null` disconnects it; its intercepts there are released. |
+| `session` | `current` sees this session and its environment (none if it is disconnected). `use` with `environment` connects this session to an environment of its team (id or name); its intercepts in the old environment are stopped first. `use` with `environment: null` disconnects it; its intercepts there are stopped. |
 
 Intercepts are not your work. The workspace that runs the service starts and ends the intercept. Ask that workspace to do it.
 
@@ -223,7 +223,7 @@ The person asks: "Add a comments feature. Add an API in the backend and a commen
 
 1. Set up the environment yourself. Use `env` action `get`. If a service is missing, use `env` action `create` or `service` action `add`. Example: a database. Check every service for data that must persist, and mount it (see "Service data" in the kloudlite skill).
 2. Use `workspace_ask` to tell the workspace to run its service and intercept it in that environment. The workspace starts the service and calls `intercept`, because it owns the service.
-3. When the person is done, ask the workspace to release the intercept.
+3. When the person is done, ask the workspace to stop the intercept.
 
 ## Integration tests with two workspaces
 
@@ -236,7 +236,7 @@ Some work needs two workspaces at the same time. Example: the backend runs its s
 2. **Start the service.** Ask the backend: "Run your service and intercept `<service>` in `<env>`. Keep it running. Send a report when it is ready." The report gives the service, the environment and the port. It also tells you that the intercept is in force. `env` action `get` also shows the intercept.
 3. **Run the tests.** Ask the tests workspace: "Run the integration tests against `<service>` in `<env>`. This service runs the backend branch `<branch>` at `<commit>`." The report gives the result: passed, or the tests that failed and how they failed.
 4. **If a test fails,** send the failed tests and their messages to the backend in a new ask. Tell it to fix the problem, start the service again and keep the intercept. Then do step 3 again. Each cycle is one ask to each workspace.
-5. **Finish.** Ask the backend to release the intercept and stop the service. Tell the person the result and the commits of each workspace.
+5. **Finish.** Ask the backend to stop the intercept and stop the service. Tell the person the result and the commits of each workspace.
 
 The backend keeps its service running between your asks. A detached process continues after the turn that started it.
 

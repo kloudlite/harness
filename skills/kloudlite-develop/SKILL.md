@@ -74,12 +74,12 @@ Every scenario ends with its cleanup. To check a result, use `kloudlite-verify`.
 **Steps:**
 1. Start the code (scenario 4). Check it listens: `exec` {"workspace": "ws-…", "cmd": "ss -ltn | grep :3000"}.
 2. `env` action `get`. Read the ports of `api`, for example 8080.
-3. `intercept` {"env": "env-…", "service": "api", "workspace": "ws-…", "ports": [{"service": 8080, "workspace": 3000}], "wait": true}. Leave out `ports` when the numbers match. It answers when `api` shows `interceptedBy` and `proxy` `ready`.
+3. `intercept` {"action": "start", "env": "env-…", "service": "api", "workspace": "ws-…", "ports": [{"service": 8080, "workspace": 3000}], "wait": true}. Leave out `ports` when the numbers match. It answers when `api` shows `interceptedBy` and `proxy` `ready`.
 4. `env` action `get`: check `interceptedBy`.
-5. Work. Then `release` {"env": "env-…", "service": "api"}.
+5. Work. Then `intercept` {"action": "stop", "env": "env-…", "service": "api"}.
 
-**Done when:** `env` action `get` shows the intercept in force and a request to `api:8080` reaches the process. The intercept is released at the end.
-**If it fails:** refused with a holder's name: tell the user who holds it; one workspace per service. `proxy` `failed`: the service keeps its traffic; check the port with `process` action `output`, `release`, intercept again. A service with no ports, or port 7788, is refused. Traffic returns when the workspace stops or is silent for 30 s; the intercept stays and takes hold again.
+**Done when:** `env` action `get` shows the intercept in force and a request to `api:8080` reaches the process. The intercept is stopped at the end.
+**If it fails:** refused with a holder's name: tell the user who holds it; one workspace per service. `proxy` `failed`: the service keeps its traffic; check the port with `process` action `output`, `intercept` action `stop`, then `start` again. A service with no ports, or port 7788, is refused. Traffic returns when the workspace stops or is silent for 30 s; the intercept stays and takes hold again.
 **Then:** scenario 7 to debug.
 
 ### 6. Change several components together
@@ -91,9 +91,9 @@ Every scenario ends with its cleanup. To check a result, use `kloudlite-verify`.
 2. A managed workspace per component (scenario 1 for each, in the session).
 3. Start each process (scenario 4) and intercept its own service (scenario 5).
 4. Change the contract first (api), then its callers. `env` action `get`: every service shows its intercept.
-5. At the end `release` each service, one by one.
+5. At the end `intercept` action `stop` each service, one by one.
 
-**Done when:** a request through `web` reaches `api` and `worker` in their workspaces. Every intercept is released.
+**Done when:** a request through `web` reaches `api` and `worker` in their workspaces. Every intercept is stopped.
 **If it fails:** as scenario 5. Two components in one workspace is fine when one process serves both.
 **Then:** `kloudlite-verify` scenario 6 to test the changes together.
 
@@ -106,7 +106,7 @@ Every scenario ends with its cleanup. To check a result, use `kloudlite-verify`.
 2. `grep` the code path in the workspace.
 3. Add logging with `edit`. Start the code (scenario 4), intercept (scenario 5).
 4. `process` action `output`: read the real requests.
-5. Fix, check, `release`.
+5. Fix, check, `intercept` action `stop`.
 
 **Done when:** the real requests succeed through the intercept and you told the user the cause.
 **If it fails:** `service` action `logs` names the workspace when an intercept holds the service: read the process output instead.
@@ -117,7 +117,7 @@ Every scenario ends with its cleanup. To check a result, use `kloudlite-verify`.
 **Shape:** 3 or 4.
 **Steps:**
 1. Against the services: a second managed workspace in the session, which clones the repo, or `worktree` {"action": "add", "workspace": "ws-…", "name": "export"} in the same managed workspace; run each tree's process on its own port.
-2. Only one tree's process can hold the intercept of a service. Intercept one, `release`, intercept the other.
+2. Only one tree's process can hold the intercept of a service. Intercept one, stop it, intercept the other.
 3. Without services: `workspace` {"action": "create", "source": "ws-…", "name": "api-try", "task": "approach B"}. A clone is standalone and does not reach the environment.
 4. Commit each part on its own branch: `exec` `git switch -c export && git commit …`. Merge in the original workspace with `git fetch` and `git merge`.
 5. Tear down: `worktree` action `drop` and `workspace` action `delete` for what you made, never one that holds unmerged work.
@@ -130,8 +130,8 @@ Every scenario ends with its cleanup. To check a result, use `kloudlite-verify`.
 **Trigger:** "reproduce it without breaking staging".
 **Shape:** 4.
 **Steps:**
-1. `env` {"action": "create", "env": "env-staging…", "name": "shop-repro"}; add `snapshot_id` to copy a snapshot. `env` action `wait`.
-2. Tell the user the next step moves the whole session to the copy and releases the session's intercepts on staging.
+1. `env` {"action": "create", "env": "env-staging…", "name": "shop-repro"}; add `source` to copy an environment, or a snapshot id to restore it into a new one. `env` action `wait`.
+2. Tell the user the next step moves the whole session to the copy and stops the session's intercepts on staging.
 3. `session` {"action": "use", "environment": "env-copy…"}. Reproduce and fix (scenarios 4, 5, 7).
 4. `session` action `use` back to staging.
 5. `env` {"action": "delete", "env": "env-copy…"} after the user says yes.
@@ -224,7 +224,7 @@ Every scenario ends with its cleanup. To check a result, use `kloudlite-verify`.
 
 **Trigger:** "stop everything for today", "stop for the day". "Stop my session" alone is the `kloudlite` skill's lifecycle row.
 **Steps:**
-1. `env` action `get`: `release` each intercept you made, one by one. A stopped workspace keeps its intercept wish and it takes hold again on the next start, so release first.
+1. `env` action `get`: `intercept` action `stop` each intercept you made, one by one. A stopped workspace keeps its intercept wish and it takes hold again on the next start, so stop it first.
 2. `process` action `list` per workspace; `process` action `kill` what you started. Report what is left to the user.
 3. `workspace` {"action": "stop", "workspace": "ws-…"} for each workspace of the session, one by one.
 4. `env` action `stop` only when the user asks; a stopped session already lets an unused environment go idle.
@@ -248,5 +248,5 @@ Every scenario ends with its cleanup. To check a result, use `kloudlite-verify`.
 - Obey the safety rules of the `kloudlite` skill.
 - Use the session's environment. Copy it only for scenario 9, or when the user asks.
 - Run servers as environment services; run only the user's own code in a workspace.
-- Release every intercept you made. Delete what you created for the task; keep what the user had.
+- Stop every intercept you made. Delete what you created for the task; keep what the user had.
 - Never handle a secret value in output. A restart after a new variable is the user's choice.

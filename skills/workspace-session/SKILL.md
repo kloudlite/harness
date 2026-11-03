@@ -74,7 +74,7 @@ A tool with the mark **card** shows a permission card to the person before it ru
 
 | Tool | Use it to |
 |---|---|
-| `exec` | Run a job that ends, for example a build, a test or `git`. `git push` works with the key of the owner. The tool waits for the job, with a timeout. |
+| `exec` | Run a job that ends, for example a build, a test or `git`. `git push` works with the key of the owner. The tool waits `soft_ms` (25 s by default), then answers `promoted: true` and a process id: loop `process` `wait`. |
 | `exec` with `detach: true` | Start a process that continues to run, for example the service, a dev server or a watcher. The tool returns a process id. |
 | `process` actions `list`, `output`, `write`, `kill` | List the processes that run, read their output (the last 4 MiB), write to their stdin, or stop them. |
 | `watch` actions `start`, `poll`, `stop` | Wait for a change to files or events. Use these tools, not a poll loop with `exec`. |
@@ -88,7 +88,7 @@ A tool with the mark **card** shows a permission card to the person before it ru
 | `env` actions `get`, `wait` | See your environment, its services and the intercepts. After a change, `env` action `wait` waits until the services are ready or one fails. |
 | `service` actions `add`, `update`, `remove` | Change a service that your component owns in that environment. Only `service` action `remove` shows a card. |
 | `service` action `logs` | Read the logs of a service in that environment. It can be your service or a service that you call. |
-| `intercept`, `release` | Send the traffic for your service in the environment to the process that you run here. `release` ends this. |
+| `intercept` | Action `start` sends the traffic for your service in the environment to the process that you run here. Action `stop` ends this. |
 | `session` action `current` | See your session and the environment whose services your workspace gets to by DNS name. You cannot join or leave a session. |
 | `workspace` action `snapshot` | Record a snapshot in the volume lineage. Do this only when the person or main asks. |
 | `workspace` action `stop` | Stop this workspace when your task is done and main or the person told you to stop. It makes a snapshot first. The next start continues from that snapshot. |
@@ -154,7 +154,7 @@ Before you send `main_tell done`, make sure that these conditions are true:
 1. The tests pass. Use the test command in `AGENTS.md` of the repo. If `AGENTS.md` does not have a test command, find the test command of the repo, run it, and add it to `AGENTS.md`.
 2. Your work is committed. Your branch is pushed to origin with `git push` through `exec`.
 3. The service is in the condition that main asked for. If main asked you to serve, the service runs and is intercepted. If not, the service is stopped.
-4. Each intercept that you started is released, unless main or the person asked you to keep it.
+4. Each intercept that you started is stopped, unless main or the person asked you to keep it.
 
 Then stop your workspace with `workspace` action `stop`, but only if main or the person told you to stop when you are done.
 
@@ -167,7 +167,7 @@ Only you intercept your service. You run it and you keep the intercept.
 3. Use `env` action `get` to get the service names.
 4. Use `intercept` on the service in your environment. The traffic for that service now goes to your process.
 5. To use a change, stop the process with `process` action `kill` and start it again. The intercept stays.
-6. When you are done, use `release`. Then use `process` action `kill`.
+6. When you are done, use `intercept` action `stop`. Then use `process` action `kill`.
 
 `service` action `logs` reads the output of the pods of the environment. Example: use it to read the logs of a service that you call when that service answers 500.
 
@@ -180,7 +180,7 @@ Main can give you work together with a different workspace, for example integrat
 1. Start the service detached and intercept it, as given in "Run and intercept your service".
 2. Use `env` action `get` to make sure that the intercept is in force. Make sure that the service answers.
 3. Send a report with the environment, the service name, the port, your branch and commit, and the status "running".
-4. Keep the service running and intercepted after your turn. Do not use `release` or `process` action `kill` until main asks.
+4. Keep the service running and intercepted after your turn. Do not use `intercept` action `stop` or `process` action `kill` until main asks.
 5. If main sends you failures, fix them. Start the service again (the intercept stays). Send a report with the new commit.
 
 **When main asks you to test against a service:**

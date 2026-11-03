@@ -2,7 +2,7 @@
 
 One row per prompt: the skill that must load (`base` is the `kloudlite` skill alone; it loads first for every row) and the tie-breaker or situation that decides it. Manual eval: give each prompt to an agent that has the installed skills and record which skill loaded. `evals.test.ts` checks the skill column.
 
-Tie-breaker for "stop": one lifecycle verb on a named object (stop, start, delete) goes to `base`; "stop everything" or "stop for the day" is a sequence (release intercepts, stop workspaces, the session last) and goes to `kloudlite-develop`.
+Tie-breaker for "stop": one lifecycle verb on a named object (stop, start, delete) goes to `base`; "stop everything" or "stop for the day" is a sequence (stop intercepts, stop workspaces, the session last) and goes to `kloudlite-develop`.
 
 | Prompt | Skill | Rule |
 |---|---|---|
@@ -51,7 +51,7 @@ Tie-breaker for "stop": one lifecycle verb on a named object (stop, start, delet
 | reset the data to last night's snapshot | kloudlite-develop | Environment restore |
 | save this dataset as v2 | kloudlite-develop | Named volume |
 | build and push the api image | kloudlite-develop | Publish an image |
-| stop everything for today | kloudlite-develop | "Everything" or "for the day" means release intercepts, stop the workspaces, then the session last; a lifecycle verb on one named object is base |
+| stop everything for today | kloudlite-develop | "Everything" or "for the day" means stop intercepts, stop the workspaces, then the session last; a lifecycle verb on one named object is base |
 | I want to run psql from my terminal | kloudlite-develop | Reach the environment from the laptop |
 | add a field to the order model, and check it | kloudlite-develop | A change, then verify: develop first |
 | run the unit tests | kloudlite-verify | Once, now, a result to read |
@@ -74,7 +74,7 @@ Tie-breaker for "stop": one lifecycle verb on a named object (stop, start, delet
 | roll back to v3 | kloudlite-automate | New version from an old one |
 | every night at 02:00 IST | kloudlite-automate | Schedule, UTC conversion |
 | start it from a GitHub push | kloudlite-automate | Webhook |
-| release after the tests pass | kloudlite-automate | After another pipeline |
+| ship after the tests pass | kloudlite-automate | After another pipeline |
 | let me choose the branch | kloudlite-automate | Inputs |
 | lint and test in parallel, then build | kloudlite-automate | needs and if |
 | test on node 20 and 22 | kloudlite-automate | Matrix |

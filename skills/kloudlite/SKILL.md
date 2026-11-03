@@ -62,11 +62,11 @@ Use a tool, not a command. Two things have no tool: connecting a provider (the w
 4. **Names.** Workspace: the repo or component (`api`, `web`). Environment: the app and purpose (`shop-dev`, `shop-pr-42`). Session: the piece of work (`orders`, `review-42`). Lowercase, hyphens, unique per owner.
 5. **Pick the shape** (below). Decide the topology before the first create, say it in one line, then build it.
 6. **Create what the task needs; tear down what you created.** Clones, environment copies, sandboxes, review workspaces and intercepts made for a task go at the end of the task. Objects the user had stay. The answer lists both.
-7. **Wait with `wait: true`.** Create, start, restore and `run` start take `wait: true` (and `timeout`) and answer when the object has settled; `wait` actions do the same. A `failing` service needs its `message` and a fix, not more waiting.
+7. **Wait with `wait: true`.** Create, start, restore and `run` start take `wait: true` and answer when the object has settled, or at `soft_ms` (default 25000) with `{promoted: true, id, kind}`: call the `wait` action of the `kind` tool (`session`: `get`). `exec` and `container_build` promote with `kind: "process"`: loop `process` `wait` with `since`/`since_err` from `next`/`next_err`. A `wait` action takes `timeout_ms` and answers `timed_out: true` at the limit: call it again. A `failing` service needs its `message` and a fix, not more waiting.
 8. **Packages are tools; services belong in the environment.** No database, queue or broker in a workspace. `references/services.md` gives image, ports and mounts.
 9. **Service data.** A service that writes data gets a mount in the same call that creates it. A service without `mounts` loses its data on each restart, and data written before a mount is lost. Example: `{"name": "db", "image": "postgres:16", "ports": [5432], "mounts": [{"folder": "pg-data", "path": "/var/lib/postgresql/data"}]}`. A service that keeps all its data in another service needs none: say so.
 10. **Processes.** Run a dev server detached (`exec` with `detach: true`). Read it with `process` and `action: "output"`. Confirm it listens on its port before an intercept. `process` with `action: "kill"` stops it when done. At most 32 processes. A plain `exec` still running after 25 s is promoted: it answers `promoted: true` and an `id`; call `process` with `action: "wait"` and that `id` until `state` is `exited`.
-11. **Intercept etiquette.** In a shared environment, intercept; do not copy. Agree who intercepts what. Release when done. Copy the environment only for data changes, risky migrations or experiments (shape 4).
+11. **Intercept etiquette.** In a shared environment, intercept; do not copy. Agree who intercepts what. Stop it when done. Copy the environment only for data changes, risky migrations or experiments (shape 4).
 12. **Secrets.** Never print a secret value. Set it with `secret_set`, never in a command line or a chat message, and never echo what the user typed. Refer by name. A rotation marks the readers; the restart is the user's choice.
 13. **Quota and errors.** A `409` that names a limit does not pass on a retry: tell the user, and offer `request_create` only when asked. Report every error as it is. Never go around it through another object, session or tool. `references/errors.md` gives the action for each.
 14. **Destructive actions** need an explicit request that names the targets. List the targets by name first. A refusal is final.
@@ -96,7 +96,7 @@ Parallel work: only a managed workspace reaches the environment, and a clone is 
 | Session | `ses-` | `running`, `starting`, `idle`, `stopped` |
 | Sandbox | `sbx-` | `phase`: `pending`, `starting`, `running`, `terminated`; with `reason` `Exited`, `exit_code` is the result |
 
-Get ids from the `list` actions of `workspace` and `env`, or from `session` `current`. Tools take the id or the name; write the name to the user. `volume` `get` and `delete` take the volume `id` from `volume` `list`. Restore and clone take a reference in `snapshot_id`.
+Get ids from the `list` actions of `workspace` and `env`, or from `session` `current`. Tools take the id or the name; write the name to the user. `volume` `get` and `delete` take the volume `id` from `volume` `list`. Restore takes a reference in `snapshot_id`; create takes one in `source`.
 
 A session goes `idle` after 30 minutes without use, and its workspaces stop. A start, a create in the session, or a connect wakes it. What the user stopped stays stopped.
 
@@ -113,7 +113,7 @@ The tools act on one session. Most tools are one per resource: `action` picks th
 | Packages | `packages` | `packages`: `list`, `add`, `remove`, `update` |
 | Images | `container_build`, `container_push`, `builder_status` | none |
 | Environments | `env`, `service` | `env`: `list`, `get`, `create`, `start`, `stop`, `delete`, `wait`, `ttl`, `snapshot`, `restore`; `service`: `add`, `update`, `remove`, `logs` |
-| Intercepts | `intercept`, `release` | none |
+| Intercepts | `intercept` | none |
 | Volumes | `volume`, `snapshot` | `volume`: `list`, `get`, `delete`; `snapshot`: `delete` |
 | Account | `quota`, `regions`, `requests_list`, `request_get`, `request_create` | none |
 | Sandboxes | `sandbox` | `sandbox`: `create`, `get`, `list`, `wait`, `logs`, `delete` |
@@ -142,7 +142,7 @@ These need no scenario.
 4. **Refused calls.** If the user refuses a call, that is the answer. Do not retry or get the same result another way.
 5. **No backdoors.** If a call fails, tell the user the error. Do not go around it.
 6. **Limits.** See "How to work", rule 13.
-7. **Shared environment.** Intercept it, release when done, copy only for a task that needs one.
+7. **Shared environment.** Intercept it, stop the intercept when done, copy only for a task that needs one.
 8. **Short answers.** Result first. Do not repeat tool output.
 
 ## Tie-breakers
