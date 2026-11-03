@@ -662,3 +662,12 @@ test("intercept is one tool with start and stop; stop answers the environment", 
   routes["GET /v1/environments/e1"] = json({ id: "e1", state: "running", services: [{ name: "web" }] });
   expect(JSON.parse(await tool(t, "intercept_stop").run({ env: "e1", service: "web" })).id).toBe("e1");
 });
+
+test("env create with wait answers the created object and a hint when the session is not connected to it", async () => {
+  const t = platformTools("main", undefined, 1);
+  routes["POST /v1/environments"] = json({ id: "env-new", name: "shop", state: "creating", services: [] }, 202);
+  routes["GET /v1/environments/env-new"] = () => new Response("that environment is not connected to this session", { status: 403 });
+  const out = JSON.parse(await tool(t, "env_create").run({ name: "shop", services: [{ name: "db", image: "postgres:16", ports: [5432] }], wait: true, soft_ms: 50 }));
+  expect(out.id).toBe("env-new");
+  expect(out.hint).toContain("session");
+});

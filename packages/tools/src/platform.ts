@@ -325,7 +325,17 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
     if (p.includes("undefined")) return out;
     const read = () => (w.get ? w.get(p) : api("GET", p));
     if (!a.wait) return w.reread ? read() : out;
-    return pollUntil(read, w.done, softMs(a), tickMs, undefined, () => promoted(w.id ? w.id(d) : d.id, w.kind));
+    try {
+      return await pollUntil(read, w.done, softMs(a), tickMs, undefined, () => promoted(w.id ? w.id(d) : d.id, w.kind));
+    } catch (e: any) {
+      // A session's bench reads only the environment its session is connected to, so a create
+      // answers the object and the way in rather than the 403 the first poll met.
+      const m = String(e?.message ?? e);
+      if (m.startsWith("403") && m.includes("not connected to this session")) {
+        return JSON.stringify({ ...d, hint: "created; this session is not connected to it: `session` `use` with `environment`, then `env` `wait`" }, null, 2);
+      }
+      throw e;
+    }
   };
   const thenWaitEnv = (out: string, a: any, env?: string, reread = false) =>
     thenWait(out, a, { kind: "env", path: (d) => `/v1/environments/${env ?? seg(d.id)}`, done: envDone, id: (d) => (env ? decodeURIComponent(env) : d.id), get: async (p) => withReady(await api("GET", p)), reread });
