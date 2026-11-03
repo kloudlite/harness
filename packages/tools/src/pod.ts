@@ -242,7 +242,7 @@ export async function anyPodTools(sample?: string): Promise<ToolDef[]> {
     const description = (shape.get(name)?.description ?? "").replace(/ ?\(This tool runs in workspace [^)]*\.\)$/, "");
     return {
       name,
-      description: `${description} Runs in the workspace named by \`workspace\`.`.trim(),
+      description: description.trim(),
       inputSchema: { ...s, type: "object", properties: { workspace: { type: "string", description: "The workspace id or name." }, ...s.properties }, required: ["workspace", ...(s.required ?? []).filter((n: string) => n !== "workspace")] },
       run: async (input: any) => {
         const { workspace, ...args } = input ?? {};
