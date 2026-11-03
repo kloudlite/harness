@@ -32,13 +32,17 @@ export const inflight = new Map<string, number>();
 
 class NotReady extends Error {}
 
-/** How long the tool will wait, as the pod reads it: `soft_ms` (exec's promotion point), else `timeout_ms`, else `timeout` in seconds, else the default. The client waits this plus a margin, never less. */
+/** How long the tool will wait, as the pod reads it: `soft_ms` (the hand-off point), else `timeout_ms`, else the aliases
+ * (`max_wait_ms` in ms, `timeout_s` and `timeout` in seconds), else the default. The client waits this plus a margin, never less. */
 export function waitMs(args: any, dflt: number): number {
-  const ms = Number(args?.soft_ms) > 0 ? Number(args?.soft_ms) : Number(args?.timeout_ms);
-  if (ms > 0) return ms;
-  const s = Number(args?.timeout);
+  for (const k of ["soft_ms", "timeout_ms", "max_wait_ms"]) if (Number(args?.[k]) > 0) return Number(args[k]);
+  const s = Number(args?.timeout_s) > 0 ? Number(args.timeout_s) : Number(args?.timeout);
   return s > 0 ? s * 1000 : dflt;
 }
+
+/** The pod still reads these spellings; the schemas the model sees list `timeout_ms`/`soft_ms` only. */
+const ALIASES = new Set(["timeout", "timeout_s", "max_wait_ms"]);
+const withoutAliases = (sch: any) => (sch?.properties ? { ...sch, properties: Object.fromEntries(Object.entries(sch.properties).filter(([k]) => !ALIASES.has(k))) } : sch);
 
 async function lookup(ws: string): Promise<Addr> {
   // api throws on a non-2xx answer; for these callers that is "not ready", not a crash
@@ -99,10 +103,9 @@ export async function podTools(ws: string, o: { ensure?: typeof ensureRunning } 
   }
 
   async function call(name: string, args: any): Promise<string> {
-    // A build waits on the builder and the registry: same long leash as a job, its own default.
-    // exec promotes a job to a process at 25 s (crates/ide SOFT_MS) rather than running it to the end.
-    const timeout = name === "exec" ? waitMs(args, 25_000) + 15_000
-      : name === "container_build" ? waitMs(args, 600_000) + 15_000
+    // exec and a build promote to a process at `soft_ms` (25 s, crates/ide SOFT_MS) rather than running to the end.
+    const timeout = name === "exec" || name === "container_build" ? waitMs(args, 25_000) + 15_000
+      : name === "process_wait" ? waitMs(args, 20_000) + 15_000
       : name === "container_push" ? 180_000 : 60_000;
     try {
       let res: Response | undefined;
@@ -156,7 +159,7 @@ export async function podTools(ws: string, o: { ensure?: typeof ensureRunning } 
     const actions: Record<string, Action> = {};
     for (const [act, podName] of Object.entries(pod)) {
       if (listed.size && !listed.has(podName)) continue;
-      const sch: any = listed.get(podName)?.schema ?? {};
+      const sch: any = withoutAliases(listed.get(podName)?.schema ?? {});
       const properties: Record<string, unknown> = {};
       for (const [k, v] of Object.entries<any>(sch.properties ?? {})) {
         const { description: _d, ...bare } = v;
@@ -175,7 +178,7 @@ export async function podTools(ws: string, o: { ensure?: typeof ensureRunning } 
     return {
       name,
       description: t?.description ? `${t.description} (This tool runs in workspace ${ws}.)` : `This tool runs in workspace ${ws}.`,
-      inputSchema: t?.schema ?? { type: "object", additionalProperties: true },
+      inputSchema: withoutAliases(t?.schema) ?? { type: "object", additionalProperties: true },
       run: (args: any) => call(name, args),
     };
   });
@@ -240,7 +243,7 @@ export async function anyPodTools(sample?: string): Promise<ToolDef[]> {
     return {
       name,
       description: `${description} Runs in the workspace named by \`workspace\`.`.trim(),
-      inputSchema: { ...s, type: "object", properties: { workspace: { type: "string", description: "Workspace id" }, ...s.properties }, required: ["workspace", ...(s.required ?? []).filter((n: string) => n !== "workspace")] },
+      inputSchema: { ...s, type: "object", properties: { workspace: { type: "string", description: "The workspace id or name." }, ...s.properties }, required: ["workspace", ...(s.required ?? []).filter((n: string) => n !== "workspace")] },
       run: async (input: any) => {
         const { workspace, ...args } = input ?? {};
         if (typeof workspace !== "string" || !workspace) throw new Error(`${name}: workspace is required`);

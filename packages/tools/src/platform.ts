@@ -177,8 +177,11 @@ const SBX = { type: "string", description: "The sandbox id or name." };
 const SES = { type: "string", description: "The session id, name or `team/name`." };
 const PIPE = { type: "string", description: "The pipeline name." };
 const RUN = { type: "string", description: "The run id (the `id` of a run from `run list` or `run start`)." };
-const WAIT = { type: "number", description: "Seconds to wait (default 300, maximum 900). At the limit the answer has `timedOut: true`." };
-const WAITING = { wait: { type: "boolean", description: "Return when the object has settled instead of at once." }, timeout: WAIT };
+const TIMEOUT = { type: "number", description: "Milliseconds this call waits before it answers (default 25000, maximum 900000). At the limit the answer has `timed_out: true`: call again." };
+const WAITING = {
+  wait: { type: "boolean", description: "Wait for the object to settle instead of answering at once." },
+  soft_ms: { type: "number", description: "With `wait`: milliseconds before the call hands off with `promoted: true` (default 25000, maximum 600000). Resume with the `wait` action named by `kind`." },
+};
 const MINE = { type: "boolean", description: "Your own secret in the team `owner` (any active member), not the team's shared one." };
 const TTL = { type: "integer", description: "Seconds of unused time before it is deleted, 600 to 2592000." };
 const CLEAR = { type: "boolean", description: "`ttl` only: remove the limit instead of setting `ttl_secs`." };
@@ -205,9 +208,16 @@ function cutLines(text: string, a: { head?: unknown; tail?: unknown }): string {
 }
 const ttlBody = (a: any): { ttl_secs: number | null } | string =>
   a.clear && a.ttl_secs !== undefined ? "error: give `ttl_secs` or `clear`, not both" : a.clear ? { ttl_secs: null } : a.ttl_secs === undefined ? "error: give `ttl_secs` (600 to 2592000) or `clear: true`; neither would change the limit by guesswork" : { ttl_secs: a.ttl_secs };
-const clampWait = (t: unknown) => Math.min(900, Math.max(0.001, Number(t) || 300));
-/** `timeout` is seconds, `timeout_ms` milliseconds; a model that learnt one spelling on exec sends it here. */
-const waitSecs = (a: any) => (a.timeout !== undefined ? a.timeout : a.timeout_ms !== undefined ? a.timeout_ms / 1000 : undefined);
+const clamp = (ms: number, max: number) => Math.min(max, Math.max(1, Math.round(ms)));
+/** How long a `wait` action waits: `timeout_ms`. `max_wait_ms` (ms), `timeout_s` and `timeout` (seconds) are read as aliases, never listed. */
+const timeoutMs = (a: any): number => {
+  const ms = a.timeout_ms ?? a.max_wait_ms ?? (a.timeout_s !== undefined ? a.timeout_s * 1000 : a.timeout !== undefined ? a.timeout * 1000 : undefined);
+  return clamp(Number(ms) || 25_000, 900_000);
+};
+/** Where a `wait: true` action hands off. */
+const softMs = (a: any): number => clamp(Number(a.soft_ms) || 25_000, 600_000);
+/** The answer of a call that handed off: nothing keeps running in the bench, the platform does the work, so there is no output offset. */
+const promoted = (id: unknown, kind: string) => JSON.stringify({ promoted: true, id, kind, next: 0, next_err: 0 }, null, 2);
 
 /** GET a plain-text body (logs): `api` would pretty-print JSON-looking text and turn an empty body into "ok". */
 async function getText(path: string): Promise<string> {
@@ -217,13 +227,17 @@ async function getText(path: string): Promise<string> {
   return r.text;
 }
 
-/** Poll a document with back-off (tick, then 1.5x up to 6 ticks) until `done`; the last view with `timedOut: true` at the limit.
+/** Poll a document with back-off (tick, then 1.5x up to 6 ticks) until `done`. At the limit: `limit()` when given
+ * (a hand-off, which does not wait for a slow read either), else the last view with `timed_out: true`.
  * One loop for every `wait`: an environment, a workspace, a session, a run. */
-async function pollUntil(get: () => Promise<string>, done: (d: any) => boolean, timeoutS: unknown, tickMs: number, trim: (d: any) => any = (d) => d): Promise<string> {
-  const end = Date.now() + clampWait(timeoutS) * 1000;
+async function pollUntil(get: () => Promise<string>, done: (d: any) => boolean, limitMs: number, tickMs: number, trim: (d: any) => any = (d) => d, limit?: () => string): Promise<string> {
+  const end = Date.now() + limitMs;
   let wait = tickMs;
+  const LIMIT = Symbol();
   for (;;) {
-    const view = await get();
+    const got = limit ? await Promise.race([get(), new Promise<symbol>((r) => setTimeout(() => r(LIMIT), Math.max(0, end - Date.now())))]) : await get();
+    if (got === LIMIT) return limit!();
+    const view = got as string;
     let d: any;
     try {
       d = JSON.parse(view);
@@ -231,7 +245,7 @@ async function pollUntil(get: () => Promise<string>, done: (d: any) => boolean, 
       return view; // not a document: nothing to wait on
     }
     if (done(d)) return JSON.stringify(trim(d), null, 2);
-    if (Date.now() >= end) return JSON.stringify({ ...trim(d), timedOut: true }, null, 2);
+    if (Date.now() >= end) return limit ? limit() : JSON.stringify({ ...trim(d), timed_out: true }, null, 2);
     // ponytail: no abort signal reaches ToolDef.run; a cancelled turn waits out its timeout. Thread a signal through ToolDef to stop at the next tick.
     await new Promise((r) => setTimeout(r, Math.max(0, Math.min(wait, end - Date.now()))));
     wait = Math.min(wait * 1.5, tickMs * 6);
@@ -245,14 +259,21 @@ const envDone = (d: any) => {
 const wsDone = (stopped: boolean) => (d: any) => d?.state === "ready" || d?.state === "error" || d?.state === "deleted" || (stopped && d?.state === "stopped");
 const RUN_ENDED = ["success", "failure", "cancelled"];
 
-/** The sandbox's own server-side wait, looped to the bound. */
-async function sandboxWait(path: string, timeoutS: unknown): Promise<string> {
-  const end = Date.now() + clampWait(timeoutS) * 1000;
+/** The sandbox's own server-side wait, looped to the bound; at it `limit()` (a hand-off) or the last view with `timed_out`. */
+async function sandboxWait(path: string, limitMs: number, limit?: () => string): Promise<string> {
+  const end = Date.now() + limitMs;
   for (;;) {
     const d = JSON.parse(await api("POST", `${path}/wait`, { timeout_ms: Math.max(1, Math.min(20000, Math.round(end - Date.now()))) }));
     if (d.phase === "terminated") return JSON.stringify(d, null, 2);
-    if (Date.now() >= end) return JSON.stringify({ ...d, timedOut: true }, null, 2);
+    if (Date.now() >= end) return limit ? limit() : JSON.stringify({ ...d, timed_out: true }, null, 2);
   }
+}
+
+/** Read the object, run the removal, answer the object as last read with `state: "deleted"`. */
+async function deleting(readPath: string, remove: () => Promise<unknown>): Promise<string> {
+  const doc = JSON.parse(await api("GET", readPath));
+  await remove();
+  return JSON.stringify({ ...doc, state: "deleted" }, null, 2);
 }
 
 const act = (properties: Props, required: string[], run: (a: any) => Promise<string>, nulls?: string[]): Action => ({ properties, required, run, ...(nulls ? { nulls } : {}) });
@@ -260,7 +281,7 @@ const act = (properties: Props, required: string[], run: (a: any) => Promise<str
 const single = (name: string, description: string, a: Action) => def(name, description, a.properties, a.required, a.run);
 
 /** The platform table. Resource tools take an `action`; the rest are single-purpose. `main` and `all` list
- * everything except what only a workspace does (packages edits, intercept, release); `workspace` is the slice a workspace's own token reaches, with its workspace fixed and `env`
+ * everything except what only a workspace does (packages edits, intercept); `workspace` is the slice a workspace's own token reaches, with its workspace fixed and `env`
  * defaulted to its session's. `noStop` drops `workspace stop` (a subagent never stops its workspace). */
 export function platformTools(kind: "main" | "workspace" | "all", wsId?: string, tickMs = 5000, noStop = false): ToolDef[] {
   const ws = kind === "workspace";
@@ -290,22 +311,26 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
     });
   /** `env get` as a poll reads it: services carry `ready` from service_status. */
   const envView = async (env: string) => withReady(await api("GET", `/v1/environments/${env}`));
-  const waitEnv = (env: string, a: any) => pollUntil(() => envView(env), envDone, waitSecs(a), tickMs);
-  /** When `wait: true`, poll the object the action created or changed until `done`; else the action's own answer. */
-  const thenWait = async (out: string, a: any, path: (d: any) => string, done: (d: any) => boolean, get?: (p: string) => Promise<string>): Promise<string> => {
-    if (!a.wait) return out;
+  const waitEnv = (env: string, a: any) => pollUntil(() => envView(env), envDone, timeoutMs(a), tickMs);
+  /** `wait: true` polls the object the action made or changed until `done` or `soft_ms`, then hands off with `promoted`;
+   * without it the action's own answer, or the object re-read when the answer is not the object (`reread`). */
+  const thenWait = async (out: string, a: any, w: { kind: string; path: (d: any) => string; done: (d: any) => boolean; id?: (d: any) => unknown; get?: (p: string) => Promise<string>; reread?: boolean }): Promise<string> => {
     let d: any = {};
     try {
       d = JSON.parse(out);
     } catch {
       // a plain "ok" (a start on something already running): the poll still answers the object
     }
-    const p = path(d);
+    const p = w.path(d);
     if (p.includes("undefined")) return out;
-    return pollUntil(() => (get ? get(p) : api("GET", p)), done, waitSecs(a), tickMs);
+    const read = () => (w.get ? w.get(p) : api("GET", p));
+    if (!a.wait) return w.reread ? read() : out;
+    return pollUntil(read, w.done, softMs(a), tickMs, undefined, () => promoted(w.id ? w.id(d) : d.id, w.kind));
   };
-  const thenWaitEnv = (out: string, a: any) => thenWait(out, a, (d) => `/v1/environments/${seg(d.id)}`, envDone, async (p) => withReady(await api("GET", p)));
-  const thenWaitWs = (out: string, a: any, stopped = false) => thenWait(out, a, (d) => `/v1/workspaces/${seg(d.id)}`, wsDone(stopped));
+  const thenWaitEnv = (out: string, a: any, env?: string, reread = false) =>
+    thenWait(out, a, { kind: "env", path: (d) => `/v1/environments/${env ?? seg(d.id)}`, done: envDone, id: (d) => (env ? decodeURIComponent(env) : d.id), get: async (p) => withReady(await api("GET", p)), reread });
+  const thenWaitWs = (out: string, a: any, o: { stopped?: boolean; ws?: string; reread?: boolean } = {}) =>
+    thenWait(out, a, { kind: "workspace", path: (d) => `/v1/workspaces/${o.ws ? seg(o.ws) : seg(d.id)}`, done: wsDone(!!o.stopped), id: (d) => o.ws ?? d.id, reread: o.reread });
 
   const services = (props: Props, req: string[], edit: (cur: any[], a: any) => any[] | string, after?: (env: string, a: any) => Promise<void>) =>
     eact({ ...props, ...WAITING }, req, async (env, a) => {
@@ -315,14 +340,18 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
       if (typeof next === "string") return next;
       const out = await api("PATCH", `/v1/environments/${env}`, { services: next });
       await after?.(env, a);
-      return a.wait ? waitEnv(env, a) : out;
+      return thenWaitEnv(out, a, env);
     });
 
   const tools: ToolDef[] = [];
 
   // ---- workspace
-  const stopAct = act({}, [], async () => api("POST", `${W}/stop`));
-  const snapAct = wact({ message: S, volume: VOLUME }, [], async (a) => api("POST", `${wsPath(a)}/snapshots`, strip({ message: a.message, volume: a.volume })));
+  const stopAct = act({}, [], async () => (await api("POST", `${W}/stop`), api("GET", W)));
+  /** The workspace as it is after the snapshot, with the snapshot's own answer under `snapshot` (its id is the one thing the object does not hold). */
+  const snapAct = wact({ message: S, volume: VOLUME }, [], async (a) => {
+    const snapshot = JSON.parse(await api("POST", `${wsPath(a)}/snapshots`, strip({ message: a.message, volume: a.volume })));
+    return JSON.stringify({ ...JSON.parse(await api("GET", wsPath(a))), snapshot }, null, 2);
+  });
   tools.push(
     resource("workspace", ws ? "This workspace. Actions: stop (snapshots first), snapshot." : "Workspaces: dev machines with a home volume. Actions: list, get, create (clone with `source`), restore, start, stop, restart, delete, wait, ttl, snapshot.",
       ws
@@ -350,15 +379,15 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
             }),
             restore: act({ name: S, snapshot_id: { type: "string", description: "A volume name, `name@N` or a snapshot id." }, team: S, image: S, packages: SL, quota_gb: N, ...WAITING }, ["name", "snapshot_id"], async (a) =>
               thenWaitWs(await api("POST", "/v1/workspaces/restore", strip({ name: a.name, snapshot_id: a.snapshot_id, team: a.team, image: a.image, packages: a.packages, quota_gb: a.quota_gb })), a)),
-            start: mact(WAITING, [], async (a) => thenWait(await api("POST", `/v1/workspaces/${seg(a.workspace)}/start`), a, () => `/v1/workspaces/${seg(a.workspace)}`, wsDone(false))),
-            stop: mact({}, [], async (a) => api("POST", `/v1/workspaces/${seg(a.workspace)}/stop`)),
-            restart: mact({}, [], async (a) => api("POST", `/v1/workspaces/${seg(a.workspace)}/restart`)),
+            start: mact(WAITING, [], async (a) => thenWaitWs(await api("POST", `/v1/workspaces/${seg(a.workspace)}/start`), a, { ws: a.workspace, reread: true })),
+            stop: mact({}, [], async (a) => (await api("POST", `/v1/workspaces/${seg(a.workspace)}/stop`), api("GET", `/v1/workspaces/${seg(a.workspace)}`))),
+            restart: mact({}, [], async (a) => (await api("POST", `/v1/workspaces/${seg(a.workspace)}/restart`), api("GET", `/v1/workspaces/${seg(a.workspace)}`))),
             delete: mact({}, [], async (a) => {
               const ses = process.env.KL_SESSION;
-              return api("DELETE", ses ? `/v1/sessions/${seg(ses)}/workspaces/${seg(a.workspace)}` : `/v1/workspaces/${seg(a.workspace)}`);
+              return deleting(`/v1/workspaces/${seg(a.workspace)}`, () => api("DELETE", ses ? `/v1/sessions/${seg(ses)}/workspaces/${seg(a.workspace)}` : `/v1/workspaces/${seg(a.workspace)}`));
             }),
-            wait: mact({ timeout: WAIT }, [], async (a) => pollUntil(() => api("GET", `/v1/workspaces/${seg(a.workspace)}`), wsDone(true), a.timeout, tickMs)),
-            ttl: mact({ ttl_secs: TTL, clear: CLEAR }, [], async (a) => { const b = ttlBody(a); return typeof b === "string" ? b : api("PUT", `/v1/workspaces/${seg(a.workspace)}/ttl`, b); }),
+            wait: mact({ timeout_ms: TIMEOUT }, [], async (a) => pollUntil(() => api("GET", `/v1/workspaces/${seg(a.workspace)}`), wsDone(true), timeoutMs(a), tickMs)),
+            ttl: mact({ ttl_secs: TTL, clear: CLEAR }, [], async (a) => { const b = ttlBody(a); return typeof b === "string" ? b : (await api("PUT", `/v1/workspaces/${seg(a.workspace)}/ttl`, b), api("GET", `/v1/workspaces/${seg(a.workspace)}`)); }),
             snapshot: snapAct,
           }),
   );
@@ -369,34 +398,36 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
       ws
         ? {
             get: eact({}, [], async (env) => (await wake(env), envView(env))),
-            wait: eact({ timeout: WAIT, timeout_ms: { type: "number", description: "Milliseconds (the other spelling of `timeout`)." } }, [], async (env, a) => (await wake(env), waitEnv(env, a))),
+            wait: eact({ timeout_ms: TIMEOUT }, [], async (env, a) => (await wake(env), waitEnv(env, a))),
           }
         : {
             list: act({ team: S }, [], async (a) => api("GET", `/v1/environments${qs({ owner: a.team })}`)),
             get: eact({}, [], async (env) => (await wake(env), envView(env))),
-            create: act({ name: S, snapshot_id: S, services: { type: "array", items: SERVICE }, team: S, quota_gb: N, region: S, source: { type: "string", description: "An environment (id or name) to clone live, or a snapshot id to grow a new environment from." }, ...WAITING }, ["name"], async (a) => {
+            create: act({ name: S, services: { type: "array", items: SERVICE }, team: S, quota_gb: N, region: S, source: { type: "string", description: "An environment (id or name) to clone live, or a snapshot id to restore into a new environment. Omit it for an empty one." }, ...WAITING }, ["name"], async (a) => {
               const services = a.services?.map(withServiceDefaults);
               if (a.source) {
                 const r = await raw("GET", `/v1/environments/${seg(a.source)}`);
                 if (r.unavailable) throw new Error(UNAVAILABLE);
-                if (r.status === 200) return thenWaitEnv(await api("POST", `/v1/environments/${seg(a.source)}/clone`, strip({ name: a.name, snapshot_id: a.snapshot_id, owner: a.team, services, region: a.region, quota_gb: a.quota_gb })), a);
+                if (r.status === 200) return thenWaitEnv(await api("POST", `/v1/environments/${seg(a.source)}/clone`, strip({ name: a.name, owner: a.team, services, region: a.region, quota_gb: a.quota_gb })), a);
                 if (r.status !== 404) throw new Error(httpError(r.status, r.text));
               }
-              return thenWaitEnv(await api("POST", "/v1/environments", strip({ name: a.name, snapshot_id: a.snapshot_id ?? a.source, services, owner: a.team, quota_gb: a.quota_gb })), a);
+              return thenWaitEnv(await api("POST", "/v1/environments", strip({ name: a.name, snapshot_id: a.source, services, owner: a.team, quota_gb: a.quota_gb })), a);
             }),
-            start: eact(WAITING, [], async (env, a) => thenWaitEnv(await api("POST", `/v1/environments/${env}/start`), a)),
-            stop: eact({}, [], async (env) => api("POST", `/v1/environments/${env}/stop`)),
-            delete: eact({}, [], async (env) => api("DELETE", `/v1/environments/${env}`)),
-            wait: eact({ timeout: WAIT, timeout_ms: { type: "number", description: "Milliseconds (the other spelling of `timeout`)." } }, [], async (env, a) => (await wake(env), waitEnv(env, a))),
-            ttl: eact({ ttl_secs: TTL, clear: CLEAR }, [], async (env, a) => { const b = ttlBody(a); return typeof b === "string" ? b : api("PUT", `/v1/environments/${env}/ttl`, b); }),
-            snapshot: eact({ message: S, volume: VOLUME }, [], async (env, a) => api("POST", `/v1/environments/${env}/snapshots`, strip({ message: a.message, volume: a.volume }))),
-            restore: eact({ snapshot_id: S, discard: { type: "array", items: S, description: "Names of the services from the 409 `lost` list whose data you accept losing." }, ...WAITING }, ["snapshot_id"], async (env, a) =>
-              thenWaitEnv(await api("POST", `/v1/environments/${env}/restore`, strip({ snapshot_id: a.snapshot_id, discard: a.discard })), a)),
+            start: eact(WAITING, [], async (env, a) => thenWaitEnv(await api("POST", `/v1/environments/${env}/start`), a, env, true)),
+            stop: eact({}, [], async (env) => (await api("POST", `/v1/environments/${env}/stop`), envView(env))),
+            delete: eact({}, [], async (env) => deleting(`/v1/environments/${env}`, () => api("DELETE", `/v1/environments/${env}`))),
+            wait: eact({ timeout_ms: TIMEOUT }, [], async (env, a) => (await wake(env), waitEnv(env, a))),
+            ttl: eact({ ttl_secs: TTL, clear: CLEAR }, [], async (env, a) => { const b = ttlBody(a); return typeof b === "string" ? b : (await api("PUT", `/v1/environments/${env}/ttl`, b), envView(env)); }),
+            snapshot: eact({ message: S, volume: VOLUME }, [], async (env, a) => {
+              const snapshot = JSON.parse(await api("POST", `/v1/environments/${env}/snapshots`, strip({ message: a.message, volume: a.volume })));
+              return JSON.stringify({ ...JSON.parse(await envView(env)), snapshot }, null, 2);
+            }),
+            restore: eact({ snapshot_id: { type: "string", description: "A volume name, `name@N` or a snapshot id." }, discard: { type: "array", items: S, description: "Names of the services from the 409 `lost` list whose data you accept losing." }, ...WAITING }, ["snapshot_id"], async (env, a) =>
+              thenWaitEnv(await api("POST", `/v1/environments/${env}/restore`, strip({ snapshot_id: a.snapshot_id, discard: a.discard })), a, env, true)),
           }),
   );
 
   // ---- session
-  const sessionDoc = (d: any) => JSON.stringify({ id: d.id, name: d.name, environment: d.environment ?? null });
   tools.push(
     resource("session", ws ? "The session of this workspace and its environment. Action: current." : "Sessions: the one link between workspaces and an environment. Actions: current, list, create, use, start, stop, delete, ttl.",
       ws
@@ -424,12 +455,12 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
               if (r.unavailable) throw new Error(UNAVAILABLE);
               if (r.status === 404 || r.status === 403) return `session ${id} has ended`;
               if (r.status < 200 || r.status >= 300) throw new Error(httpError(r.status, r.text));
-              return sessionDoc(r.data);
+              return currentSession();
             }, ["environment"]),
-            start: act({ session: SES, ...WAITING }, ["session"], async (a) => thenWait(await api("POST", `/v1/sessions/${seg(a.session)}/start`), a, () => `/v1/sessions/${seg(a.session)}`, (d) => d?.state === "running")),
-            stop: act({ session: SES }, ["session"], async (a) => api("POST", `/v1/sessions/${seg(a.session)}/stop`)),
-            delete: act({ session: SES }, ["session"], async (a) => api("DELETE", `/v1/sessions/${seg(a.session)}`)),
-            ttl: act({ session: SES, ttl_secs: TTL, clear: CLEAR }, ["session"], async (a) => { const b = ttlBody(a); return typeof b === "string" ? b : api("PUT", `/v1/sessions/${seg(a.session)}/ttl`, b); }),
+            start: act({ session: SES, ...WAITING }, ["session"], async (a) => thenWait(await api("POST", `/v1/sessions/${seg(a.session)}/start`), a, { kind: "session", path: () => `/v1/sessions/${seg(a.session)}`, done: (d) => d?.state === "running", id: () => a.session, reread: true })),
+            stop: act({ session: SES }, ["session"], async (a) => (await api("POST", `/v1/sessions/${seg(a.session)}/stop`), api("GET", `/v1/sessions/${seg(a.session)}`))),
+            delete: act({ session: SES }, ["session"], async (a) => deleting(`/v1/sessions/${seg(a.session)}`, () => api("DELETE", `/v1/sessions/${seg(a.session)}`))),
+            ttl: act({ session: SES, ttl_secs: TTL, clear: CLEAR }, ["session"], async (a) => { const b = ttlBody(a); return typeof b === "string" ? b : (await api("PUT", `/v1/sessions/${seg(a.session)}/ttl`, b), api("GET", `/v1/sessions/${seg(a.session)}`)); }),
           }),
   );
 
@@ -491,19 +522,19 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
 
   // ---- intercept (a workspace session intercepts for itself only: no `workspace` argument); not the orchestrator's
   if (kind !== "main") tools.push(
-    single("intercept", ws ? "Send the traffic of an environment service to this workspace. Add `wait` to wait until the proxy is ready." : "Send the traffic of an environment service to a workspace. Add `wait` to wait until the proxy is ready.",
-      eact(
-        { service: S, ...(ws ? {} : { workspace: WS }), ports: { type: "array", description: "Port remaps: `service` is the port callers dial on the environment service, `workspace` the port the workspace listens on. Omit to forward each port to the same number.", items: { type: "object", properties: { service: I, workspace: I }, required: ["service", "workspace"] } }, ...WAITING },
+    resource("intercept", "Send an environment service's traffic to a workspace. Actions: start (`wait` until the proxy is ready), stop (the service goes back to its own pod).", {
+      start: eact(
+        { service: { type: "string", description: "The environment service to take over." }, ...(ws ? {} : { workspace: { ...WS, description: "The workspace that receives the traffic (id or name)." } }), ports: { type: "array", description: "Port remaps: `service` is the port callers dial on the environment service, `workspace` the port the workspace listens on. Omit to forward each port to the same number.", items: { type: "object", properties: { service: I, workspace: I }, required: ["service", "workspace"] } }, ...WAITING },
         ["service", ...(ws ? [] : ["workspace"])],
         async (env, a) => {
-          const out = await api("POST", `/v1/environments/${env}/intercepts`, strip({ service: a.service, workspace: ws ? wsId : a.workspace, ports: a.ports }));
-          if (!a.wait) return out;
+          await api("POST", `/v1/environments/${env}/intercepts`, strip({ service: a.service, workspace: ws ? wsId : a.workspace, ports: a.ports }));
           // taken over once the proxy answers; a failed proxy ends the wait too
           const done = (d: any) => { const s = d?.services?.find((x: any) => x.name === a.service); return !!s && ((!!s.interceptedBy && s.proxy === "ready") || s.proxy === "failed"); };
-          return pollUntil(() => envView(env), done, waitSecs(a), tickMs);
+          return thenWait("{}", a, { kind: "env", path: () => `/v1/environments/${env}`, done, id: () => decodeURIComponent(env), get: async (p) => withReady(await api("GET", p)), reread: true });
         },
-      )),
-    single("release", "Release an intercepted service back to its own pod.", eact({ service: S }, ["service"], async (env, a) => api("DELETE", `/v1/environments/${env}/intercepts/${seg(a.service)}`))),
+      ),
+      stop: eact({ service: { type: "string", description: "The intercepted environment service." } }, ["service"], async (env, a) => (await api("DELETE", `/v1/environments/${env}/intercepts/${seg(a.service)}`), envView(env))),
+    }),
   );
 
   if (ws) return tools;
@@ -519,9 +550,9 @@ function mainOnly(tickMs: number): ToolDef[] {
   const RUNREF = { owner: OWNER, pipeline: PIPE, run: RUN };
   const RUNREQ = ["owner", "pipeline", "run"];
   /** `run wait` and a waiting `run start`: the run without its definition, plus the log page at `offset` when one is given. */
-  const runWait = async (a: any): Promise<string> => {
-    const view = await pollUntil(() => api("GET", run(a)), (d) => RUN_ENDED.includes(d?.state), a.timeout, tickMs, ({ definition: _d, ...rest }) => rest);
-    if (a.offset === undefined) return view;
+  const runWait = async (a: any, limitMs: number, limit?: () => string): Promise<string> => {
+    const view = await pollUntil(() => api("GET", run(a)), (d) => RUN_ENDED.includes(d?.state), limitMs, tickMs, ({ definition: _d, ...rest }) => rest, limit);
+    if (a.offset === undefined || JSON.parse(view).promoted) return view;
     const page = await api("GET", `${run(a)}/jobs/${a.job ?? 0}/logs${qs({ offset: String(a.offset) })}`);
     let output: unknown = page;
     try { output = JSON.parse(page); } catch {}
@@ -529,22 +560,26 @@ function mainOnly(tickMs: number): ToolDef[] {
   };
   return [
     resource("sandbox", "Sandboxes: an isolated container that runs one command and ends when it exits. Actions: create, get, list, wait, logs, delete (ends a running one first).", {
-      create: act({ command: { oneOf: [S, SL], description: "A shell string (run with `sh -c`), or an argv array." }, image: S, packages: SL, variables: { type: "object", additionalProperties: S, description: "Environment variables for the command. A value of exactly `${{ secrets.NAME }}` reads a secret." }, timeout_s: { ...I, description: "The hard lifetime in seconds, 10 to 86400. Default 300." }, team: TEAMSLUG, from_workspace: { type: "string", description: "A workspace of yours (id, name or `team/name`) whose current files the sandbox starts as, uncommitted work included." }, from_snapshot: { type: "string", description: "A snapshot id or `name@N` reference whose files the sandbox starts as." }, ...WAITING }, ["command"], async (a) => {
+      create: act({ command: { oneOf: [S, SL], description: "A shell string (run with `sh -c`), or an argv array." }, image: S, packages: SL, variables: { type: "object", additionalProperties: S, description: "Environment variables for the command. A value of exactly `${{ secrets.NAME }}` reads a secret." }, lifetime_s: { ...I, description: "The sandbox's hard lifetime in seconds, 10 to 86400 (default 300). It ends when the command exits or this runs out." }, team: TEAMSLUG, from_workspace: { type: "string", description: "A workspace of yours (id, name or `team/name`) whose current files the sandbox starts as, uncommitted work included." }, from_snapshot: { type: "string", description: "A snapshot id or `name@N` reference whose files the sandbox starts as." }, ...WAITING }, ["command"], async (a) => {
         const cmd = Array.isArray(a.command) ? a.command : ["sh", "-c", String(a.command)];
-        const body = { cmd, image: a.image, packages: a.packages, env: a.variables, timeout_secs: a.timeout_s, from_workspace: a.from_workspace, from_snapshot: a.from_snapshot };
+        const body = { cmd, image: a.image, packages: a.packages, env: a.variables, timeout_secs: a.lifetime_s ?? a.timeout_s, from_workspace: a.from_workspace, from_snapshot: a.from_snapshot };
         const ses = process.env.KL_SESSION;
         const out = ses ? await api("POST", `/v1/sessions/${seg(ses)}/sandboxes`, strip(body)) : await api("POST", "/v1/sandboxes", strip({ team: a.team, ...body }));
-        return a.wait ? sandboxWait(`/v1/sandboxes/${seg(JSON.parse(out).id)}`, a.timeout) : out;
+        if (!a.wait) return out;
+        const id = JSON.parse(out).id;
+        return sandboxWait(`/v1/sandboxes/${seg(id)}`, softMs(a), () => promoted(id, "sandbox"));
       }),
       get: act({ sandbox: SBX }, ["sandbox"], async (a) => api("GET", sbx(a))),
       list: act({ team: TEAMSLUG, state: { type: "string", enum: ["waiting", "running", "ended", "stopped", "timed-out", "failed"] }, q: { type: "string", description: "Keep sandboxes whose id, image, packages or command contain this text." }, limit: I }, [], async (a) =>
         api("GET", `/v1/sandboxes${qs({ team: a.team, state: a.state, q: a.q, limit: a.limit === undefined ? undefined : String(a.limit) })}`)),
-      wait: act({ sandbox: SBX, timeout: WAIT }, ["sandbox"], async (a) => sandboxWait(sbx(a), a.timeout)),
+      wait: act({ sandbox: SBX, timeout_ms: TIMEOUT }, ["sandbox"], async (a) => sandboxWait(sbx(a), timeoutMs(a))),
       logs: act({ sandbox: SBX, tail: TAIL, head: HEAD }, ["sandbox"], async (a) => cutLines(await getText(`${sbx(a)}/logs`), a)),
       delete: act({ sandbox: SBX }, ["sandbox"], async (a) => {
+        const doc = JSON.parse(await api("GET", sbx(a)));
         // a running sandbox is ended first; a sandbox already over (409) or gone (404) has nothing to end
         await api("POST", `${sbx(a)}/terminate`).catch((e) => { if (!/^(409|404)\b/.test(String(e?.message))) throw e; });
-        return api("DELETE", sbx(a));
+        await api("DELETE", sbx(a));
+        return JSON.stringify({ ...doc, state: "deleted" }, null, 2);
       }),
     }),
     resource("volume", "Volumes: the stored state of workspaces and environments. Actions: list, get (history and branch tips), delete a detached volume.", {
@@ -553,10 +588,10 @@ function mainOnly(tickMs: number): ToolDef[] {
         const [history, refs] = await Promise.all([api("GET", `/v1/volumes/${seg(a.volume)}/history`), api("GET", `/v1/volumes/${seg(a.volume)}/refs`)]);
         return JSON.stringify({ volume: a.volume, history: JSON.parse(history), refs: JSON.parse(refs) }, null, 2);
       }),
-      delete: act({ volume: S }, ["volume"], async (a) => api("DELETE", `/v1/volumes/${seg(a.volume)}`)),
+      delete: act({ volume: S }, ["volume"], async (a) => (await api("DELETE", `/v1/volumes/${seg(a.volume)}`), JSON.stringify({ volume: a.volume, state: "deleted" }, null, 2))),
     }),
     resource("snapshot", "Snapshots of a volume. Action: delete one.", {
-      delete: act({ volume: S, snapshot: S }, ["volume", "snapshot"], async (a) => api("DELETE", `/v1/volumes/${seg(a.volume)}/snapshots/${seg(a.snapshot)}`)),
+      delete: act({ volume: S, snapshot: S }, ["volume", "snapshot"], async (a) => (await api("DELETE", `/v1/volumes/${seg(a.volume)}/snapshots/${seg(a.snapshot)}`), JSON.stringify({ volume: a.volume, snapshot: a.snapshot, state: "deleted" }, null, 2))),
     }),
     resource("pipeline", "Pipelines: versioned definitions. Actions: list, get (a version, or the pipeline with its versions), save, delete (one version with `version`).", {
       list: act({ owner: OWNER }, ["owner"], async (a) => api("GET", `/v1/pipelines/${seg(a.owner)}`)),
@@ -574,20 +609,24 @@ function mainOnly(tickMs: number): ToolDef[] {
         if (r.status < 200 || r.status >= 300) throw new Error(httpError(r.status, r.text));
         return api("PUT", `/v1/pipelines/${seg(a.owner)}/${seg(name)}`, a.definition);
       }),
-      delete: act({ owner: OWNER, pipeline: PIPE, version: PVER }, ["owner", "pipeline"], async (a) =>
-        api("DELETE", a.version === undefined ? pipe(a) : `${pipe(a)}/versions/${a.version}`)),
+      delete: act({ owner: OWNER, pipeline: PIPE, version: PVER }, ["owner", "pipeline"], async (a) => {
+        if (a.version !== undefined) return (await api("DELETE", `${pipe(a)}/versions/${a.version}`), JSON.stringify({ pipeline: a.pipeline, version: a.version, state: "deleted" }, null, 2));
+        return deleting(pipe(a), () => api("DELETE", pipe(a)));
+      }),
     }),
     resource("run", "Pipeline runs. Actions: start, list, get, wait, logs (a job's output), cancel.", {
       start: act({ owner: OWNER, pipeline: PIPE, inputs: { type: "object", additionalProperties: S, description: "String values by input name." }, version: { ...I, description: "The version to run. Default: the newest." }, key: { type: "string", description: "A retry key: a second start with the same key answers the first run." }, ...WAITING }, ["owner", "pipeline"], async (a) => {
         const out = await api("POST", `${pipe(a)}/runs`, strip({ inputs: a.inputs, version: a.version, key: a.key }));
-        return a.wait ? runWait({ ...a, run: JSON.parse(out).id }) : out;
+        if (!a.wait) return out;
+        const id = JSON.parse(out).id;
+        return runWait({ ...a, run: id, offset: undefined }, softMs(a), () => promoted(id, "run"));
       }),
       list: act({ owner: OWNER, pipeline: PIPE, state: { type: "string", enum: ["queued", "running", "success", "failure", "cancelled"] }, limit: I }, ["owner"], async (a) => {
         const q = qs({ state: a.state, limit: a.limit === undefined ? undefined : String(a.limit) });
         return api("GET", a.pipeline ? `${pipe(a)}/runs${q}` : `/v1/pipelines/${seg(a.owner)}/runs${q}`);
       }),
       get: act(RUNREF, RUNREQ, async (a) => api("GET", run(a))),
-      wait: act({ ...RUNREF, timeout: WAIT, job: { ...I, description: "The job's index in the run (default 0)." }, offset: OFFSET }, RUNREQ, runWait),
+      wait: act({ ...RUNREF, timeout_ms: TIMEOUT, job: { ...I, description: "The job's index in the run (default 0)." }, offset: OFFSET }, RUNREQ, async (a) => runWait(a, timeoutMs(a))),
       logs: act({ ...RUNREF, job: { ...I, description: "The job's index in the run (default 0)." }, offset: OFFSET, tail: TAIL, head: HEAD }, RUNREQ, async (a) => {
         const out = await api("GET", `${run(a)}/jobs/${a.job ?? 0}/logs${qs({ offset: a.offset === undefined ? undefined : String(a.offset) })}`);
         if (a.offset !== undefined) return out;
@@ -598,7 +637,7 @@ function mainOnly(tickMs: number): ToolDef[] {
           return out;
         }
       }),
-      cancel: act(RUNREF, RUNREQ, async (a) => api("POST", `${run(a)}/cancel`)),
+      cancel: act(RUNREF, RUNREQ, async (a) => (await api("POST", `${run(a)}/cancel`), api("GET", run(a)))),
     }),
     resource("worktree", "Worktrees of a workspace. Actions: add, drop.", {
       add: act({ workspace: WS, name: S }, ["workspace", "name"], async (a) => api("POST", `/v1/workspaces/${seg(a.workspace)}/trees`, { name: a.name })),

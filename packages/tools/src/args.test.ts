@@ -54,9 +54,10 @@ test("service tools say what a flat call lacked, and take a JSON-string array", 
   await expect(add.run({ workspace: "ws-1", packages: '["git"]' })).rejects.toThrow("platform tools unavailable");
 });
 
-test("env_wait takes seconds or milliseconds", () => {
+test("env_wait takes milliseconds only; the old spellings are not listed", () => {
   const w = platformTools("main").find((t) => t.name === "env")!;
-  expect(Object.keys((w.inputSchema as any).properties)).toEqual(expect.arrayContaining(["timeout", "timeout_ms"]));
+  expect(Object.keys((w.inputSchema as any).properties)).toContain("timeout_ms");
+  expect(Object.keys((w.inputSchema as any).properties)).not.toContain("timeout");
 });
 
 test("an HTML error page is a status line and plain text, not markup", () => {

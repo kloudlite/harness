@@ -114,13 +114,13 @@ export function scratchTools(root: string): ToolDef[] {
         type: "object",
         properties: {
           command: { type: "string" },
-          timeout: { type: "number", description: "In seconds. The default is 120. The maximum is 600." },
-          timeout_ms: { type: "number", description: "The same limit in milliseconds (the other spelling of `timeout`); give one of them." },
+          timeout_ms: { type: "number", description: "Milliseconds before the command is killed (default 120000, maximum 600000)." },
         },
         required: ["command"],
       },
-      run: async (a: { command: string; timeout?: number; timeout_ms?: number }) => {
-        const secs = Math.min(Math.max((a.timeout ?? (a.timeout_ms === undefined ? 120 : a.timeout_ms / 1000)) || 120, 1), 600);
+      run: async (a: { command: string; timeout?: number; timeout_s?: number; timeout_ms?: number }) => {
+        // `timeout` and `timeout_s` (seconds) are read as aliases, never listed
+        const secs = Math.min(Math.max((a.timeout_ms !== undefined ? a.timeout_ms / 1000 : a.timeout_s ?? a.timeout ?? 120) || 120, 1), 600);
         return JSON.stringify(await runBash(root, a.command, secs), null, 2);
       },
     },

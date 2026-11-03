@@ -119,7 +119,7 @@ test("anyPodTools: schemas from the sample, each call reaches the named workspac
   const t = await anyPodTools("w1");
   expect(t.length).toBe(10);
   const read = t.find((x) => x.name === "read")!;
-  expect(read.inputSchema).toEqual({ type: "object", properties: { workspace: { type: "string", description: "Workspace id" }, path: {} }, required: ["workspace", "path"] });
+  expect(read.inputSchema).toEqual({ type: "object", properties: { workspace: { type: "string", description: "The workspace id or name." }, path: {} }, required: ["workspace", "path"] });
   expect(read.description).toBe("Read a file Runs in the workspace named by `workspace`.");
   expect(await read.run({ workspace: "w2", path: "a" })).toContain("http://10.0.0.2:7788/tools/read");
   const posted = log.filter((l) => l.url.endsWith("/tools/read")).map((l) => l.url);
@@ -206,6 +206,8 @@ test("the client waits longer than the tool, whichever spelling the timeout has"
   const { waitMs } = await import("./pod.ts");
   expect(waitMs({ timeout_ms: "600000" }, 1)).toBe(600_000);
   expect(waitMs({ timeout: 300 }, 1)).toBe(300_000);
+  expect(waitMs({ timeout_s: 30 }, 1)).toBe(30_000);
+  expect(waitMs({ max_wait_ms: 7000 }, 1)).toBe(7000);
   expect(waitMs({ timeout_ms: "2m" }, 120_000)).toBe(120_000);
   expect(waitMs({}, 120_000)).toBe(120_000);
 });

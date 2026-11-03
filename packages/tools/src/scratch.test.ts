@@ -66,7 +66,7 @@ test.skipIf(!sandbox)("bash runs confined, env-clean, propagates exit and times 
   expect(readFileSync(join(root, "f"), "utf8")).toBe("hi\n");
   expect((await run({ command: "env" })).output).not.toContain("KL_");
   expect((await run({ command: "exit 3" })).exit_code).toBe(3);
-  const to = await run({ command: "sleep 30", timeout: 1 });
+  const to = await run({ command: "sleep 30", timeout_ms: 1000 });
   expect(to.exit_code).toBe(124);
   delete process.env.KL_API_URL;
 });
