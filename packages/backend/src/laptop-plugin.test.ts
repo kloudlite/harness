@@ -5,6 +5,9 @@ import { join } from "node:path";
 import { mcpTools } from "./local.ts";
 
 const PLUGIN = join(import.meta.dir, "../../../laptop-plugin/plugin");
+const SOURCES = join(import.meta.dir, "../../../skills");
+// the skills the plugin ships, copied by laptop-plugin/sync-skills.sh (a symlink out of the plugin root does not load)
+const SHIPPED = ["develop", "kloudlite", "kloudlite-automate", "kloudlite-develop", "kloudlite-verify", "orchestrate"];
 // the laptop door (`kloudlite mcp`, mcp.rs) answers these itself; the bench never serves session_use
 const LAPTOP_DOOR = ["session_current", "session_use"];
 const LAPTOP_NEVER = ["workspace_ask", "task_add", "task_update", "task_list", "workspace_tasks"];
@@ -15,6 +18,16 @@ const served = async () => {
 };
 const skills = () => readdirSync(join(PLUGIN, "skills")).map((d) => readFileSync(join(PLUGIN, "skills", d, "SKILL.md"), "utf8"));
 const agents = () => readdirSync(join(PLUGIN, "agents")).map((f) => readFileSync(join(PLUGIN, "agents", f), "utf8"));
+
+test("the plugin ships exactly its skills, each equal to its source in skills/ (run laptop-plugin/sync-skills.sh)", () => {
+  expect(readdirSync(join(PLUGIN, "skills")).sort()).toEqual(SHIPPED);
+  for (const d of SHIPPED) expect(readFileSync(join(PLUGIN, "skills", d, "SKILL.md"), "utf8")).toBe(readFileSync(join(SOURCES, d, "SKILL.md"), "utf8"));
+});
+
+test("the agents and commands load only skills the plugin ships", () => {
+  const texts = [...agents(), ...readdirSync(join(PLUGIN, "commands")).map((f) => readFileSync(join(PLUGIN, "commands", f), "utf8"))];
+  for (const t of texts) for (const m of t.matchAll(/(?<![:\w/])kloudlite:([a-z-]+)/g)) expect(SHIPPED).toContain(m[1]!);
+});
 
 test("every tool a laptop skill lists is one the bench serves, and none is a bench-session tool", async () => {
   const names = await served();

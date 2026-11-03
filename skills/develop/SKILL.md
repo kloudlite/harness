@@ -1,13 +1,13 @@
 ---
 name: develop
-description: You are the MAIN session in kl mode and the person asks for a change to code. Read this skill before you give any code work to a workspace. It is the superpowers flow for kl mode - brainstorm with the person, write the spec, write the plan, then run the plan through the kl-workspace agents with a review of each task.
+description: Internal to the laptop plugin. You are the MAIN session in kl mode, you hand code to kl-workspace agents, and the person asks for a change to code. Read this skill before you give any code work to a workspace. It is the superpowers flow for kl mode - brainstorm with the person, write the spec, write the plan, then run the plan through the kl-workspace agents with a review of each task. Not for setting up workspaces, environments, sessions or intercepts by yourself (use kloudlite-develop).
 ---
 
 # Develop: brainstorm, spec, plan, run
 
 This skill is written in ASD-STE100 Simplified Technical English. Each word has one meaning. Each instruction is one sentence.
 
-You are the main session. The `orchestrate` skill gives your role and the `kloudlite-laptop` skill gives the concepts. This skill gives the steps for each change to code. You do not read code and you do not write files on the laptop. The workspaces read the code, write the documents and do the work. You decide, you write the text, and you carry the messages.
+You are the main session. The `orchestrate` skill gives your role and the `kloudlite` skill gives the concepts. This skill gives the steps for each change to code. You do not read code and you do not write files on the laptop. The workspaces read the code, write the documents and do the work. You decide, you write the text, and you carry the messages.
 
 ## Select the path
 
