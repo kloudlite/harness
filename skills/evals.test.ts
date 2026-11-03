@@ -38,6 +38,19 @@ test("every task skill scenario is reachable from a routing row of its skill", (
   expect(r.filter((l) => cells(l)[1] === "base").length).toBeGreaterThanOrEqual(10);
 });
 
+test("the first trigger phrase of every task skill scenario is a routing prompt of that skill", () => {
+  const r = rows("routing.md").map(cells);
+  const missing: string[] = [];
+  for (const s of TASK)
+    for (const sec of read(s, "SKILL.md").split(/^### /m).slice(1)) {
+      const head = sec.split("\n")[0]!;
+      const first = sec.match(/\*\*Trigger:\*\*[^"]*"([^"]+)"/)?.[1]?.toLowerCase();
+      if (!first) continue;
+      if (!r.some((c) => c[1] === s && (c[0]!.toLowerCase().includes(first) || first.includes(c[0]!.toLowerCase())))) missing.push(`${s} ${head}: "${first}"`);
+    }
+  expect(missing).toEqual([]);
+});
+
 test("each user-facing skill has name, a description under 1024 chars with a Not for clause, and the size budget", () => {
   const budget: Record<string, number> = { kloudlite: 220 };
   for (const s of USER) {

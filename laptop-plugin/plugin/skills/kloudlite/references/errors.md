@@ -17,7 +17,6 @@ The status comes first; the body is one sentence. Report it as it is, then take 
 | `409 this snapshot is the base of a running worktree` | Keep it; tell the user. |
 | `409 the volume still has a workspace or environment` | Delete the owner first, if the user asked. |
 | `409 this session has no environment; connect one…` | `session_connect`. |
-| `409 that workspace is in session {name}; remove it there first` | Tell the user. |
 | `409 conflict, retry` / `the session changed; retry` | Read again, repeat once. |
 | `env_restore` `409` with `lost` | Name the services; call again with `discard` only after a yes. |
 | `422` for a package; the answer lists versions | Pick a listed version. |

@@ -7,13 +7,13 @@ Every tool, with its arguments. `workspace` is a `ws-` id of a `ready` workspace
 | Tool | Arguments | Answers |
 |---|---|---|
 | `session_current` | none | The session, its team, its environment |
-| `session_use` | `team?`, `name?`, `environment?`, `new_environment?` | Picks the session; can connect or create an environment |
+| `session_use` | `team?`, `name?`, `environment?`, `new_environment?` | Laptop door only. Picks the session; can connect or create an environment |
 | `session_pick` | `id` | Picks the session when several exist (the only tool until then) |
 | `session_connect` | `environment` | Connects the session to an environment; releases its intercepts on the old one |
 | `session_disconnect` | none | Disconnects from the environment |
 | `session_create` | `name`, `team?`, `environment?`, `ttl_secs?` | A new session; `session_use` drives it |
 | `session_stop`, `session_start`, `session_delete` | `session` (id, name or `team/name`) | Lifecycle of a session |
-| `session_ttl` | `session`, `ttl_secs` (600..2592000; omit to clear) | Sets the unused-time limit |
+| `session_ttl` | `session`, `ttl_secs?` (600..2592000), `clear?` | Sets or removes the unused-time limit; one of the two is required |
 
 ## Workspaces
 
@@ -28,9 +28,10 @@ Every tool, with its arguments. `workspace` is a `ws-` id of a `ready` workspace
 | `workspace_delete` | `workspace` | Deletes for good |
 | `workspace_snapshot` | `workspace`, `message?`, `volume?` | A snapshot; `volume` names the volume on its first push |
 | `worktree_add`, `worktree_drop` | `workspace`, `name` | A second branch checkout inside one workspace |
-| `workspace_env_set` | `workspace`, `variables`, `restart_on_change?` | Replaces the whole env; a secret is the whole value `${{ secrets.NAME }}` |
+| `workspace_env_get` | `workspace` | The stored env `{env, restartOnEnvChange}`; a secret shows as its reference |
+| `workspace_env_set` | `workspace`, `variables`, `replace?`, `restart_on_change?` | Merges into the env; `replace: true` replaces the whole set; a secret is the whole value `${{ secrets.NAME }}` |
 | `workspace_restart` | `workspace` | Restarts to read new variables |
-| `workspace_ttl` | `workspace`, `ttl_secs?` | Unused-time limit |
+| `workspace_ttl` | `workspace`, `ttl_secs?`, `clear?` | Unused-time limit; one of the two is required |
 
 ## Code, run, packages, images
 
@@ -65,7 +66,7 @@ Every tool, with its arguments. `workspace` is a `ws-` id of a `ready` workspace
 | `service_remove` | `env`, `name` | Removes one service |
 | `service_logs` | `env`, `service`, `tail?` (2000 max), `since?` (seconds), `previous?` | Recent logs |
 | `service_restart` | `env`, `service` | Restarts one service to read new variables |
-| `env_ttl` | `env`, `ttl_secs?` | Unused-time limit |
+| `env_ttl` | `env`, `ttl_secs?`, `clear?` | Unused-time limit; one of the two is required |
 
 ## Intercepts and volumes
 
@@ -82,10 +83,10 @@ Every tool, with its arguments. `workspace` is a `ws-` id of a `ready` workspace
 
 | Tool | Arguments | Answers |
 |---|---|---|
-| `sandbox_create` | `command` (string or argv), `image?`, `packages?`, `variables?`, `timeout_s?` (10..86400, default 300), `team?` | A sandbox in the session; its id `sbx-`. It starts empty: clone code in the command |
+| `sandbox_create` | `command` (string or argv), `image?`, `packages?`, `variables?`, `timeout_s?` (10..86400, default 300), `team?`, `from_workspace?`, `from_snapshot?` | A sandbox in the session; its id `sbx-`. It starts empty: clone code in the command |
 | `sandbox_get` | `sandbox` | `phase`, `reason`, `exit_code`, `message` |
 | `sandbox_wait` | `sandbox`, `timeout?` (max 900) | Waits for `terminated`; `timedOut: true` at the limit |
-| `sandbox_logs` | `sandbox` | Output; an ended sandbox keeps its last 256 KiB |
+| `sandbox_logs` | `sandbox`, `tail?` (default 200, max 2000), `head?` | Output; an ended sandbox keeps its last 256 KiB |
 | `sandbox_list` | `team?`, `state?`, `q?`, `limit?` | Sandboxes and phases |
 | `sandbox_terminate`, `sandbox_delete` | `sandbox` | Ends a running sandbox; removes the record of an ended one |
 
@@ -97,13 +98,14 @@ Every tool, with its arguments. `workspace` is a `ws-` id of a `ready` workspace
 | `pipeline_get` | `owner`, `pipeline`, `version?` | One definition |
 | `pipeline_save` | `owner`, `definition` | A new version; a definition equal to the newest saves nothing |
 | `pipeline_versions` | `owner`, `pipeline` | Version numbers |
+| `pipeline_version_delete` | `owner`, `pipeline`, `version` | Deletes one old version; `409` for the latest or one a live run reads |
 | `pipeline_delete` | `owner`, `pipeline` | Deletes the pipeline; finished runs stay; `409` while a run is live |
 | `webhook_rotate` | `owner`, `pipeline` | A new webhook URL, shown once |
 | `run_start` | `owner`, `pipeline`, `inputs?`, `version?`, `key?` | A run id; the same `key` answers the first run |
 | `run_list` | `owner`, `pipeline?`, `state?`, `limit?` | Runs |
 | `run_get` | `owner`, `pipeline`, `run` | State, jobs, `failedStep`, `exitCode` |
 | `run_wait` | `owner`, `pipeline`, `run`, `timeout?` (max 900) | Waits for the end |
-| `run_logs` | `owner`, `pipeline`, `run`, `job?` (index), `offset?` | A page of the job log; repeat with `offset` = `next` while `complete` is false |
+| `run_logs` | `owner`, `pipeline`, `run`, `job?` (index), `offset?`, `tail?`, `head?` | A page of the job log (without `offset`, only its last 200 lines unless `tail`/`head`); repeat with `offset` = `next` while `complete` is false |
 | `run_cancel` | `owner`, `pipeline`, `run` | Cancels a run |
 
 ## Secrets and connectors

@@ -44,6 +44,18 @@ export function target(name: string, args: any, self?: string): string | string[
       return args?.volume;
     case "snapshot_delete":
       return args?.snapshot;
+    case "session_delete":
+    case "session_stop":
+      return args?.session;
+    case "pipeline_delete":
+    case "pipeline_version_delete":
+      return args?.pipeline;
+    case "secret_delete":
+      return args?.name;
+    case "sandbox_delete":
+      return args?.sandbox;
+    case "run_cancel":
+      return args?.run;
     case "packages_remove": {
       const names = (args?.packages ?? []).map((p: unknown) => String(p).split("@")[0]);
       return names.length ? names : undefined;

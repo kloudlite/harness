@@ -13,6 +13,7 @@ import {
 import type { Api, AuthInteraction, AuthType, Credential, Model } from "@earendil-works/pi-ai";
 import type { Registry } from "@kloudlite-tui/tools";
 import { budgeted, budgetExtension } from "./budget.ts";
+import { redactingTranscript } from "./redact.ts";
 import { checkProvider } from "./provider-check.ts";
 import { guardExtension } from "./guard.ts";
 import { orphansExtension } from "./orphans.ts";
@@ -490,8 +491,8 @@ export async function createSession({
     ...(thinkingLevel ? { thinkingLevel } : {}),
     // continue the most recent session in this key's dir (new file if none)
     sessionManager: fresh
-      ? SessionManager.create(smCwd, dir)
-      : SessionManager.continueRecent(smCwd, dir),
+      ? redactingTranscript(SessionManager.create(smCwd, dir))
+      : redactingTranscript(SessionManager.continueRecent(smCwd, dir)),
     // pi's read/bash/edit/write would run in the bench pod; real work goes through the pod tools
     noTools: "builtin",
     customTools: registry ? (adaptTools(registry) as never) : undefined,

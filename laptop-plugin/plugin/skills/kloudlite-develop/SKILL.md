@@ -47,7 +47,7 @@ Every scenario ends with its cleanup. To check a result, use `kloudlite-verify`.
 **Shape:** 2.
 **Steps:**
 1. `session_current`. If the session has the environment, go to step 3.
-2. `session_connect` {"environment": "env-…"}. To make a session for this work: `session_create` {"name": "orders", "environment": "env-…"}, then `session_use` {"name": "orders"} to drive it.
+2. `session_connect` {"environment": "env-…"}. To make a session for this work: `session_create` {"name": "orders", "environment": "env-…"}, then, only where `session_use` exists (the laptop door; see Hosts in the `kloudlite` skill), `session_use` {"name": "orders"} to drive it. Elsewhere you cannot drive another session: tell the user to open it, or use `session_connect` on the current one after the user agrees.
 3. A workspace joins only by being created in the session: `workspace_create` with the session picked. A standalone workspace stays out; clone the repo into a new managed one.
 4. `exec` {"workspace": "ws-…", "cmd": "getent hosts db"}.
 
@@ -155,11 +155,11 @@ Every scenario ends with its cleanup. To check a result, use `kloudlite-verify`.
 
 **Trigger:** "set DATABASE_URL on api", "give the worker the SMTP password".
 **Steps:**
-1. A plain value: `service_update` with it in `env` (a service), or `workspace_env_set` {"workspace": "ws-…", "variables": {…}} for a workspace. It replaces the whole workspace env: read `workspace_get` first and send all of it.
+1. A plain value: `service_update` with it in `env` (a service), or `workspace_env_set` {"workspace": "ws-…", "variables": {…}} for a workspace. It merges into the current set; `workspace_env_get` reads the set (references, never a secret value). Add `"replace": true` only to remove a variable, and send the whole set.
 2. A secret: `secret_set` (scenario 2, step 3), then the whole value `"${{ secrets.SMTP_PASSWORD }}"` in `env`. A service reads the team's secrets; a workspace sees the member's own first, then the team's.
 3. A new variable marks the reader `restart_required`; nothing restarts by itself (scenario 12).
 
-**Done when:** `env_get` or `workspace_get` shows the variable name. No value was printed.
+**Done when:** `env_get` or `workspace_env_get` shows the variable name. No value was printed.
 **If it fails:** `422` on a missing secret: set it first. `409` deleting a referenced secret names the readers.
 
 ### 12. Rotate a secret
@@ -206,7 +206,7 @@ Every scenario ends with its cleanup. To check a result, use `kloudlite-verify`.
 **Steps:**
 1. `workspace_snapshot` {"workspace": "ws-…", "volume": "dataset", "message": "v2"}. The first snapshot names the volume; later ones number `dataset@N`.
 2. `volume_refs` {"volume": "<id>"}: the versions.
-3. Another workspace or a sandbox starts from `dataset@2` (`workspace_restore` with `snapshot_id`).
+3. Another workspace starts from `dataset@2` (`workspace_restore` with `snapshot_id`); a sandbox with `sandbox_create` {"from_snapshot": "dataset@2", …}.
 
 **Done when:** `volume_refs` lists the version.
 **If it fails:** `409 volume dataset already exists`: another volume has the name.
@@ -223,14 +223,16 @@ Every scenario ends with its cleanup. To check a result, use `kloudlite-verify`.
 
 ### 17. Stop for the day
 
-**Trigger:** "stop everything".
+**Trigger:** "stop everything for today", "stop for the day". "Stop my session" alone is the `kloudlite` skill's lifecycle row.
 **Steps:**
-1. `session_current`. `session_stop` {"session": "orders"}: the session and its workspaces stop; homes are kept.
-2. `env_stop` only when the user asks; a stopped session already lets an unused environment go idle.
-3. Release intercepts you made first (`release`).
+1. `env_get`: `release` each intercept you made, one by one. A stopped workspace keeps its intercept wish and it takes hold again on the next start, so release first.
+2. `process_list` per workspace; `process_kill` what you started. Report what is left to the user.
+3. `workspace_stop` {"workspace": "ws-…"} for each workspace of the session, one by one.
+4. `env_stop` only when the user asks; a stopped session already lets an unused environment go idle.
+5. Last, and only when the user wants the session itself stopped: tell the user that `session_stop` also stops the bench, so your tools end with it; then `session_stop` {"session": "orders"} as the final act. Do nothing after it.
 
-**Done when:** `session_current` shows `stopped`.
-**If it fails:** an idle session stops by itself after 30 minutes.
+**Done when:** `workspace_get` shows each workspace `stopped` and `env_get` shows no intercept of yours. After step 5 you cannot check; say what you did before you called it.
+**If it fails:** an idle session stops by itself after 30 minutes. A refused `workspace_stop` (a process you cannot kill): tell the user.
 
 ### 18. Reach the environment from the laptop
 

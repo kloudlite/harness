@@ -2,6 +2,8 @@
 
 One row per prompt: the skill that must load (`base` is the `kloudlite` skill alone; it loads first for every row) and the tie-breaker or situation that decides it. Manual eval: give each prompt to an agent that has the installed skills and record which skill loaded. `evals.test.ts` checks the skill column.
 
+Tie-breaker for "stop": one lifecycle verb on a named object (stop, start, delete) goes to `base`; "stop everything" or "stop for the day" is a sequence (release intercepts, stop workspaces, the session last) and goes to `kloudlite-develop`.
+
 | Prompt | Skill | Rule |
 |---|---|---|
 | what do I have | base | Reads need no scenario |
@@ -11,7 +13,7 @@ One row per prompt: the skill that must load (`base` is the `kloudlite` skill al
 | logs of db | base | Service logs |
 | why is worker crashing | base | Service logs, then develop if code must change |
 | who intercepts api | base | Intercepts in force: env_get |
-| stop my session | base | Lifecycle |
+| stop my session | base | Lifecycle verb on one named object goes to base, even though develop 17 also stops things |
 | start the environment | base | Lifecycle |
 | set the session TTL to a day | base | Lifecycle |
 | delete the review workspace | base | Delete: name the target, rule 1 |
@@ -49,7 +51,7 @@ One row per prompt: the skill that must load (`base` is the `kloudlite` skill al
 | reset the data to last night's snapshot | kloudlite-develop | Environment restore |
 | save this dataset as v2 | kloudlite-develop | Named volume |
 | build and push the api image | kloudlite-develop | Publish an image |
-| stop everything for today | kloudlite-develop | Session stop with cleanup of intercepts |
+| stop everything for today | kloudlite-develop | "Everything" or "for the day" means release intercepts, stop the workspaces, then the session last; a lifecycle verb on one named object is base |
 | I want to run psql from my terminal | kloudlite-develop | Reach the environment from the laptop |
 | add a field to the order model, and check it | kloudlite-develop | A change, then verify: develop first |
 | run the unit tests | kloudlite-verify | Once, now, a result to read |

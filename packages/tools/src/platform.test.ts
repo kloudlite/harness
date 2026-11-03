@@ -323,6 +323,9 @@ test("the push tools pass the volume name and the restore tool the team", async 
 const ok = () => json({ ok: 1 });
 const CASES: [string, any, string, string, any?][] = [
   ["sandbox_create", { command: "make test", image: "i:1", packages: ["go"], variables: { A: "1" }, timeout_s: 60, team: "acme" }, "POST", "/v1/sandboxes", { team: "acme", cmd: ["sh", "-c", "make test"], image: "i:1", packages: ["go"], env: { A: "1" }, timeout_secs: 60 }],
+  ["sandbox_create", { command: "x", from_workspace: "w1", from_snapshot: "ds@2" }, "POST", "/v1/sandboxes", { cmd: ["sh", "-c", "x"], from_workspace: "w1", from_snapshot: "ds@2" }],
+  ["pipeline_version_delete", { owner: "acme", pipeline: "ci", version: 3 }, "DELETE", "/v1/pipelines/acme/ci/versions/3"],
+  ["workspace_env_get", { workspace: "w1" }, "GET", "/v1/workspaces/w1/env"],
   ["sandbox_get", { sandbox: "sbx-1" }, "GET", "/v1/sandboxes/sbx-1"],
   ["sandbox_logs", { sandbox: "sbx-1" }, "GET", "/v1/sandboxes/sbx-1/logs"],
   ["sandbox_list", { team: "acme", state: "running", limit: 5 }, "GET", "/v1/sandboxes?team=acme&state=running&limit=5"],
@@ -340,7 +343,7 @@ const CASES: [string, any, string, string, any?][] = [
   ["run_cancel", { owner: "acme", pipeline: "ci", run: "r1" }, "POST", "/v1/pipelines/acme/ci/runs/r1/cancel"],
   ["secret_list", { owner: "acme" }, "GET", "/v1/secrets/acme"],
   ["secret_delete", { owner: "acme", name: "DB_URL", mine: true }, "DELETE", "/v1/secrets/acme/mine/DB_URL"],
-  ["workspace_env_set", { workspace: "w1", variables: { A: "${{ secrets.A }}" }, restart_on_change: true }, "PUT", "/v1/workspaces/w1/env", { env: { A: "${{ secrets.A }}" }, restartOnEnvChange: true }],
+  ["workspace_env_set", { workspace: "w1", variables: { A: "${{ secrets.A }}" }, replace: true, restart_on_change: true }, "PUT", "/v1/workspaces/w1/env", { env: { A: "${{ secrets.A }}" }, restartOnEnvChange: true }],
   ["workspace_restart", { workspace: "w1" }, "POST", "/v1/workspaces/w1/restart"],
   ["service_restart", { env: "e1", service: "api" }, "POST", "/v1/environments/e1/services/api/restart"],
   ["connector_list", { owner: "acme" }, "GET", "/v1/connectors?owner=acme"],
@@ -349,7 +352,7 @@ const CASES: [string, any, string, string, any?][] = [
   ["session_start", { session: "s1" }, "POST", "/v1/sessions/s1/start"],
   ["session_delete", { session: "s1" }, "DELETE", "/v1/sessions/s1"],
   ["session_ttl", { session: "s1", ttl_secs: 600 }, "PUT", "/v1/sessions/s1/ttl", { ttl_secs: 600 }],
-  ["workspace_ttl", { workspace: "w1" }, "PUT", "/v1/workspaces/w1/ttl", { ttl_secs: null }],
+  ["workspace_ttl", { workspace: "w1", clear: true }, "PUT", "/v1/workspaces/w1/ttl", { ttl_secs: null }],
   ["env_ttl", { env: "e1", ttl_secs: 86400 }, "PUT", "/v1/environments/e1/ttl", { ttl_secs: 86400 }],
 ];
 for (const [name, args, method, url, body] of CASES) {
@@ -448,4 +451,51 @@ test("secret_set sends the value and answers {name, updatedAt}, never the value,
 test("ttl tools clear with null when ttl_secs is omitted, and the wait tools take a timeout", () => {
   const t = platformTools("main");
   for (const n of ["sandbox_wait", "run_wait"]) expect((tool(t, n).inputSchema as any).properties.timeout.description).toContain("maximum 900");
+});
+
+test("a ttl tool needs ttl_secs or clear", async () => {
+  for (const [n, a, url] of [["session_ttl", { session: "s1" }, "/v1/sessions/s1/ttl"], ["workspace_ttl", { workspace: "w1" }, "/v1/workspaces/w1/ttl"], ["env_ttl", { env: "e1" }, "/v1/environments/e1/ttl"]] as const) {
+    routes[`PUT ${url}`] = json({});
+    calls = [];
+    await expect(tool(platformTools("main"), n).run(a)).rejects.toThrow("ttl_secs");
+    expect(calls.filter((c) => c.method === "PUT")).toHaveLength(0);
+    await tool(platformTools("main"), n).run({ ...a, clear: true });
+    expect(calls.at(-1)!.body).toEqual({ ttl_secs: null });
+  }
+});
+
+test("workspace_env_set merges into the stored env unless replace is set", async () => {
+  routes["GET /v1/workspaces/w1/env"] = json({ env: { A: "1", B: "2" } });
+  routes["PUT /v1/workspaces/w1/env"] = json({});
+  const t = tool(platformTools("main"), "workspace_env_set");
+  await t.run({ workspace: "w1", variables: { B: "3", C: "4" } });
+  expect(calls.at(-1)!.body).toEqual({ env: { A: "1", B: "3", C: "4" } });
+  await t.run({ workspace: "w1", variables: { C: "4" }, replace: true });
+  expect(calls.at(-1)!.body).toEqual({ env: { C: "4" } });
+});
+
+test("sandbox_logs and run_logs keep the last 200 lines by default, tail and head choose", async () => {
+  const text = Array.from({ length: 500 }, (_, i) => `l${i}`).join("\n") + "\n";
+  routes["GET /v1/sandboxes/sbx-1/logs"] = () => new Response(text);
+  const t = tool(platformTools("main"), "sandbox_logs");
+  const out = await t.run({ sandbox: "sbx-1" });
+  expect(out).toContain("300 of 500 lines left out");
+  expect(out).toContain("l499");
+  expect(out).not.toContain("l299\n");
+  expect(await t.run({ sandbox: "sbx-1", tail: 2000 })).toBe(text);
+  expect(await t.run({ sandbox: "sbx-1", head: 2, tail: 2000 })).toContain("l1\n");
+  routes["GET /v1/pipelines/a/ci/runs/r1/jobs/0/logs"] = json({ data: text, next: 9, complete: true, state: "success" });
+  const d = JSON.parse(await tool(platformTools("main"), "run_logs").run({ owner: "a", pipeline: "ci", run: "r1" }));
+  expect(d.data).toContain("l499");
+  expect(d.data).toContain("lines left out");
+  expect(d.next).toBe(9);
+  routes["GET /v1/pipelines/a/ci/runs/r1/jobs/0/logs?offset=0"] = json({ data: text, next: 9, complete: true });
+  expect(JSON.parse(await tool(platformTools("main"), "run_logs").run({ owner: "a", pipeline: "ci", run: "r1", offset: 0 })).data).toBe(text);
+});
+
+test("env_get folds interceptedBy and proxy into services[]", async () => {
+  routes["GET /v1/environments/e1"] = json({ services: [{ name: "api" }, { name: "db" }], service_status: [{ name: "api", ready: true, interceptedBy: "ws-1", proxy: "ready" }, { name: "db", ready: true, proxy: "none" }] });
+  const d = JSON.parse(await tool(platformTools("main"), "env_get").run({ env: "e1" }));
+  expect(d.services[0]).toMatchObject({ interceptedBy: "ws-1", proxy: "ready" });
+  expect(d.services[1].interceptedBy).toBeUndefined();
 });

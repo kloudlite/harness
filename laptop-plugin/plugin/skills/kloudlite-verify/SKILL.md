@@ -20,7 +20,7 @@ A check in a workspace uses the workspace's files and changes nothing. A sandbox
 3. If the tests need a service (`db`), the workspace must be managed in a session with the environment (`kloudlite-develop`, scenario 3), or use scenario 2.
 
 **Done when:** the exit code is 0, or you told the user which tests failed with the lines that show it.
-**If it fails:** a command past 25 s: run it detached (`exec` with `detach: true`) and read `process_output`. A name that does not resolve: the workspace is not in the session.
+**If it fails:** a command that may run past 120 s (the default wait; at most 600 s): pass `timeout`, or run it detached (`exec` with `detach: true`) and read `process_output`. A name that does not resolve: the workspace is not in the session.
 **Then:** scenario 2 for a clean run.
 
 ### 2. Clean run in a sandbox against the environment
@@ -28,7 +28,7 @@ A check in a workspace uses the workspace's files and changes nothing. A sandbox
 **Trigger:** "run the integration tests against staging".
 **Steps:**
 1. `session_current`: the session needs an environment. `env_get`: service names and ports.
-2. A sandbox starts empty, so it gets the code with `git clone` through the connector (`connector_list` must show a code host). It tests what is pushed: the branch must be on the remote. For uncommitted work use scenario 1.
+2. A sandbox starts empty, so it gets the code with `git clone` through the connector (`connector_list` must show a code host). It tests what is pushed: the branch must be on the remote. For uncommitted work, add `"from_workspace": "ws-…"` to `sandbox_create` (the sandbox starts as that workspace's current files, so no clone is needed), or use scenario 1.
 3. `sandbox_create` {"command": "git clone --branch main https://github.com/acme/api api && cd api && npm ci && npm run test:integration", "packages": ["git", "nodejs@22"], "variables": {"DATABASE_URL": "postgres://postgres@db:5432/postgres"}, "timeout_s": 1800}. It runs in the session, so it reaches `db`. Note the id `sbx-…`. A secret is `"${{ secrets.NAME }}"` as the whole value of a variable, never a value.
 4. `sandbox_wait` {"sandbox": "sbx-…", "timeout": 900}. On `timedOut: true`, wait again.
 5. `sandbox_logs` {"sandbox": "sbx-…"}, then `sandbox_get`: read `exit_code`.
@@ -65,7 +65,7 @@ A check in a workspace uses the workspace's files and changes nothing. A sandbox
 **Shape:** 4.
 **Steps:**
 1. `env_clone` {"env": "env-staging…", "name": "shop-pr-42"}; `env_wait`.
-2. `session_create` {"name": "review-42", "environment": "env-copy…"} so the user's session does not move, and `session_use` {"name": "review-42"} to drive it; `session_use` back at the end.
+2. `session_create` {"name": "review-42", "environment": "env-copy…"} so the user's session does not move, and, where `session_use` exists (the laptop door), `session_use` {"name": "review-42"} to drive it and back at the end. Without `session_use` (the harness, a remote connector) `workspace_create` always lands in the current session, which may be on staging: do not create the review workspace there. Tell the user to open `review-42`, and stop.
 3. A review workspace in that session: `workspace_create` {"name": "api-pr-42", …}; clone the repo; `exec` {"cmd": "git fetch origin pull/42/head:pr-42 && git switch pr-42"} (GitLab: `merge-requests/42/head`).
 4. Run the tests (scenario 1) or `sandbox_create` in the review session (scenario 2, with `git fetch origin pull/42/head:pr-42 && git switch pr-42` after the clone). For a behaviour check, `intercept` the changed service from the review workspace, drive requests, `release`.
 5. Tell the user the result. Delete what you made, after the user says yes: `workspace_delete`, `session_delete` {"session": "review-42"}, `env_delete` of the copy. The user's own workspace and session stay as they were.

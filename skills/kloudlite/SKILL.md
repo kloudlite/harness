@@ -51,6 +51,8 @@ Read your row. The task skills never name a host.
 | Remote connector (claude.ai, ChatGPT) | `/mcp` over OAuth | no | no | the one agent |
 | Kloudlite harness | split by role: main, workspace, subagent | no | no | the role skills |
 
+`session_use` exists only on the laptop door (`kloudlite mcp` and the plugin). The harness and the remote connector drive their own session and have no way to switch; `workspace_create` always uses it. There, a task that needs another session is for the user to open.
+
 Use a tool, not a command. Two things have no tool: connecting a provider (the web console) and `kloudlite env`, the tunnel to the laptop. For those, give the user the exact command, or run it only on a host with a shell and kl mode off. If a local command is refused (`kl mode: use the kl tools; nothing runs on this laptop`), do not go around it: give `/kloudlite:off` or the command.
 
 ## How to work
@@ -106,7 +108,7 @@ The tools act on one session. Every code, run, package and image tool takes `wor
 | Group | Tools |
 |---|---|
 | Session | `session_current`, `session_use`, `session_connect`, `session_disconnect`, `session_create`, `session_stop`, `session_start`, `session_delete`, `session_ttl` |
-| Workspaces | `workspace_list`, `workspace_get`, `workspace_create`, `workspace_clone`, `workspace_restore`, `workspace_start`, `workspace_stop`, `workspace_delete`, `workspace_snapshot`, `worktree_add`, `worktree_drop`, `workspace_env_set`, `workspace_restart`, `workspace_ttl` |
+| Workspaces | `workspace_list`, `workspace_get`, `workspace_create`, `workspace_clone`, `workspace_restore`, `workspace_start`, `workspace_stop`, `workspace_delete`, `workspace_snapshot`, `worktree_add`, `worktree_drop`, `workspace_env_get`, `workspace_env_set`, `workspace_restart`, `workspace_ttl` |
 | Code | `read`, `write`, `edit`, `patch`, `glob`, `grep` |
 | Run | `exec`, `process_list`, `process_output`, `process_write`, `process_kill`, `watch`, `watch_poll`, `watch_stop` |
 | Packages | `packages_list`, `packages_add`, `packages_remove`, `packages_update` |
@@ -116,7 +118,7 @@ The tools act on one session. Every code, run, package and image tool takes `wor
 | Volumes | `volume_list`, `volume_history`, `volume_refs`, `volume_delete`, `snapshot_delete` |
 | Account | `quota`, `regions`, `requests_list`, `request_get`, `request_create` |
 | Sandboxes | `sandbox_create`, `sandbox_get`, `sandbox_wait`, `sandbox_logs`, `sandbox_list`, `sandbox_terminate`, `sandbox_delete` |
-| Pipelines | `pipeline_list`, `pipeline_get`, `pipeline_save`, `pipeline_versions`, `pipeline_delete`, `webhook_rotate`, `run_start`, `run_list`, `run_get`, `run_wait`, `run_logs`, `run_cancel` |
+| Pipelines | `pipeline_list`, `pipeline_get`, `pipeline_save`, `pipeline_versions`, `pipeline_version_delete`, `pipeline_delete`, `webhook_rotate`, `run_start`, `run_list`, `run_get`, `run_wait`, `run_logs`, `run_cancel` |
 | Secrets and connectors | `secret_set`, `secret_list`, `secret_delete`, `connector_list` |
 | Web | `web_fetch`, `web_search` |
 
@@ -129,13 +131,13 @@ These need no scenario.
 - **What do I have:** the three orient calls, plus `env_list`.
 - **Status:** `workspace_get`, `env_get`, `env_wait`. Intercepts in force: `env_get`, `services[].interceptedBy`.
 - **Logs of a service:** `service_logs` with `tail`, `since`, `previous` (after a crash). It names the workspace when an intercept holds the service.
-- **Start and stop:** `workspace_start`, `workspace_stop`, `env_start`, `env_stop`. A stop of something the user did not name needs a name first.
+- **Start and stop:** `workspace_start`, `workspace_stop`, `env_start`, `env_stop`. A stop of something the user did not name needs a name first. `session_stop` also stops the bench, which serves your own tools: say so first and make it your last call.
 - **Delete:** safety rule 1, then `workspace_delete`, `env_delete`, `volume_delete`, `snapshot_delete`.
 - **Quota:** `quota` shows the ceilings and the use. A raise is `request_create` (`kind`: `quota`, `access`, `region` or `other`, with `reason`), only when the user asks.
 
 ## Safety rules
 
-1. **Destructive actions.** `workspace_delete`, `env_delete`, `service_remove`, `volume_delete`, `snapshot_delete`, `worktree_drop`, `env_restore`, any delete of a sandbox, pipeline or secret, and a stop of something the user did not name need a request that names the targets. List them by name. If the user did not name them in this turn, ask in one line first. A host confirmation counts as the confirmation.
+1. **Destructive actions.** `workspace_delete`, `env_delete`, `service_remove`, `volume_delete`, `snapshot_delete`, `worktree_drop`, `env_restore`, any delete of a sandbox, pipeline (or a version) or secret, `session_delete`, `run_cancel`, `session_stop`, and a stop of something the user did not name need a request that names the targets. List them by name. If the user did not name them in this turn, ask in one line first. A host confirmation counts as the confirmation.
 2. **Snapshots only when asked.** The platform already keeps data safe after a crash.
 3. **No secret values in output.** Never print, echo, log or repeat one.
 4. **Refused calls.** If the user refuses a call, that is the answer. Do not retry or get the same result another way.

@@ -80,9 +80,10 @@ A job with an `if` that calls no status function means `success() && (the condit
 |---|---|---|---|---|
 | all succeeded | runs | runs | skipped | skipped |
 | one failed | skipped | runs | runs | skipped |
-| run canceled | skipped | does not run | skipped | runs |
+| a needed job skipped | skipped | runs | skipped | skipped |
+| run canceled | skipped (never starts) | skipped (never starts) | skipped (never starts) | skipped (never starts) |
 
-`always()` runs after any end except a cancel. A job whose condition is false is `skipped`. A failed job makes the run `failure`. Up to 8 jobs run at once.
+After a cancel the platform starts no more jobs and evaluates no `if`: a cleanup job cannot run on a cancel. `always()` runs after any end except a cancel. A job whose condition is false is `skipped`. A failed job makes the run `failure`. Up to 8 jobs run at once.
 
 ## Variables the platform sets
 

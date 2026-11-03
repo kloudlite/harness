@@ -36,8 +36,8 @@ test("fs wraps git.ts", async () => {
 });
 
 test("only destructive house actions ask", () => {
-  const destructive = ["workspace_delete", "worktree_drop", "env_delete", "env_restore", "service_remove", "volume_delete", "snapshot_delete"];
-  expect(DESTRUCTIVE.size).toBe(7);
+  const destructive = ["workspace_delete", "worktree_drop", "env_delete", "env_restore", "service_remove", "volume_delete", "snapshot_delete", "session_delete", "session_stop", "pipeline_delete", "pipeline_version_delete", "secret_delete", "sandbox_delete", "run_cancel"];
+  expect(DESTRUCTIVE.size).toBe(14);
   for (const n of destructive) expect(mustAsk(n)).toBe(true);
   for (const n of ["write", "edit", "patch", "read", "exec", "bash", "web_fetch", "workspace_stop", "env_stop", "container_build", "container_push", "packages_remove", "service_update", "intercept"]) expect(mustAsk(n)).toBe(false);
 });

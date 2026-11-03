@@ -90,3 +90,10 @@ test("a quote counts from lent words and not from the relayed request text", () 
   w.add("please delete workspace foo");
   expect(consented("workspace_delete", { workspace: "foo" }, call, w.get())).toBe(true);
 });
+
+test("the session, pipeline, secret, sandbox and run deletes bind their target", () => {
+  expect(consented("session_stop", { session: "orders" }, { asked: "stop session orders now" }, ["stop session orders now"])).toBe(true);
+  expect(consented("pipeline_delete", { owner: "a", pipeline: "ci" }, { asked: "delete the pipeline ci" }, ["delete the pipeline ci"])).toBe(true);
+  expect(consented("secret_delete", { owner: "a", name: "DB_PASSWORD" }, { asked: "delete DB_PASSWORD please" }, ["delete DB_PASSWORD please"])).toBe(true);
+  expect(consented("session_delete", { session: "orders" }, { asked: "delete session billing" }, ["delete session billing"])).toBe(false);
+});

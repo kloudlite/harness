@@ -50,7 +50,7 @@ Read the `kloudlite` skill first. It holds the definitions and the safety rules.
 3. Roll back: `pipeline_get` with `version` 3, then `pipeline_save` that definition. It becomes the next number; versions are never rewritten.
 
 **Done when:** `pipeline_versions` shows the new number.
-**If it fails:** `409 pipeline changed; retry`: read the newest version again, apply, save. 100 versions: `409`; delete an old one, only when the user asks.
+**If it fails:** `409 pipeline changed; retry`: read the newest version again, apply, save. 100 versions: `409`; `pipeline_version_delete` an old one (not the latest), only when the user asks.
 
 ### 3. Start by hand and follow
 
@@ -112,7 +112,7 @@ Read the `kloudlite` skill first. It holds the definitions and the safety rules.
 **Trigger:** "lint and test in parallel, then build".
 **Steps:**
 1. `lint` and `test` with no `needs` run together; `build` has `"needs": ["lint", "test"]`.
-2. A job runs only if every needed job succeeded. For cleanup after a failure: `"if": "always()"`. For a failure notice: `"if": "failure()"` (true when a needed job failed). `cancelled()` is true while the run is canceled.
+2. A job runs only if every needed job succeeded. For cleanup after a failure: `"if": "always()"`. For a failure notice: `"if": "failure()"` (true when a needed job failed). After a cancel the platform starts no more jobs and evaluates no `if`, so no cleanup job runs on a cancel (`references/definition.md`, truth table).
 3. A job whose needs did not succeed is `skipped`. A failed job fails the run.
 
 **Done when:** a run shows the jobs in the expected order and states.
@@ -212,9 +212,10 @@ Read the `kloudlite` skill first. It holds the definitions and the safety rules.
 **Trigger:** "cancel the run", "delete the old versions".
 **Steps:**
 1. Only on a named request. `run_cancel` {"owner": "acme", "pipeline": "api-ci", "run": "…"}; a running run stops at its next report, so read it again with `run_get`.
-2. Delete: `pipeline_delete` {"owner": "acme", "pipeline": "api-ci"} (finished runs stay; `409` while a run is queued or running).
+2. Old versions: `pipeline_versions`, then `pipeline_version_delete` {"owner": "acme", "pipeline": "api-ci", "version": 3} for each one the user names (`409` for the latest, or one a live run reads).
+3. The whole pipeline: `pipeline_delete` {"owner": "acme", "pipeline": "api-ci"} (finished runs stay; `409` while a run is queued or running).
 
-**Done when:** `run_get` shows `cancelled`, or the pipeline is gone.
+**Done when:** `run_get` shows `cancelled`, the named versions are gone from `pipeline_versions`, or the pipeline is gone.
 **If it fails:** `409 this run has already finished`.
 
 ## Rules

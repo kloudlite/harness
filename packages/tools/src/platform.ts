@@ -154,7 +154,7 @@ function withReady(out: string): string {
     if (!Array.isArray(doc?.services)) return out;
     doc.services = doc.services.map((svc: any) => {
       const st = doc.service_status?.find((x: any) => x.name === svc.name);
-      return { ...svc, ready: st?.ready ?? false, ...(st?.message ? { message: st.message } : {}), ...(st?.failing ? { failing: true } : {}) };
+      return { ...svc, ready: st?.ready ?? false, ...(st?.message ? { message: st.message } : {}), ...(st?.failing ? { failing: true } : {}), ...(st?.interceptedBy ? { interceptedBy: st.interceptedBy } : {}), ...(st?.proxy ? { proxy: st.proxy } : {}) };
     });
     return JSON.stringify(doc, null, 2);
   } catch {
@@ -416,7 +416,26 @@ const PIPE = { type: "string", description: "The pipeline name." };
 const RUN = { type: "string", description: "The run id (the `id` of a run from run_list or run_start)." };
 const WAIT = { type: "number", description: "Seconds to wait (default 300, maximum 900). At the limit the answer has `timedOut: true`." };
 const MINE = { type: "boolean", description: "Your own secret in the team `owner` (any active member), not the team's shared one." };
-const TTL = { oneOf: [{ type: "integer" }, { type: "null" }], description: "Seconds of unused time before it is deleted, 600 to 2592000. Omit or null clears it." };
+const TTL = { type: "integer", description: "Seconds of unused time before it is deleted, 600 to 2592000. Give this or `clear`, never neither." };
+const CLEAR = { type: "boolean", description: "Remove the limit (instead of `ttl_secs`)." };
+const TAIL = { ...{ type: "integer" }, description: "Keep only the last N lines (default 200, maximum 2000)." };
+const HEAD = { ...{ type: "integer" }, description: "Keep only the first N lines (applied before `tail`)." };
+const MAX_TAIL = 2000;
+
+/** Cut a log to its first `head` and last `tail` lines (tail defaults to 200); a note says how many lines went. */
+function cutLines(text: string, a: { head?: unknown; tail?: unknown }): string {
+  let lines = text.split("\n");
+  const trailing = lines.at(-1) === "" ? lines.pop() : undefined;
+  const total = lines.length;
+  if (a.head !== undefined) lines = lines.slice(0, Math.max(0, Number(a.head)));
+  const tail = Math.min(MAX_TAIL, Math.max(1, Number(a.tail ?? 200) || 200));
+  if (lines.length > tail) lines = lines.slice(-tail);
+  const cut = total - lines.length;
+  const note = cut > 0 ? `[${cut} of ${total} lines left out; raise tail (maximum ${MAX_TAIL}) or pass head]\n` : "";
+  return note + lines.join("\n") + (trailing !== undefined && lines.length ? "\n" : "");
+}
+const ttlBody = (a: any): { ttl_secs: number | null } | string =>
+  a.clear && a.ttl_secs !== undefined ? "error: give `ttl_secs` or `clear`, not both" : a.clear ? { ttl_secs: null } : a.ttl_secs === undefined ? "error: give `ttl_secs` (600 to 2592000) or `clear: true`; neither would change the limit by guesswork" : { ttl_secs: a.ttl_secs };
 const clampWait = (t: unknown) => Math.min(900, Math.max(0.001, Number(t) || 300));
 
 /** GET a plain-text body (logs): `api` would pretty-print JSON-looking text and turn an empty body into "ok". */
@@ -450,9 +469,9 @@ function componentTools(tickMs: number): ToolDef[] {
   const RUNREQ = ["owner", "pipeline", "run"];
   return [
     // Sandbox
-    def("sandbox_create", "Start a sandbox: an isolated container that runs one command and ends when it exits. In a session it is created in the session and reaches the session's environment; otherwise it is standalone. `command` is a shell string (run with `sh -c`) or an argv array. It returns at once with the sandbox document in `pending`. Call sandbox_wait for the end, then sandbox_logs." , { command: { oneOf: [S, SL], description: "A shell string, or an argv array." }, image: S, packages: SL, variables: { type: "object", additionalProperties: S, description: "Environment variables for the command. A value of exactly `${{ secrets.NAME }}` reads a secret." }, timeout_s: { ...I, description: "The hard lifetime in seconds, 10 to 86400. Default 300." }, team: { type: "string", description: "The team slug for a standalone sandbox. A session uses its own team." } }, ["command"], async (a) => {
+    def("sandbox_create", "Start a sandbox: an isolated container that runs one command and ends when it exits. In a session it is created in the session and reaches the session's environment; otherwise it is standalone. `command` is a shell string (run with `sh -c`) or an argv array. It returns at once with the sandbox document in `pending`. Call sandbox_wait for the end, then sandbox_logs." , { command: { oneOf: [S, SL], description: "A shell string, or an argv array." }, image: S, packages: SL, variables: { type: "object", additionalProperties: S, description: "Environment variables for the command. A value of exactly `${{ secrets.NAME }}` reads a secret." }, timeout_s: { ...I, description: "The hard lifetime in seconds, 10 to 86400. Default 300." }, team: { type: "string", description: "The team slug for a standalone sandbox. A session uses its own team." }, from_workspace: { type: "string", description: "A workspace of yours (id, name or `team/name`) whose current files the sandbox starts as, uncommitted work included." }, from_snapshot: { type: "string", description: "A snapshot id or `name@N` reference whose files the sandbox starts as." } }, ["command"], async (a) => {
       const cmd = Array.isArray(a.command) ? a.command : ["sh", "-c", String(a.command)];
-      const body = { cmd, image: a.image, packages: a.packages, env: a.variables, timeout_secs: a.timeout_s };
+      const body = { cmd, image: a.image, packages: a.packages, env: a.variables, timeout_secs: a.timeout_s, from_workspace: a.from_workspace, from_snapshot: a.from_snapshot };
       const ses = process.env.KL_SESSION;
       return ses ? api("POST", `/v1/sessions/${seg(ses)}/sandboxes`, strip(body)) : api("POST", "/v1/sandboxes", strip({ team: a.team, ...body }));
     }),
@@ -465,7 +484,7 @@ function componentTools(tickMs: number): ToolDef[] {
         if (Date.now() >= end) return JSON.stringify({ ...d, timedOut: true }, null, 2);
       }
     }),
-    def("sandbox_logs", "Read the output of a sandbox's command as plain text: the live output while it runs, the last 256 KiB after it ended. Empty until the first output; 409 while it has not started.", { sandbox: SBX }, ["sandbox"], async (a) => getText(`${sbx(a)}/logs`)),
+    def("sandbox_logs", "Read the output of a sandbox's command as plain text: the live output while it runs, the last 256 KiB after it ended. Only the last 200 lines are returned unless `tail` (maximum 2000) or `head` says otherwise. Empty until the first output; 409 while it has not started.", { sandbox: SBX, tail: TAIL, head: HEAD }, ["sandbox"], async (a) => cutLines(await getText(`${sbx(a)}/logs`), a)),
     def("sandbox_list", "List your sandboxes, newest first, ended ones included. The first 50 unless `limit` (1 to 200).", { team: S, state: { type: "string", enum: ["waiting", "running", "ended", "stopped", "timed-out", "failed"] }, q: { type: "string", description: "Keep sandboxes whose id, image, packages or command contain this text." }, limit: I }, [], async (a) =>
       api("GET", `/v1/sandboxes${qs({ team: a.team, state: a.state, q: a.q, limit: a.limit === undefined ? undefined : String(a.limit) })}`)),
     def("sandbox_terminate", "Ask the platform to end a sandbox. The record stays, and the call is safe to repeat. It returns at once; poll sandbox_get or call sandbox_wait.", { sandbox: SBX }, ["sandbox"], async (a) => api("POST", `${sbx(a)}/terminate`)),
@@ -474,7 +493,7 @@ function componentTools(tickMs: number): ToolDef[] {
     // Pipeline
     def("pipeline_list", "List the pipelines of an owner, with the latest version and the triggers.", { owner: OWNER }, ["owner"], async (a) => api("GET", `/v1/pipelines/${seg(a.owner)}`)),
     def("pipeline_get", "Read a pipeline: its latest definition, or version `version`.", { owner: OWNER, pipeline: PIPE, version: I }, ["owner", "pipeline"], async (a) => api("GET", `${pipe(a)}${qs({ version: a.version === undefined ? undefined : String(a.version) })}`)),
-    def("pipeline_save", "Save a pipeline definition (JSON, with its `name`) as a new version; the pipeline is created when it does not exist. A definition equal to the latest saves nothing. To roll back, save an old definition. A definition that cannot run is a 422 with every reason. When a save turns `triggers.webhook` on, the answer holds `webhookUrl` once: keep it secret and tell the person.", { owner: OWNER, definition: { type: "object", description: "The pipeline definition. Its `name` names the pipeline." } }, ["owner", "definition"], async (a) => {
+    def("pipeline_save", "Save a pipeline definition (JSON, with its `name`) as a new version; the pipeline is created when it does not exist. A definition equal to the latest saves nothing. It is sent as a JSON object, so a job, input or matrix key that is an integer (\"1\") moves to the front: avoid such names. To roll back, save an old definition. A definition that cannot run is a 422 with every reason. When a save turns `triggers.webhook` on, the answer holds `webhookUrl` once: keep it secret and tell the person.", { owner: OWNER, definition: { type: "object", description: "The pipeline definition. Its `name` names the pipeline." } }, ["owner", "definition"], async (a) => {
       const name = a.definition?.name;
       if (typeof name !== "string" || !name) return "error: `definition` needs a `name`";
       const r = await raw("GET", `/v1/pipelines/${seg(a.owner)}/${seg(name)}`);
@@ -484,6 +503,7 @@ function componentTools(tickMs: number): ToolDef[] {
       return api("PUT", `/v1/pipelines/${seg(a.owner)}/${seg(name)}`, a.definition);
     }),
     def("pipeline_versions", "List the versions of a pipeline, oldest first: `{version, createdBy, createdAtMs, definitionSha256}`.", { owner: OWNER, pipeline: PIPE }, ["owner", "pipeline"], async (a) => api("GET", `${pipe(a)}/versions`)),
+    def("pipeline_version_delete", "Delete one old version of a pipeline (a pipeline holds 100). The latest version, and a version a queued or running run reads, are 409.", { owner: OWNER, pipeline: PIPE, version: { ...I, description: "The version number from pipeline_versions." } }, ["owner", "pipeline", "version"], async (a) => api("DELETE", `${pipe(a)}/versions/${a.version}`)),
     def("pipeline_delete", "Delete a pipeline and all its versions. Finished runs stay. 409 while a run is queued or running.", { owner: OWNER, pipeline: PIPE }, ["owner", "pipeline"], async (a) => api("DELETE", pipe(a))),
     def("webhook_rotate", "Make a new webhook secret for a pipeline; the old URL stops at once. The answer holds the new `webhookUrl` once: keep it secret and tell the person. 409 when the webhook trigger is off.", { owner: OWNER, pipeline: PIPE }, ["owner", "pipeline"], async (a) => api("POST", `${pipe(a)}/webhook/rotate`)),
     def("run_start", "Start a run of a pipeline by hand. It returns at once with the run in `queued`. Call run_wait. A run that cannot be planned is a 422 with every reason, and nothing is recorded.", { owner: OWNER, pipeline: PIPE, inputs: { type: "object", additionalProperties: S, description: "String values by input name." }, version: { ...I, description: "The version to run. Default: the newest." }, key: { type: "string", description: "A retry key: a second start with the same key answers the first run." } }, ["owner", "pipeline"], async (a) =>
@@ -495,12 +515,20 @@ function componentTools(tickMs: number): ToolDef[] {
     def("run_get", "Read one run: `state` (`queued`, `running`, `success`, `failure`, `cancelled`), its jobs and their states.", RUNREF, RUNREQ, async (a) => api("GET", run(a))),
     def("run_wait", "Wait until a run is `success`, `failure` or `cancelled`, then return the run (without its definition). `timedOut: true` means it was still going after `timeout` seconds. There is no server wait: the tool polls with back-off.", { ...RUNREF, timeout: WAIT }, RUNREQ, async (a) =>
       pollDoc(run(a), (d) => ["success", "failure", "cancelled"].includes(d?.state), a.timeout, tickMs, ({ definition: _d, ...rest }) => rest)),
-    def("run_logs", "Read the output of one job of a run from a byte offset, one page of at most 1 MiB: `{data, next, complete, state}`. While `complete` is false, call again with `offset` = `next`.", { ...RUNREF, job: { ...I, description: "The job's index in the run (default 0)." }, offset: I }, RUNREQ, async (a) =>
-      api("GET", `${run(a)}/jobs/${a.job ?? 0}/logs${qs({ offset: a.offset === undefined ? undefined : String(a.offset) })}`)),
+    def("run_logs", "Read the output of one job of a run from a byte offset, one page of at most 1 MiB: `{data, next, complete, state}`. Without `offset` only the last 200 lines of the page are kept (`tail`, maximum 2000; `head` keeps the first lines). With `offset` the whole page comes back: while `complete` is false, call again with `offset` = `next`.", { ...RUNREF, job: { ...I, description: "The job's index in the run (default 0)." }, offset: I, tail: TAIL, head: HEAD }, RUNREQ, async (a) => {
+      const out = await api("GET", `${run(a)}/jobs/${a.job ?? 0}/logs${qs({ offset: a.offset === undefined ? undefined : String(a.offset) })}`);
+      if (a.offset !== undefined) return out;
+      try {
+        const d = JSON.parse(out);
+        return typeof d?.data === "string" ? JSON.stringify({ ...d, data: cutLines(d.data, a) }, null, 2) : out;
+      } catch {
+        return out;
+      }
+    }),
     def("run_cancel", "Ask a run to stop. A queued run is cancelled at once; a running one stops at its next report, so poll run_get. 409 when it has already finished.", RUNREF, RUNREQ, async (a) => api("POST", `${run(a)}/cancel`)),
 
     // Secrets and workspace variables
-    def("secret_set", "Store a secret value under a name (`A-Z`, `0-9`, `_`), replacing an existing one. The value is never printed back: not here, not by secret_list, not by any tool. Answers `{name, updatedAt}`. A pod reads it only through an env value that is exactly `${{ secrets.NAME }}`. A team's shared secret needs a team admin; set `mine` for your own in a team.", { owner: OWNER, name: S, value: S, mine: MINE }, ["owner", "name", "value"], async (a) => {
+    def("secret_set", "Store a secret value under a name (`A-Z`, `0-9`, `_`), replacing an existing one. The value is never printed back: not here, not by secret_list, not by any tool. Answers `{name, updatedAt}`. The harness session transcript keeps this call's arguments, so the value is redacted there. A pod reads it only through an env value that is exactly `${{ secrets.NAME }}`. A team's shared secret needs a team admin; set `mine` for your own in a team.", { owner: OWNER, name: S, value: S, mine: MINE }, ["owner", "name", "value"], async (a) => {
       await api("PUT", `${secret(a)}/${seg(a.name)}`, { value: a.value });
       // The route answers 204: the date comes from the names list, which never carries a value.
       const list = await raw("GET", secret(a)).catch(() => undefined);
@@ -509,8 +537,15 @@ function componentTools(tickMs: number): ToolDef[] {
     }),
     def("secret_list", "List the names of an owner's secrets with when and by whom each was last set. Never a value.", { owner: OWNER, mine: MINE }, ["owner"], async (a) => api("GET", secret(a))),
     def("secret_delete", "Delete one secret. 409 while a workspace, sandbox, service or pipeline references it; the answer names the referrers.", { owner: OWNER, name: S, mine: MINE }, ["owner", "name"], async (a) => api("DELETE", `${secret(a)}/${seg(a.name)}`)),
-    def("workspace_env_set", "Replace the whole variable set of a workspace: variables left out are removed, `{}` clears it. A value of exactly `${{ secrets.NAME }}` reads a secret. A running workspace keeps its old variables and is marked `restart_required`; call workspace_restart, or set `restart_on_change`.", { workspace: WS, variables: { type: "object", additionalProperties: S, description: "Variable name to value." }, restart_on_change: { type: "boolean", description: "Restart the workspace itself whenever its variables change from now on." } }, ["workspace", "variables"], async (a) =>
-      api("PUT", `/v1/workspaces/${seg(a.workspace)}/env`, strip({ env: a.variables, restartOnEnvChange: a.restart_on_change }))),
+    def("workspace_env_get", "Read a workspace's variables as stored: `{env, restartOnEnvChange}`. A secret shows as its `${{ secrets.NAME }}` reference, never a value. Owner only.", { workspace: WS }, ["workspace"], async (a) => api("GET", `/v1/workspaces/${seg(a.workspace)}/env`)),
+    def("workspace_env_set", "Set variables of a workspace. By default the given ones are merged into the current set (read with workspace_env_get): others stay. With `replace: true` the whole set is replaced: variables left out are removed, `{}` clears it. A value of exactly `${{ secrets.NAME }}` reads a secret. A running workspace keeps its old variables and is marked `restart_required`; call workspace_restart, or set `restart_on_change`.", { workspace: WS, variables: { type: "object", additionalProperties: S, description: "Variable name to value." }, replace: { type: "boolean", description: "Replace the whole set instead of merging." }, restart_on_change: { type: "boolean", description: "Restart the workspace itself whenever its variables change from now on." } }, ["workspace", "variables"], async (a) => {
+      let env = a.variables;
+      if (!a.replace) {
+        const cur = JSON.parse(await api("GET", `/v1/workspaces/${seg(a.workspace)}/env`));
+        env = { ...(cur?.env ?? {}), ...a.variables };
+      }
+      return api("PUT", `/v1/workspaces/${seg(a.workspace)}/env`, strip({ env, restartOnEnvChange: a.restart_on_change }));
+    }),
     def("workspace_restart", "Restart a running workspace so that it reads its current variables and secrets. It returns at once; poll workspace_get. 409 when it is not running (its next start reads them anyway)." , { workspace: WS }, ["workspace"], async (a) => api("POST", `/v1/workspaces/${seg(a.workspace)}/restart`)),
     def("service_restart", "Restart one service of an environment so that it reads its current variables and secrets. It returns at once; call env_wait. 409 when the environment is not running.", { env: ENV, service: S }, ["env", "service"], async (a) => api("POST", `/v1/environments/${seg(a.env)}/services/${seg(a.service)}/restart`)),
 
@@ -520,11 +555,11 @@ function componentTools(tickMs: number): ToolDef[] {
     // Session lifecycle and time to live
     def("session_create", "Create a session in a team, optionally connected to an environment of that team. The name is 1 to 40 lowercase letters, digits or `-`.", { name: S, team: { type: "string", description: "A team you belong to. Omit it for your own." }, environment: { type: "string", description: "An environment id or name of the same team." }, ttl_secs: { ...I, description: "Unused seconds before it is deleted, 600 to 2592000. Default: never." } }, ["name"], async (a) =>
       api("POST", "/v1/sessions", strip({ name: a.name, team: a.team, environment: a.environment, ttl_secs: a.ttl_secs }))),
-    def("session_stop", "Stop a session and every workspace in it. Sandboxes and the environment are not touched. It returns at once.", { session: SES }, ["session"], async (a) => api("POST", `/v1/sessions/${seg(a.session)}/stop`)),
+    def("session_stop", "Stop a session and every workspace in it, its bench too: the bench serves your tools on the laptop and runs the agent in the harness, so this ends the tools you are using. Do it as the very last act and tell the person first. Sandboxes and the environment are not touched. It returns at once.", { session: SES }, ["session"], async (a) => api("POST", `/v1/sessions/${seg(a.session)}/stop`)),
     def("session_start", "Start a session: its environment, then its workspaces. It returns at once; poll workspace_get and env_wait.", { session: SES }, ["session"], async (a) => api("POST", `/v1/sessions/${seg(a.session)}/start`)),
     def("session_delete", "Delete a session. Its workspaces are deleted (snapshots stay) and its sandboxes ended. Answers the ids removed.", { session: SES }, ["session"], async (a) => api("DELETE", `/v1/sessions/${seg(a.session)}`)),
-    def("session_ttl", "Set or clear how long a session may stay unused before it is deleted. An awake session is never deleted by it.", { session: SES, ttl_secs: TTL }, ["session"], async (a) => api("PUT", `/v1/sessions/${seg(a.session)}/ttl`, { ttl_secs: a.ttl_secs ?? null })),
-    def("workspace_ttl", "Set or clear how long a workspace may stay unused before it is deleted.", { workspace: WS, ttl_secs: TTL }, ["workspace"], async (a) => api("PUT", `/v1/workspaces/${seg(a.workspace)}/ttl`, { ttl_secs: a.ttl_secs ?? null })),
-    def("env_ttl", "Set or clear how long an environment may stay unused before it is deleted. An environment with a session connected is never deleted by it.", { env: ENV, ttl_secs: TTL }, ["env"], async (a) => api("PUT", `/v1/environments/${seg(a.env)}/ttl`, { ttl_secs: a.ttl_secs ?? null })),
+    def("session_ttl", "Set (`ttl_secs`) or remove (`clear`) how long a session may stay unused before it is deleted. An awake session is never deleted by it.", { session: SES, ttl_secs: TTL, clear: CLEAR }, ["session"], async (a) => { const b = ttlBody(a); return typeof b === "string" ? b : api("PUT", `/v1/sessions/${seg(a.session)}/ttl`, b); }),
+    def("workspace_ttl", "Set (`ttl_secs`) or remove (`clear`) how long a workspace may stay unused before it is deleted.", { workspace: WS, ttl_secs: TTL, clear: CLEAR }, ["workspace"], async (a) => { const b = ttlBody(a); return typeof b === "string" ? b : api("PUT", `/v1/workspaces/${seg(a.workspace)}/ttl`, b); }),
+    def("env_ttl", "Set (`ttl_secs`) or remove (`clear`) how long an environment may stay unused before it is deleted. An environment with a session connected is never deleted by it.", { env: ENV, ttl_secs: TTL, clear: CLEAR }, ["env"], async (a) => { const b = ttlBody(a); return typeof b === "string" ? b : api("PUT", `/v1/environments/${seg(a.env)}/ttl`, b); }),
   ];
 }
