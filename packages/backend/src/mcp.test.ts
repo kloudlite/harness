@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mcpServer } from "./mcp.ts";
+import { DESTRUCTIVE, READ_ONLY, annotations, mcpServer } from "./mcp.ts";
 
 const echo = { name: "echo", description: "Say it back", inputSchema: { type: "object" }, run: async (i: any) => `said ${i.text}` };
 const boom = { name: "boom", description: "Fails", inputSchema: { type: "object" }, run: async () => { throw new Error("no such workspace"); } };
@@ -13,4 +13,16 @@ test("initialize, list, call, failures and notifications", async () => {
   expect(await mcp({ jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "boom" } })).toEqual({ jsonrpc: "2.0", id: 4, result: { content: [{ type: "text", text: "no such workspace" }], isError: true } });
   expect(((await mcp({ jsonrpc: "2.0", id: 5, method: "tools/call", params: { name: "nope" } })) as any).error.code).toBe(-32602);
   expect(((await mcp({ jsonrpc: "2.0", id: 6, method: "resources/list" })) as any).error.code).toBe(-32601);
+});
+
+test("tools/list carries annotations, and no tool is both read-only and destructive", async () => {
+  const mcp = mcpServer(async () => [{ ...echo, name: "read" }, { ...echo, name: "workspace_delete" }, { ...echo, name: "workspace_create" }]);
+  const tools = ((await mcp({ jsonrpc: "2.0", id: 1, method: "tools/list" })) as any).result.tools;
+  expect(tools.map((t: any) => t.annotations)).toEqual([
+    { readOnlyHint: true, destructiveHint: false },
+    { readOnlyHint: false, destructiveHint: true },
+    { readOnlyHint: false, destructiveHint: false },
+  ]);
+  expect([...READ_ONLY].filter((n) => DESTRUCTIVE.has(n))).toEqual([]);
+  expect(annotations("anything-new")).toEqual({ readOnlyHint: false, destructiveHint: false });
 });

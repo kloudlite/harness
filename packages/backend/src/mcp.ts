@@ -7,6 +7,18 @@
 //! No bench permission cards and no `because` here: the client's own approvals stand in for them.
 import type { ToolDef } from "@kloudlite-tui/tools";
 
+/** Tool annotations (MCP `annotations`): hosted clients decide on them. ChatGPT asks for confirmation on
+ * every tool that is not `readOnlyHint`, and Claude shows the hint beside the tool. One table, so
+ * a tool added without a line here is a write that is not destructive, the safe-to-ask default. A rename
+ * fails the test beside this file (every name must be a tool `mcpTools` serves). */
+export const READ_ONLY = new Set([
+  "read", "glob", "grep", "process_list", "process_output", "watch_poll", "workspace_list", "workspace_get", "packages_list",
+  "session_current", "env_list", "env_get", "env_wait", "service_logs", "volume_list", "volume_history", "volume_refs",
+  "builder_status", "quota", "regions", "requests_list", "request_get", "task_list", "workspace_tasks", "scratch_read",
+]);
+export const DESTRUCTIVE = new Set(["workspace_delete", "env_delete", "volume_delete", "snapshot_delete", "service_remove", "worktree_drop", "process_kill"]);
+export const annotations = (name: string) => ({ readOnlyHint: READ_ONLY.has(name), destructiveHint: DESTRUCTIVE.has(name) });
+
 type Msg = { jsonrpc?: string; id?: string | number | null; method?: string; params?: any };
 
 /** `tools()` is read on every `tools/list`; `tools/call` runs against the last list. */
@@ -25,7 +37,7 @@ export function mcpServer(tools: () => Promise<ToolDef[]>): (msg: Msg) => Promis
       case "ping":
         return reply(id, {});
       case "tools/list":
-        return reply(id, { tools: (await list()).map((t) => ({ name: t.name, description: t.description, inputSchema: t.inputSchema })) });
+        return reply(id, { tools: (await list()).map((t) => ({ name: t.name, description: t.description, inputSchema: t.inputSchema, annotations: annotations(t.name) })) });
       case "tools/call": {
         const t = (await (last ?? list())).find((t) => t.name === params?.name);
         if (!t) return fail(id, -32602, `unknown tool: ${params?.name}`);

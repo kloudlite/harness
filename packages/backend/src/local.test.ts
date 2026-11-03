@@ -2,6 +2,7 @@ import { expect, jest, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { READ_ONLY, DESTRUCTIVE as MCP_DESTRUCTIVE } from "./mcp.ts";
 import { LocalBackend, DESTRUCTIVE, asking, baseHandle, ROUTE_TIMEOUT_MS, mustAsk, roleCard, stripCard, shareable, installGate, mcpTools, registryFor, sessionCwd, sessionKind, seen } from "./local.ts";
 import { toolDiff } from "./diff.ts";
 import { Cards } from "./cards.ts";
@@ -406,6 +407,8 @@ test("the MCP door serves every platform and pod tool with no `because`, plus ma
   for (const t of tools) expect((t.inputSchema as any).properties?.because).toBeUndefined();
   expect((tools.find((t) => t.name === "exec")!.inputSchema as any).required).toContain("workspace");
   expect(names).not.toContain("question");
+  // A renamed tool must not silently lose its annotation: every name in the tables is served.
+  for (const n of [...READ_ONLY, ...MCP_DESTRUCTIVE]) expect(names).toContain(n);
 });
 
 // A fake agent whose prompt() records what it was sent; a turn is agent_start, a board change, agent_end.
