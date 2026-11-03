@@ -2,7 +2,7 @@
 
 Gives Claude Code the Kloudlite skills and the session's tools.
 
-Needs no `kloudlite` binary: the MCP server is `https://dev.kloudlite.io/mcp`. The first tool call opens the browser sign-in, and the consent page picks the team and session.
+Needs no `kloudlite` binary: the MCP server is `https://dev.kloudlite.io/mcp`. The first tool call opens the browser sign-in, and the consent page picks the teams; the agent picks or creates the session.
 
 ## Install
 

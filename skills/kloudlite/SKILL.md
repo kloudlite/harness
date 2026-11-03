@@ -50,7 +50,7 @@ Read your row. The task skills never name a host.
 | Remote connector (claude.ai, ChatGPT) | `/mcp` over OAuth | no | no | the one agent |
 | Kloudlite harness | split by role: main, workspace, subagent | no | no | the role skills |
 
-`session_use` exists on the laptop door (`kloudlite mcp`) and on the remote server (the plugin and a remote connector), where it picks among your sessions in the owner you connected. Only the harness drives one fixed session and cannot switch; `workspace_create` always uses the current session. In the harness, a task that needs another session is for the user to open.
+`session_use` exists on the laptop door (`kloudlite mcp`) and on the remote server (the plugin and a remote connector), where it picks among your sessions in the teams you connected (`team` moves between them). Only the harness drives one fixed session and cannot switch; `workspace_create` always uses the current session. In the harness, a task that needs another session is for the user to open.
 
 Use a tool, not a command. Two things have no tool: connecting a provider (the web console) and `kloudlite env`, the tunnel to the laptop. For those, give the user the exact command, or run it only on a host with a shell.
 
@@ -172,7 +172,7 @@ The five steps:
 
 1. Install `kloudlite` (macOS, Linux; WSL on Windows): `curl -fsSL https://dev.kloudlite.io/install.sh | sh`
 2. Sign in (opens the browser): `kloudlite login`
-3. Connect the agent. Claude Code with the plugin (tools and skills; needs no `kloudlite` binary): `/plugin marketplace add kloudlite/harness`, then `/plugin install kloudlite@kloudlite`; the first tool call opens the browser sign-in, and the consent page picks the team and session. Another MCP client: `claude mcp add kl -- kloudlite mcp`, or the JSON `{"mcpServers": {"kl": {"command": "kloudlite", "args": ["mcp"]}}}`; for another team or session, `["mcp", "TEAM", "--session", "SESSION"]`. A client that cannot start a program uses the remote URL `https://dev.kloudlite.io/mcp` with OAuth.
+3. Connect the agent. Claude Code with the plugin (tools and skills; needs no `kloudlite` binary): `/plugin marketplace add kloudlite/harness`, then `/plugin install kloudlite@kloudlite`; the first tool call opens the browser sign-in, and the consent page picks the teams; the agent picks or creates the session. Another MCP client: `claude mcp add kl -- kloudlite mcp`, or the JSON `{"mcpServers": {"kl": {"command": "kloudlite", "args": ["mcp"]}}}`; for another team or session, `["mcp", "TEAM", "--session", "SESSION"]`. A client that cannot start a program uses the remote URL `https://dev.kloudlite.io/mcp` with OAuth.
 4. Pick or create a session: `kloudlite sessions use NAME`, or `kloudlite sessions use --new-environment NAME`. With no session, `kloudlite mcp` creates `main`.
 5. Restart the client. It then lists the server `kl`.
 
