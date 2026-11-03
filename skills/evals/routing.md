@@ -12,7 +12,7 @@ Tie-breaker for "stop": one lifecycle verb on a named object (stop, start, delet
 | status of shop-dev | base | Status of one object |
 | logs of db | base | Service logs |
 | why is worker crashing | base | Service logs, then develop if code must change |
-| who intercepts api | base | Intercepts in force: env_get |
+| who intercepts api | base | Intercepts in force: env(get) |
 | stop my session | base | Lifecycle verb on one named object goes to base, even though develop 17 also stops things |
 | start the environment | base | Lifecycle |
 | set the session TTL to a day | base | Lifecycle |
@@ -21,7 +21,7 @@ Tie-breaker for "stop": one lifecycle verb on a named object (stop, start, delet
 | why can't I create a workspace | base | Quota |
 | ask for more quota | base | Quota: request_create when asked |
 | tools say not logged in | base | Setup and recovery symptom |
-| the server lists only session_pick | base | Setup and recovery symptom |
+| the server lists only session(pick) | base | Setup and recovery symptom |
 | 403 your access to acme is paused | base | Setup and recovery symptom |
 | connect Kloudlite to my agent (no Kloudlite tool present) | base | Setup steps, if the skill is installed at all |
 | set up this repo | kloudlite-develop | Creates the shape |

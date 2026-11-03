@@ -6,9 +6,9 @@ import { mcpTools } from "../packages/backend/src/local.ts";
 import { platformTools } from "../packages/tools/src/platform.ts";
 
 // served by the laptop door itself (mcp.rs) and not by mcpTools
-const DOOR = ["session_current", "session_use", "session_pick"];
+const DOOR: string[] = [];
 // bench-only tools: no skill teaches them
-const NOT_FOR_SKILLS = ["workspace_ask", "task_add", "task_update", "task_list", "workspace_tasks", "scratch_bash", "scratch_read", "scratch_write"];
+const NOT_FOR_SKILLS = ["workspace_ask", "task", "scratch_bash"];
 test("references/tools.md lists exactly the served tools, and no other", async () => {
   const deps = { live: new Map(), busy: new Set<string>(), open: async () => null as never, permit: async () => ({}), tasks: mkdtempSync(join(tmpdir(), "kl-ref-")) };
   const tools = await mcpTools(deps);

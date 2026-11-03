@@ -11,19 +11,19 @@ The status comes first; the body is one sentence. Report it as it is, then take 
 | `422` name rule (`name must be 1-40 lowercase letters, digits or '-'…`) | Rename: lowercase, hyphens, starts with a letter, no `--`, not `ws`, `env`, `api`, `admin`, `system`, `kl`. |
 | `409 a workspace named "x" already exists here` (also environment, session) | Reuse it, or pick another name. |
 | `409` `"x" is ambiguous; qualify it as owner/name` | Use the id or `team/name`. |
-| `409 workspace is interrupted: its storage is moving; it resumes in seconds` | Wait and poll. |
+| `409 workspace is interrupted: its storage is moving; it resumes in seconds` | Wait, then read the object again. |
 | `409 no storage disk has room for {n} GiB; retry later or ask an operator` | Smaller `quota_gb`, or tell the user. |
-| `409 a snapshot is already being cut for this workspace` | Wait, poll the volume history, do not repeat. |
+| `409 a snapshot is already being cut for this workspace` | Wait, read the volume history, do not repeat. |
 | `409 this snapshot is the base of a running worktree` | Keep it; tell the user. |
 | `409 the volume still has a workspace or environment` | Delete the owner first, if the user asked. |
-| `409 this session has no environment; connect one…` | `session_connect`. |
+| `409 this session has no environment; connect one…` | `session` action `use`. |
 | `409 conflict, retry` / `the session changed; retry` | Read again, repeat once. |
-| `env_restore` `409` with `lost` | Name the services; call again with `discard` only after a yes. |
+| `env` action `restore` `409` with `lost` | Name the services; call again with `discard` only after a yes. |
 | `422` for a package; the answer lists versions | Pick a listed version. |
 | `422 volume: this volume has no name yet; name it on its first push` | Ask for a name; give `volume`. |
 | `409 volume {name} already exists; delete it first` | Ask for another name. |
 | `409 volume {name} is used by {readers}` | A pipeline reads it. Tell the user. |
-| `404 volume {name} has no version {n}` / `has no ready version` | List with `volume_history`. |
+| `404 volume {name} has no version {n}` / `has no ready version` | List with `volume` action `get`. |
 | `no git connector of {owner} covers {host}/{repo}` | The user connects the code host in the web console. |
 | `no registry is configured` | The user connects a registry in the web console. |
 | `422 pipeline {name} is invalid:` + lines | Fix every line, save again. |

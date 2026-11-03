@@ -1,6 +1,6 @@
 # Service catalogue
 
-Copy a row into `env_create` or `service_add`. A mount is `{"folder": NAME, "path": PATH}`. Mount in the same call that creates the service: data written before a mount is lost. Pick a strong password and store it as a secret (`${{ secrets.NAME }}`); never write a value into `env`.
+Copy a row into `env` action `create` or `service` action `add`. A mount is `{"folder": NAME, "path": PATH}`. Mount in the same call that creates the service: data written before a mount is lost. Pick a strong password and store it as a secret (`${{ secrets.NAME }}`); never write a value into `env`.
 
 Checked on 2026-11-03 against the image page or the vendor documentation named in the last column. A fact marked "unconfirmed" was not on the page that was read; check it before you rely on it.
 

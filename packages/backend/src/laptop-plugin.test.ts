@@ -23,8 +23,7 @@ test("the plugin ships exactly its skills, each equal to its source in skills/ (
   for (const d of SHIPPED) expect(readFileSync(join(PLUGIN, "skills", d, "SKILL.md"), "utf8")).toBe(readFileSync(join(SOURCES, d, "SKILL.md"), "utf8"));
 });
 
-// Skipped until Stream C rewrites the skills to the folded tool names (plan 2026-11-04-mcp-tool-surface, Stream C step 2); re-enable there.
-test.skip("every tool a laptop skill lists is one the bench serves, and none is a bench-session tool", async () => {
+test("every tool a laptop skill lists is one the bench serves, and none is a bench-session tool", async () => {
   const names = await served();
   // tool tables are headed `| Tool | ..` or `| Group | Tools |`; a row lists one or more tools in its first backticked cell
   // (Agent, SendMessage and `subagent_type: ..` are not bench tools; state tables are not tool tables)
@@ -37,7 +36,7 @@ test.skip("every tool a laptop skill lists is one the bench serves, and none is 
       return tools ? [...cell.matchAll(/`([a-z_]+)`/g)].map((m) => m[1]!) : [];
     });
   });
-  expect(rows.length).toBeGreaterThan(40);
+  expect(rows.length).toBeGreaterThan(30);
   for (const n of rows) expect(names.has(n) ? n : `missing: ${n}`).toBe(n);
   for (const n of rows) expect(LAPTOP_NEVER).not.toContain(n);
 });

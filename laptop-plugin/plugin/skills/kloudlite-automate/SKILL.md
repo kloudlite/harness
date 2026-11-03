@@ -7,7 +7,7 @@ description: Gives the steps to write, save, version, start, schedule and debug 
 
 Read the `kloudlite` skill first. It holds the definitions and the safety rules. Automate means: repeats without a person. Example app: `web`, `api`, `worker`, `db`, `cache`.
 
-`references/definition.md` holds the key tables and the `needs`/`if` truth table. The rules below are enough to write most definitions. Every pipeline tool takes `owner`: the user's handle, or the team slug for a team. When the host has files, keep each definition in the user's repo (`pipelines/ci.json`), and send its text to `pipeline_save`.
+`references/definition.md` holds the key tables and the `needs`/`if` truth table. The rules below are enough to write most definitions. Every pipeline tool takes `owner`: the user's handle, or the team slug for a team. When the host has files, keep each definition in the user's repo (`pipelines/ci.json`), and send its text to `pipeline` action `save`.
 
 ## Definition rules
 
@@ -26,7 +26,7 @@ Read the `kloudlite` skill first. It holds the definitions and the safety rules.
 
 **Trigger:** "make a pipeline that runs the tests".
 **Steps:**
-1. Orient. `connector_list` {"owner": "acme"} to see that a git connector covers the repo (scenario 11). `pipeline_list` {"owner": "acme"} for a pipeline that already does the job.
+1. Orient. `connector_list` {"owner": "acme"} to see that a git connector covers the repo (scenario 11). `pipeline` {"action": "list", "owner": "acme"} for a pipeline that already does the job.
 2. Write the definition:
    ```json
    {"name": "api-ci", "jobs": {"test": {"packages": ["git", "nodejs@22"], "permissions": {"git": "read"}, "timeoutMinutes": 30,
@@ -34,8 +34,8 @@ Read the `kloudlite` skill first. It holds the definitions and the safety rules.
                {"name": "install", "run": "npm ci", "cwd": "api"},
                {"name": "test", "run": "npm test", "cwd": "api"}]}}}
    ```
-3. `pipeline_save` {"owner": "acme", "definition": {…}}.
-4. `pipeline_versions` {"owner": "acme", "pipeline": "api-ci"}: version 1.
+3. `pipeline` {"action": "save", "owner": "acme", "definition": {…}}.
+4. `pipeline` {"action": "get", "owner": "acme", "pipeline": "api-ci"}: version 1.
 
 **Done when:** the pipeline exists with version 1.
 **If it fails:** `422` lists every problem with job and step: fix all, save again. `secret NAME does not exist`: scenario 10.
@@ -45,20 +45,20 @@ Read the `kloudlite` skill first. It holds the definitions and the safety rules.
 
 **Trigger:** "add a lint job", "roll back to v3".
 **Steps:**
-1. `pipeline_get` {"owner": "acme", "pipeline": "api-ci"}: start from the newest version.
-2. Add the job and `"needs": ["lint"]` on `test`. `pipeline_save`. An equal definition saves nothing.
-3. Roll back: `pipeline_get` with `version` 3, then `pipeline_save` that definition. It becomes the next number; versions are never rewritten.
+1. `pipeline` {"action": "get", "owner": "acme", "pipeline": "api-ci"}: start from the newest version.
+2. Add the job and `"needs": ["lint"]` on `test`. `pipeline` action `save`. An equal definition saves nothing.
+3. Roll back: `pipeline` action `get` with `version` 3, then `pipeline` action `save` that definition. It becomes the next number; versions are never rewritten.
 
-**Done when:** `pipeline_versions` shows the new number.
-**If it fails:** `409 pipeline changed; retry`: read the newest version again, apply, save. 100 versions: `409`; `pipeline_version_delete` an old one (not the latest), only when the user asks.
+**Done when:** `pipeline` action `get` shows the new number.
+**If it fails:** `409 pipeline changed; retry`: read the newest version again, apply, save. 100 versions: `409`; `pipeline` action `delete` an old one (not the latest), only when the user asks.
 
 ### 3. Start by hand and follow
 
 **Trigger:** "run it now".
 **Steps:**
-1. `run_start` {"owner": "acme", "pipeline": "api-ci", "inputs": {"branch": "main"}}; `version` for an older one; `key` makes a retry answer the first run. Note the run id.
-2. `run_wait` {"owner": "acme", "pipeline": "api-ci", "run": "…", "timeout": 900}. On `timedOut: true`, wait again.
-3. `run_logs` {"owner": "acme", "pipeline": "api-ci", "run": "…", "job": 0}. `job` is the index of the job in the run; while `complete` is false, call again with `offset` set to `next`.
+1. `run` {"action": "start", "owner": "acme", "pipeline": "api-ci", "inputs": {"branch": "main"}}; `version` for an older one; `key` makes a retry answer the first run. Note the run id.
+2. `run` {"action": "wait", "owner": "acme", "pipeline": "api-ci", "run": "…", "timeout": 900}. On `timedOut: true`, wait again.
+3. `run` {"action": "logs", "owner": "acme", "pipeline": "api-ci", "run": "…", "job": 0}. `job` is the index of the job in the run; while `complete` is false, call again with `offset` set to `next`.
 
 **Done when:** the run is `success`, or you reported the failure (scenario 15).
 **If it fails:** `422` at start: the version cannot run (a missing input or deleted secret); nothing is recorded. Fix, start again.
@@ -69,7 +69,7 @@ Read the `kloudlite` skill first. It holds the definitions and the safety rules.
 **Steps:**
 1. Convert to UTC. 02:00 IST is 20:30 UTC the day before: `"triggers": {"schedule": ["30 20 * * *"]}`. Five fields: minute, hour, day of month, month, weekday. No `@daily`, no names, no seconds.
 2. Every input needs a `default`: nobody gives a value to a trigger.
-3. `pipeline_save`. Tell the user the next tick in their time.
+3. `pipeline` action `save`. Tell the user the next tick in their time.
 
 **Done when:** the new version is saved; its runs show `event` `schedule`.
 **If it fails:** a tick missed while the platform is down is dropped, not replayed.
@@ -79,7 +79,7 @@ Read the `kloudlite` skill first. It holds the definitions and the safety rules.
 **Trigger:** "start it from a GitHub push".
 **Steps:**
 1. `"triggers": {"webhook": true}`. Read body fields through `env`: `"env": {"DOC_ID": "${{ webhook.body.id }}"}`, then `"run": "reindex \"$DOC_ID\""`.
-2. `pipeline_save`. The answer shows the URL once: tell the user to store it in the calling system, and never repeat it.
+2. `pipeline` action `save`. The answer shows the URL once: tell the user to store it in the calling system, and never repeat it.
 3. A leaked URL: `webhook_rotate` {"owner": "acme", "pipeline": "api-ci"}; the old URL stops at once and the answer shows the new one once.
 4. A `push` event is not a trigger here: the URL starts a run, and the job clones the code.
 
@@ -91,7 +91,7 @@ Read the `kloudlite` skill first. It holds the definitions and the safety rules.
 **Trigger:** "release after the tests pass".
 **Steps:**
 1. In `release`: `"triggers": {"after": {"pipeline": "api-ci", "result": "success"}}`. `result` is `success`, `failure` or `cancelled`; absent means any end.
-2. The target must exist, same owner. `pipeline_save`.
+2. The target must exist, same owner. `pipeline` action `save`.
 
 **Done when:** a successful `api-ci` run starts a `release` run with `event` `pipeline`.
 **If it fails:** a pipeline cannot follow itself; a chain stops at depth 5, and the ended run's `triggered` names the refusal.
@@ -102,7 +102,7 @@ Read the `kloudlite` skill first. It holds the definitions and the safety rules.
 **Steps:**
 1. `"inputs": {"branch": {"default": "main"}}`; `options` limits the values; `required` refuses a start without one.
 2. Use `${{ inputs.branch }}` in `env`, `image`, `packages`, `environment`, `fromSnapshot`, `if` and steps.
-3. `run_start` {"inputs": {"branch": "feature-x"}}. Every value is text.
+3. `run` {"action": "start", "inputs": {"branch": "feature-x"}}. Every value is text.
 
 **Done when:** a run with `feature-x` shows it in the job.
 **If it fails:** a run can give only declared inputs; `inputs.nope` is an error at save.
@@ -136,7 +136,7 @@ Read the `kloudlite` skill first. It holds the definitions and the safety rules.
 1. `secret_list` {"owner": "acme"}. A job reads only the pipeline owner's secrets (the team for a team).
 2. A missing name: the user gives the value. `secret_set` {"owner": "acme", "name": "NPM_TOKEN", "value": "…"}, value never printed. The owner is the team, so the job can read it.
 3. In the job: `"secrets": ["NPM_TOKEN"]`, or `"env": {"TOKEN": "${{ secrets.NPM_TOKEN }}"}`. Never in `run`.
-4. `pipeline_save`.
+4. `pipeline` action `save`.
 
 **Done when:** the save passes and the logs show `***`.
 **If it fails:** a value under 4 bytes is not masked: ask for a longer one. Deleting a referenced secret is a `409` naming the pipeline.
@@ -179,7 +179,7 @@ Read the `kloudlite` skill first. It holds the definitions and the safety rules.
 **Steps:**
 1. First job: `"saveTo": "dataset"`. On exit 0 its home is saved as the next version of the volume.
 2. Next job: `"needs": ["fetch"]`, `"fromSnapshot": "dataset"` (or `dataset@3`). Its home starts as a copy.
-3. `volume_list` / `volume_refs` show the versions.
+3. `volume` action `list` / `volume` action `get` show the versions.
 
 **Done when:** the run shows `saved` on the first job and the second job reads the files.
 **If it fails:** two jobs that save to one name need an order in `needs`. `volume dataset has no ready version`: tell the user. A save counts one `snapshots` unit of quota; a failed job saves nothing.
@@ -188,9 +188,9 @@ Read the `kloudlite` skill first. It holds the definitions and the safety rules.
 
 **Trigger:** "why did run 12 fail".
 **Steps:**
-1. `run_list` {"owner": "acme", "pipeline": "api-ci", "state": "failure"}: find the run.
-2. `run_get` {"owner": "acme", "pipeline": "api-ci", "run": "…"}: the run `detail`, and per job `state`, `failedStep`, `exitCode`, `detail`.
-3. `run_logs` per failing job (`job` is its index): steps are marked `▶`, the end `■` with the cause.
+1. `run` {"action": "list", "owner": "acme", "pipeline": "api-ci", "state": "failure"}: find the run.
+2. `run` {"action": "get", "owner": "acme", "pipeline": "api-ci", "run": "…"}: the run `detail`, and per job `state`, `failedStep`, `exitCode`, `detail`.
+3. `run` action `logs` per failing job (`job` is its index): steps are marked `▶`, the end `■` with the cause.
 4. Tell the user the job, the step and the lines that show the cause, then the fix.
 
 **Done when:** the user knows the cause and the fix.
@@ -211,11 +211,11 @@ Read the `kloudlite` skill first. It holds the definitions and the safety rules.
 
 **Trigger:** "cancel the run", "delete the old versions".
 **Steps:**
-1. Only on a named request. `run_cancel` {"owner": "acme", "pipeline": "api-ci", "run": "…"}; a running run stops at its next report, so read it again with `run_get`.
-2. Old versions: `pipeline_versions`, then `pipeline_version_delete` {"owner": "acme", "pipeline": "api-ci", "version": 3} for each one the user names (`409` for the latest, or one a live run reads).
-3. The whole pipeline: `pipeline_delete` {"owner": "acme", "pipeline": "api-ci"} (finished runs stay; `409` while a run is queued or running).
+1. Only on a named request. `run` {"action": "cancel", "owner": "acme", "pipeline": "api-ci", "run": "…"}; a running run stops at its next report, so read it again with `run` action `get`.
+2. Old versions: `pipeline` action `get`, then `pipeline` {"action": "delete", "owner": "acme", "pipeline": "api-ci", "version": 3} for each one the user names (`409` for the latest, or one a live run reads).
+3. The whole pipeline: `pipeline` {"action": "delete", "owner": "acme", "pipeline": "api-ci"} (finished runs stay; `409` while a run is queued or running).
 
-**Done when:** `run_get` shows `cancelled`, the named versions are gone from `pipeline_versions`, or the pipeline is gone.
+**Done when:** `run` action `get` shows `cancelled`, the named versions are gone from `pipeline` action `get`, or the pipeline is gone.
 **If it fails:** `409 this run has already finished`.
 
 ## Rules

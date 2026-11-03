@@ -43,35 +43,25 @@ The main session has `bash`. A workspace session does not have `bash`. It has `e
 8. To show the person a table, list or report, make it in the script. Then give it to `tools.display({ markdown })`. You can read the displayed text later. Reply in one line. Do not type the displayed text again.
 9. A failed platform call throws, and the script stops there. The calls before it are not undone. Writes are real.
 
-## Poll loops
+## Waiting
 
-A lifecycle call returns before the work is done. To wait for the result, write a poll loop. Obey these rules:
-
-1. Set a maximum number of tries.
-2. Stop the loop immediately when the state is the state that you want.
-3. Stop the loop when the state is `error` or `deleted`. Return that state.
-4. Use the correct state:
-
-   | Object | The state when it is up |
-   |---|---|
-   | Workspace | `ready`. A workspace is not `running` at any time. |
-   | Environment | `running` |
-
-5. For an environment, `tools.env_wait({ env })` replaces the loop: it returns when every service is ready, one fails, or the state is `error` or `deleted`.
-6. For a service, examine `services[].ready` or `service_status[].ready`. Do not use a regex on the spec.
-7. Use the id (`ws-…` or `env-…`) in the call. Do not use the name.
-8. Before the loop, make sure that the write call passed. A failed tool call throws.
-9. Wait with `await tools.sleep({ seconds })` (at most 30). Do not run `sleep` in a shell.
+Create, start and restore calls take `wait: true` and answer when the object has settled. Use it before any loop:
 
 ```js
-// Wait until a workspace is up
-for (let i = 0; i < 60; i++) {
-  const ws = JSON.parse(await tools.workspace_get({ workspace: "ws-23d55aca095079c4" }));
-  if (ws.state === "ready" || ws.state === "error" || ws.state === "deleted") return ws.state;
-  await tools.sleep({ seconds: 5 });
-}
-return "still not ready after 60 tries";
+// Create a workspace and wait until it is up
+const ws = JSON.parse(await tools.workspace({ action: "create", name: "api", quota_gb: 20, wait: true }));
+return ws.state;
 ```
+
+Obey these rules for a loop that remains:
+
+1. Set a maximum number of tries.
+2. Stop the loop when the state is the state that you want, or is `error` or `deleted`. Return that state.
+3. Use the correct state. A workspace is `ready`, never `running`. An environment is `running`.
+4. For an environment, `tools.env({ action: "wait", env })` returns when every service is ready, one fails, or the state is `error` or `deleted`.
+5. For a service, examine `services[].ready` or `service_status[].ready`. Do not use a regex on the spec.
+6. Before the loop, make sure that the write call passed. A failed tool call throws.
+7. Wait with `await tools.sleep({ seconds })` (at most 30). Do not run `sleep` in a shell.
 
 ## Examples
 
@@ -138,6 +128,6 @@ await tools.bash({ command: "curl -s $A; curl -s $B; curl -s $C" });
 // Incorrect: a workspace is "ready", not "running". This loop does not stop until its limit.
 if (ws.state === "running") return "up";
 
-// Incorrect: the call uses a name, not an id. The answer is 404.
-await tools.workspace_get({ workspace: "backend" });
+// Incorrect: the call has no action. The answer names the valid actions.
+await tools.workspace({ workspace: "ws-23d55aca095079c4" });
 ```
