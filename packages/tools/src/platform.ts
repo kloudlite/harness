@@ -294,13 +294,14 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
   /** When `wait: true`, poll the object the action created or changed until `done`; else the action's own answer. */
   const thenWait = async (out: string, a: any, path: (d: any) => string, done: (d: any) => boolean, get?: (p: string) => Promise<string>): Promise<string> => {
     if (!a.wait) return out;
-    let d: any;
+    let d: any = {};
     try {
       d = JSON.parse(out);
     } catch {
-      return out;
+      // a plain "ok" (a start on something already running): the poll still answers the object
     }
     const p = path(d);
+    if (p.includes("undefined")) return out;
     return pollUntil(() => (get ? get(p) : api("GET", p)), done, waitSecs(a), tickMs);
   };
   const thenWaitEnv = (out: string, a: any) => thenWait(out, a, (d) => `/v1/environments/${seg(d.id)}`, envDone, async (p) => withReady(await api("GET", p)));

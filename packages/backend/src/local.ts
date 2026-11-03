@@ -187,7 +187,15 @@ function withScratch(pod: ToolDef | undefined, scratch: ToolDef | undefined): To
     inputSchema: { ...s, required: (s.required ?? []).filter((n: string) => n !== "workspace") },
     run: async (input: any) => {
       const p = input?.path;
-      if (scratch && typeof p === "string" && p.startsWith("scratch:")) return scratch.run({ ...input, path: p.slice("scratch:".length) });
+      const isScratch = (x: unknown) => typeof x === "string" && x.startsWith("scratch:");
+      if (scratch && isScratch(p)) return scratch.run({ ...input, path: p.slice("scratch:".length) });
+      // `read` takes `paths`: all scratch reads one by one, a mix is refused rather than half-answered.
+      const ps = input?.paths;
+      if (scratch && Array.isArray(ps) && ps.some(isScratch)) {
+        if (!ps.every(isScratch)) throw new Error(`${pod.name}: \`paths\` mixes scratch: and workspace paths; read them in two calls`);
+        const files = await Promise.all(ps.map((x: string) => scratch.run({ path: x.slice("scratch:".length) }).then((r) => ({ path: x, content: r }), (e) => ({ path: x, error: String(e?.message ?? e) }))));
+        return JSON.stringify({ files }, null, 2);
+      }
       if (!input?.workspace) throw new Error(`${pod.name}: \`workspace\` is required, or a \`scratch:\` path`);
       return pod.run(input);
     },
