@@ -231,21 +231,25 @@ test("service_logs reads the build gate's logs port, defaulting env in a workspa
       expect(init.headers?.authorization).toBeUndefined();
       return String(url).includes("/nope") ? new Response("{\"error\":\"no such service\"}", { status: 404 }) : new Response("{\"pods\":[]}");
     }) as any;
-    // main: env is required and goes into the path
+    // main: env is required and goes into the path; a name resolves to the id the gate takes
+    routes["GET /v1/environments/e1"] = json({ id: "env-e1" });
+    routes["GET /v1/environments/e9"] = json({ id: "env-e9" });
     const m = platformTools("main");
     expect(await tool(m, "service_logs").run({ env: "e1", name: "web", tail: 50, previous: true })).toBe("{\"pods\":[]}");
-    expect(seen.at(-1)).toBe("/logs/e1/web?tail=50&previous=true");
+    expect(seen.at(-1)).toBe("/logs/env-e1/web?tail=50&previous=true");
+    await tool(m, "service_logs").run({ env: "env-e1", name: "web", tail: 50, previous: true });
+    expect(seen.at(-1)).toBe("/logs/env-e1/web?tail=50&previous=true");
     // a quoted flag reads as the flag: "false" must not ask for the crashed container
     await tool(m, "service_logs").run({ env: "e1", name: "web", previous: "false" });
-    expect(seen.at(-1)).toBe("/logs/e1/web");
+    expect(seen.at(-1)).toBe("/logs/env-e1/web");
     await tool(m, "service_logs").run({ env: "e1", name: "web", previous: "true" });
-    expect(seen.at(-1)).toBe("/logs/e1/web?previous=true");
+    expect(seen.at(-1)).toBe("/logs/env-e1/web?previous=true");
     await expect(tool(m, "service_logs").run({ name: "web" })).rejects.toThrow("`env` is required");
     // workspace: env defaults through the workspace's session
     const t = platformTools("workspace", "w1");
     routes["GET /v1/workspaces/w1"] = json({ team: "acme", session: "ses-1", environment: "e9", packages: [] });
     await tool(t, "service_logs").run({ name: "web" });
-    expect(seen.at(-1)).toBe("/logs/e9/web");
+    expect(seen.at(-1)).toBe("/logs/env-e9/web");
     await expect(tool(t, "service_logs").run({ name: "nope" })).rejects.toThrow(/404: .*no such service/);
   } finally {
     delete process.env.KL_LOGS_URL;
