@@ -10,7 +10,7 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { apiJson, podPost, processNotify, touched as podTouched, type Notify } from "@kloudlite-tui/tools";
+import { apiJson, podPost, processNotify, sessionWorkspaces, touched as podTouched, type Notify } from "@kloudlite-tui/tools";
 
 type Proc = { id: string; cmd?: string; state?: string; exit_code?: number | null; restarted_at?: string | number; started_at?: string | number };
 
@@ -25,6 +25,8 @@ export type WatchDeps = {
   workspace(ws: string): Promise<WsDoc | undefined>;
   /** The session's environment and its state; null when there is none. */
   environment(): Promise<{ name: string; state: string } | null>;
+  /** The session's workspace docs (`GET /v1/workspaces`, session members), read defensively: [] on error. */
+  members?(): Promise<WsDoc[]>;
   notify(msg: string): void;
   notifyOf: Map<string, Notify>;
   now(): number;
@@ -150,6 +152,15 @@ export function createWatch(d: WatchDeps) {
       }
       await workspace(ws, doc, killed);
     }
+    // Every session member gets the lifecycle diff, touched or not: an idle stop lands long after
+    // the last tool call (the 1 h touch window hid the stop of 2026-11-04 13:48Z), and a GET per
+    // member each 10 s is cheap.
+    const ticked = new Set([...d.touched.keys()].filter((ws) => d.now() - d.touched.get(ws)! <= 3_600_000));
+    for (const m of (await d.members?.().catch(() => [])) ?? []) {
+      const id = (m as any).id as string | undefined;
+      if (!id || ticked.has(id)) continue;
+      await workspace(id, m, []);
+    }
     save(false);
     const e = await d.environment().catch(() => undefined);
     if (e !== undefined) {
@@ -179,6 +190,7 @@ export const liveWatch = (notify: (m: string) => void) =>
     stderr: async (ws, id) => String((await podPost<any>(ws, "process_output", { id, since_err: 0 }, 8000))?.stderr ?? ""),
     workspace: (ws) => apiJson<WsDoc>("GET", `/v1/workspaces/${encodeURIComponent(ws)}`),
     environment: sessionEnvironment,
+    members: () => sessionWorkspaces() as Promise<WsDoc[]>,
     notify,
     notifyOf: processNotify,
     now: Date.now,

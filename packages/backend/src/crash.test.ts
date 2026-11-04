@@ -175,3 +175,23 @@ test("the watch persists: a restarted watch reports restarts and stops newer tha
   await mk2()();
   expect(out).toEqual(["[workspace web stopped]"]);
 });
+
+test("a session member nobody touched within the hour still gets its idle stop reported", async () => {
+  const out: string[] = [];
+  let members: any[] = [{ id: "w9", name: "quiet", state: "ready", restarts: [] }];
+  const tick = createWatch({
+    touched: new Map([["w9", 0]]),
+    list: async () => { throw new Error("process_list must not be asked for an untouched member"); },
+    stderr: async () => "",
+    workspace: async () => { throw new Error("workspace() is only for touched members"); },
+    environment: async () => null,
+    members: async () => members,
+    notify: (m) => out.push(m), notifyOf: new Map(), now: () => 10 * 3_600_000,
+  });
+  await tick(); // baseline
+  members = [{ id: "w9", name: "quiet", state: "stopped", restarts: [{ at: "2026-11-04T13:48:23Z", reason: "idle", by: "system", detail: "its session was idle 30 min; starts on next use" }] }];
+  await tick();
+  expect(out).toEqual(["[workspace quiet idle (by system) at 2026-11-04T13:48:23Z: its session was idle 30 min; starts on next use]"]);
+  await tick();
+  expect(out.length).toBe(1);
+});
