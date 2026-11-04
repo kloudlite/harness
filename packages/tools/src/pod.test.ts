@@ -120,7 +120,7 @@ test("anyPodTools: schemas from the sample, each call reaches the named workspac
   expect(t.length).toBe(10);
   const read = t.find((x) => x.name === "read")!;
   expect(read.inputSchema).toEqual({ type: "object", properties: { workspace: { type: "string", description: "The workspace id or name." }, path: {} }, required: ["workspace", "path"] });
-  expect(read.description).toBe("Read a file Runs in the workspace named by `workspace`.");
+  expect(read.description).toBe("Read a file");
   expect(await read.run({ workspace: "w2", path: "a" })).toContain("http://10.0.0.2:7788/tools/read");
   const posted = log.filter((l) => l.url.endsWith("/tools/read")).map((l) => l.url);
   expect(posted).toEqual(["http://10.0.0.2:7788/tools/read"]);
