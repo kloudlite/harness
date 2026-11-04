@@ -264,13 +264,13 @@ function askOpts(deps: DelegateDeps, callerKey: string, a: PendingAsk, key: stri
  * turn between the check and the call, so a refused prompt retries as a followUp instead of losing
  * the reply. Not awaited: a prompt lasts the caller's whole turn. */
 /** The caller's model and settings as they are NOW (the daemon's state is the truth), else as it opened. */
-function callerSettings(deps: DelegateDeps, callerKey: string, caller: SessionOpts) {
+export function callerSettings(deps: DelegateDeps, callerKey: string, caller: SessionOpts) {
   const s = deps.live.get(callerKey)?.state;
   const i = caller.initial ?? {};
   return { model: s?.model ?? i.model, thinkingLevel: s?.thinkingLevel ?? i.thinkingLevel, autoCompact: s?.autoCompact ?? i.autoCompact, codemode: s?.codemode ?? i.codemode };
 }
 
-async function deliver(
+export async function deliver(
   deps: DelegateDeps,
   to: string,
   o: NonNullable<SessionOpts["initial"]>,

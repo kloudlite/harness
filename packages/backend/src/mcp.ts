@@ -6,6 +6,7 @@
 //!
 //! No bench permission cards and no `because` here: the client's own approvals stand in for them.
 import { INSTRUCTIONS, type ToolDef } from "@kloudlite-tui/tools";
+import { drainNotices } from "./crash.ts";
 
 /** Tool annotations (MCP `annotations`): hosted clients decide on them. ChatGPT asks for confirmation on
  * every tool that is not `readOnlyHint`, and Claude shows the hint beside the tool. One table of
@@ -51,10 +52,15 @@ export function mcpServer(tools: () => Promise<ToolDef[]>): (msg: Msg) => Promis
       case "tools/call": {
         const t = (await (last ?? list())).find((t) => t.name === params?.name);
         if (!t) return fail(id, -32602, `unknown tool: ${params?.name}`);
+        // crash notices queued since the last answer ride on this one (no server push on this door)
+        const withNotices = (text: string) => {
+          const n = drainNotices();
+          return n.length ? `notices: ${JSON.stringify(n)}\n${text}` : text;
+        };
         try {
-          return reply(id, { content: [{ type: "text", text: await t.run(params?.arguments ?? {}) }] });
+          return reply(id, { content: [{ type: "text", text: withNotices(await t.run(params?.arguments ?? {})) }] });
         } catch (e: any) {
-          return reply(id, { content: [{ type: "text", text: String(e?.message ?? e) }], isError: true });
+          return reply(id, { content: [{ type: "text", text: withNotices(String(e?.message ?? e)) }], isError: true });
         }
       }
       default:

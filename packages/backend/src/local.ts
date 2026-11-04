@@ -28,7 +28,7 @@ import {
 } from "@kloudlite-tui/agent";
 import { Registry, anyPodTools, platformTools, podTools, scratchRoot, scratchTools, webFetch, webSearch, type ToolDef } from "@kloudlite-tui/tools";
 import { Cards } from "./cards.ts";
-import { WORKSPACE_DIR, delegateTools, resumeAsks, type DelegateDeps } from "./delegate.ts";
+import { WORKSPACE_DIR, callerSettings, deliver, delegateTools, resumeAsks, type DelegateDeps } from "./delegate.ts";
 import { asksDir, listAsks } from "./asks.ts";
 import { forgetSessions } from "./forget.ts";
 import { boardWatcher } from "./watch.ts";
@@ -665,6 +665,13 @@ export class LocalBackend implements Backend {
       tasks: this.#tasks,
       asks: this.#asks,
     };
+  }
+
+  /** A crash notice: into the main session when one is open, else `queue` for the next MCP answer. */
+  notice(msg: string, queue: (m: string) => void): void {
+    const deps = this.#deps();
+    if (!this.#live.has("main")) return queue(msg);
+    void deliver(deps, "main", callerSettings(deps, "main", { tools: [] } as unknown as SessionOpts), msg, "watch");
   }
 
   /** Boot: resend the asks a restart interrupted. Returns once they are started, not finished. */

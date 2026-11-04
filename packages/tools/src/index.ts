@@ -41,7 +41,7 @@ export class Registry {
 }
 export { webFetch, webSearch } from "./web.ts";
 export { api, apiJson, platformTools } from "./platform.ts";
-export { POD_TOOLS, anyPodTools, podTools, podFence, type PodFence, podExec, podGet, podText, podPost, podHold, sessionHold, touched, inflight, type ExecResult } from "./pod.ts";
+export { POD_TOOLS, anyPodTools, podTools, podFence, type PodFence, podExec, podGet, podText, podPost, podHold, sessionHold, touched, inflight, processNotify, type Notify, type ExecResult } from "./pod.ts";
 export { scratchTools, scratchRoot } from "./scratch.ts";
 export { ensureRunning } from "./ensure.ts";
 export { checkArgs, guarded } from "./args.ts";

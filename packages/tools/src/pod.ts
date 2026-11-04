@@ -19,6 +19,26 @@ const FOLDED: Record<string, { description: string; pod: Record<string, string> 
 type Addr = { address: string; token?: string };
 type Listed = { name: string; description?: string; schema?: Record<string, unknown> };
 
+/** Names of the owner's registry connectors (`connector_list`'s call); empty when the listing fails. */
+async function registryNames(): Promise<string[]> {
+  try {
+    const j: any = JSON.parse(await api("GET", "/v1/connectors"));
+    const rows: any[] = Array.isArray(j) ? j : j?.connectors ?? [];
+    return rows.filter((c) => c?.kind === "registry").map((c) => String(c.name ?? c.connector));
+  } catch {
+    return [];
+  }
+}
+
+/** `kl` prints these two sentences (bins/kl/src/registries.rs); the model gets a shape it can act on. */
+export async function mapBuild(j: any): Promise<void> {
+  const err = String(j?.stderr ?? "");
+  const unknown = /no registry named (\S+?);/.exec(err);
+  if (!unknown && !err.includes("no registry is configured")) return;
+  const registries = await registryNames();
+  throw new Mapped(JSON.stringify(unknown ? { error: "unknown_registry", registry: unknown[1], registries } : { error: "no_registry", hint: "connect one in the console under Connectors", registries }));
+}
+
 /** What the tool server says stands between exec and the world (`fence` in `GET /tools`). */
 export type PodFence = { sandbox?: string; network?: string };
 const fences = new Map<string, PodFence>();
@@ -29,8 +49,13 @@ export const podFence = (ws: string): PodFence | undefined => fences.get(ws);
 export const touched = new Map<string, number>();
 /** Calls in flight per workspace: a Claude Code session has no turn in the backend, but its call is running. */
 export const inflight = new Map<string, number>();
+/** Per-process crash-notice choice from `exec`'s `notify`, keyed `{workspace}/{process id}`; the bench's watch (backend/src/watch.ts) reads it. */
+export type Notify = "never" | "on_failure" | "always";
+export const processNotify = new Map<string, Notify>();
+const NOTIFY: Notify[] = ["never", "on_failure", "always"];
 
 class NotReady extends Error {}
+class Mapped extends Error {} // an answer already shaped for the model: not wrapped with the tool name
 
 /** How long the tool will wait, as the pod reads it: `soft_ms` (the hand-off point), else `timeout_ms`, else the aliases
  * (`max_wait_ms` in ms, `timeout_s` and `timeout` in seconds), else the default. The client waits this plus a margin, never less. */
@@ -103,6 +128,14 @@ export async function podTools(ws: string, o: { ensure?: typeof ensureRunning } 
   }
 
   async function call(name: string, args: any): Promise<string> {
+    const label = name.replace(/^(process|watch)_/, "$1 "); // the model calls `process` with an action, never `process_wait`
+    // `notify` is the bench's, not the pod's: keep it, forward the rest
+    let notify: Notify | undefined;
+    if (name === "exec" && args && "notify" in args) {
+      const { notify: n, ...rest } = args;
+      if (NOTIFY.includes(n)) notify = n;
+      args = rest;
+    }
     // exec and a build promote to a process at `soft_ms` (25 s, crates/ide SOFT_MS) rather than running to the end.
     const timeout = name === "exec" || name === "container_build" ? waitMs(args, 25_000) + 15_000
       : name === "process_wait" ? waitMs(args, 20_000) + 15_000
@@ -131,21 +164,29 @@ export async function podTools(ws: string, o: { ensure?: typeof ensureRunning } 
       }
       const text = await res!.text();
       if (res!.ok) {
+        let built: any;
+        let out: string;
         try {
-          return JSON.stringify(JSON.parse(text), null, 2);
+          const j = JSON.parse(text);
+          built = j;
+          if (notify && typeof j?.id === "string") processNotify.set(`${ws}/${j.id}`, notify);
+          out = JSON.stringify(j, null, 2);
         } catch {
-          return text;
+          out = text;
         }
+        if (name === "container_build") await mapBuild(built);
+        return out;
       }
       let msg = text;
       try {
         msg = JSON.parse(text).error ?? text;
       } catch {}
-      throw new Error(`${name} ${res!.status}: ${msg}`);
+      throw new Error(`${label} ${res!.status}: ${msg}`);
     } catch (e: any) {
       // a failed call throws (a codemode script stops, a direct call shows as failed); a command that ran and exited non-zero is a 200 and stays a result
-      if (e instanceof NotReady) throw new Error(`${name}: workspace not ready: ${e.message}`);
-      throw e?.message?.startsWith(`${name} `) ? e : new Error(`${name}: ${e?.message ?? e}`);
+      if (e instanceof Mapped) throw e;
+      if (e instanceof NotReady) throw new Error(`${label}: workspace not ready: ${e.message}`);
+      throw e?.message?.startsWith(`${label} `) ? e : new Error(`${label}: ${e?.message ?? e}`);
     } finally {
       const n = (inflight.get(ws) ?? 1) - 1;
       n > 0 ? inflight.set(ws, n) : inflight.delete(ws);
@@ -175,10 +216,11 @@ export async function podTools(ws: string, o: { ensure?: typeof ensureRunning } 
   return POD_TOOLS.filter((n) => listed.size === 0 || (n in FOLDED ? Object.values(FOLDED[n]!.pod).some((p) => listed.has(p)) : listed.has(n))).map((name) => {
     if (name in FOLDED) return folded(name);
     const t = listed.get(name);
+    const sch: any = withoutAliases(t?.schema) ?? { type: "object", additionalProperties: true };
     return {
       name,
       description: t?.description ? `${t.description} (This tool runs in workspace ${ws}.)` : `This tool runs in workspace ${ws}.`,
-      inputSchema: withoutAliases(t?.schema) ?? { type: "object", additionalProperties: true },
+      inputSchema: name === "exec" && sch.properties ? { ...sch, properties: { ...sch.properties, notify: { type: "string", enum: NOTIFY, description: "Report a detached or promoted process that ends: `on_failure` (default) tells you on a non-zero exit, `always` also on a clean one, `never` stays silent." } } } : sch,
       run: (args: any) => call(name, args),
     };
   });

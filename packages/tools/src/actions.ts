@@ -12,6 +12,8 @@ export type Action = {
   run: (a: any) => Promise<string>;
   /** Keys where an explicit `null` is a value (`session use` with `environment: null` disconnects), not "omitted". */
   nulls?: string[];
+  /** Unlisted spellings read as the listed key (`{snapshot_id: "source"}`): kept out of the schema on purpose. */
+  alias?: Record<string, string>;
 };
 
 /** What the tool knows to say after a refusal from /v1, keyed on the status the message starts with. */
@@ -23,6 +25,14 @@ function hintFor(message: string): string | undefined {
 
 /** The text of a failure: an `Error` whose message is `{error, hint?, schema?}` as JSON. */
 export function failure(message: string, schema?: unknown): Error {
+  // /v1 refuses an out-of-audience call with 403 {error, missing_scope}: pass both on, with where to go instead
+  const m = /^403\b[^{]*(\{.*\})\s*$/s.exec(message);
+  if (m) {
+    try {
+      const j = JSON.parse(m[1]!);
+      if (j?.missing_scope) return new Error(JSON.stringify({ error: j.error ?? message, missing_scope: j.missing_scope, hint: "use the console or the CLI as yourself", ...(schema ? { schema } : {}) }));
+    } catch {}
+  }
   const hint = hintFor(message);
   return new Error(JSON.stringify({ error: message, ...(hint ? { hint } : {}), ...(schema ? { schema } : {}) }));
 }
@@ -58,6 +68,7 @@ export function resource(name: string, description: string, actions: Record<stri
       const a = typeof act === "string" ? actions[act] : undefined;
       if (!a) throw failure(`${name}: \`action\` must be one of ${names.join(", ")}; got ${JSON.stringify(act ?? null)}`);
       const { action: _, ...rest } = input;
+      for (const [from, to] of Object.entries(a.alias ?? {})) if (rest[from] !== undefined) rest[to] ??= rest[from], delete rest[from];
       const kept = (a.nulls ?? []).filter((k) => rest[k] === null);
       const schema = { type: "object", properties: a.properties, required: a.required };
       const c = checkArgs(schema, rest);

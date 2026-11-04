@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { anyPodTools, podGet, podHold, sessionHold, inflight, podTools, touched } from "./pod.ts";
+import { anyPodTools, podGet, podHold, sessionHold, inflight, podTools, touched, processNotify } from "./pod.ts";
 
 const realFetch = globalThis.fetch;
 let log: { url: string; auth: string | null }[] = [];
@@ -234,4 +234,27 @@ test("process and watch fold the pod's per-verb tools; patch and process_close_s
   await expect(proc.run({ action: "wait" })).rejects.toThrow("`id` is required");
   await t[1]!.run({ action: "poll", id: "w1" });
   expect(log.at(-1)!.url).toBe("http://10.0.0.5:7788/tools/watch_poll");
+});
+
+test("exec takes notify, keeps it per process id and does not forward it; container_build maps a missing registry", async () => {
+  const bodies: any[] = [];
+  let stderr = "";
+  handler = (u, init) => {
+    if (u.endsWith("/v1/workspaces/w1/tools")) return j({ address: "10.0.0.5:7788" });
+    if (u.endsWith("/tools")) return j({ tools: [{ name: "exec", schema: { type: "object", properties: { cmd: {} } } }, { name: "container_build", schema: { type: "object" } }] });
+    if (u.endsWith("/v1/connectors")) return j([{ name: "hub", kind: "registry" }, { name: "gh", kind: "git" }]);
+    bodies.push(JSON.parse(init.body));
+    return u.endsWith("/tools/exec") ? j({ id: "p7" }) : j({ exit_code: 1, stderr });
+  };
+  const t = await podTools("w1");
+  const exec = t.find((x) => x.name === "exec")!;
+  expect((exec.inputSchema as any).properties.notify.enum).toEqual(["never", "on_failure", "always"]);
+  await exec.run({ cmd: "sleep 3", detach: true, notify: "always" });
+  expect(bodies[0]).toEqual({ cmd: "sleep 3", detach: true });
+  expect(processNotify.get("w1/p7")).toBe("always");
+  const build = t.find((x) => x.name === "container_build")!;
+  stderr = "kl: no registry is configured";
+  expect(JSON.parse((await build.run({}).catch((e) => e)).message)).toEqual({ error: "no_registry", hint: "connect one in the console under Connectors", registries: ["hub"] });
+  stderr = "kl: no registry named nope; connected: hub";
+  expect(JSON.parse((await build.run({}).catch((e) => e)).message)).toEqual({ error: "unknown_registry", registry: "nope", registries: ["hub"] });
 });

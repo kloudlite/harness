@@ -671,3 +671,14 @@ test("env create with wait answers the created object and a hint when the sessio
   expect(out.id).toBe("env-new");
   expect(out.hint).toContain("session");
 });
+
+test("env restore takes source; snapshot_id is an unlisted alias", async () => {
+  routes["POST /v1/environments/e1/restore"] = json({ ok: 1 });
+  routes["GET /v1/environments/e1"] = json({ id: "e1", services: [] });
+  const t = platformTools("main");
+  await tool(t, "env").run({ action: "restore", env: "e1", source: "pg@2" });
+  await tool(t, "env").run({ action: "restore", env: "e1", snapshot_id: "snap-9" });
+  expect(calls.filter((c) => c.url === "/v1/environments/e1/restore").map((c) => c.body.snapshot_id)).toEqual(["pg@2", "snap-9"]);
+  const props = (t.find((x) => x.name === "env")!.inputSchema as any).properties;
+  expect(props.snapshot_id).toBeUndefined();
+});

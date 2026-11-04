@@ -304,11 +304,13 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
     return g.doc.environment ? { env: g.doc.environment } : { err: "error: this workspace's session has no environment" };
   };
   const ENVP = ws ? { ...ENV, description: "The environment id or name. Default: the environment of this workspace's session." } : ENV;
-  const eact = (props: Props, req: string[], run: (env: string, a: any) => Promise<string>) =>
-    act({ env: ENVP, ...props }, ws ? req : ["env", ...req], async (a) => {
+  const eact = (props: Props, req: string[], run: (env: string, a: any) => Promise<string>, alias?: Record<string, string>): Action => ({
+    ...act({ env: ENVP, ...props }, ws ? req : ["env", ...req], async (a) => {
       const e = await envOf(a);
       return "err" in e ? e.err : run(seg(e.env), a);
-    });
+    }),
+    ...(alias ? { alias } : {}),
+  });
   /** `env get` as a poll reads it: services carry `ready` from service_status. */
   const envView = async (env: string) => withReady(await api("GET", `/v1/environments/${env}`));
   const waitEnv = (env: string, a: any) => pollUntil(() => envView(env), envDone, timeoutMs(a), tickMs);
@@ -432,8 +434,8 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
               const snapshot = JSON.parse(await api("POST", `/v1/environments/${env}/snapshots`, strip({ message: a.message, volume: a.volume })));
               return JSON.stringify({ ...JSON.parse(await envView(env)), snapshot }, null, 2);
             }),
-            restore: eact({ snapshot_id: { type: "string", description: "A volume name, `name@N` or a snapshot id." }, discard: { type: "array", items: S, description: "Names of the services from the 409 `lost` list whose data you accept losing." }, ...WAITING }, ["snapshot_id"], async (env, a) =>
-              thenWaitEnv(await api("POST", `/v1/environments/${env}/restore`, strip({ snapshot_id: a.snapshot_id, discard: a.discard })), a, env, true)),
+            restore: eact({ source: { type: "string", description: "A volume name, `name@N` or a snapshot id." }, discard: { type: "array", items: S, description: "Names of the services from the 409 `lost` list whose data you accept losing." }, ...WAITING }, ["source"], async (env, a) =>
+              thenWaitEnv(await api("POST", `/v1/environments/${env}/restore`, strip({ snapshot_id: a.source, discard: a.discard })), a, env, true), { snapshot_id: "source" }),
           }),
   );
 

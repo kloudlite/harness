@@ -14,6 +14,7 @@ import { createServer, type Server, type Socket } from "node:net";
 import type { Backend } from "./index.ts";
 import { serve } from "./serve.ts";
 import { Peer } from "./wire.ts";
+import { liveWatch, queueNotice } from "./crash.ts";
 import { inflight, podHold, sessionHold, touched } from "@kloudlite-tui/tools";
 
 export const sockPath = () => process.env.KL_HOST_SOCK ?? join(homedir(), ".kl", "host.sock");
@@ -125,5 +126,7 @@ if (import.meta.main) {
     beat();
     if (++ticks % 12 === 0) hold();
   }, 5000);
+  const watch = liveWatch((m) => b.notice(m, queueNotice));
+  setInterval(() => void watch().catch(() => {}), 10_000);
   await b.resumeAsks();
 }
