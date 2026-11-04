@@ -12,7 +12,7 @@ One tool per resource. `action` picks the verb; the arguments below are the unio
 
 | Tool | Arguments | Answers |
 |---|---|---|
-| `workspace` | `action`, `workspace?`, `name?`, `quota_gb?`, `image?`, `packages?`, `team?`, `source?`, `task?`, `snapshot_id?`, `ttl_secs?`, `clear?`, `message?`, `volume?`, `wait?`, `soft_ms?`, `timeout_ms?` | `list`, `get` (state, packages, volume, `restart_required`), `create` (a managed workspace in a session; with `source` a standalone copy), `restore` (from `snapshot_id`), `start`, `stop`, `restart` (to read new variables), `delete`, `wait`, `ttl`, `snapshot` (`volume` names the volume on its first push) |
+| `workspace` | `action`, `workspace?`, `name?`, `quota_gb?`, `image?`, `packages?`, `team?`, `source?`, `task?`, `snapshot_id?`, `ttl_secs?`, `clear?`, `message?`, `volume?`, `wait?`, `soft_ms?`, `timeout_ms?` | `list`, `get` (state, `restarts`, `packages_missing`, packages, volume, `restart_required`), `create` (a managed workspace in a session; with `source` a standalone copy), `restore` (from `snapshot_id`), `start`, `stop`, `restart` (to read new variables), `delete`, `wait`, `ttl`, `snapshot` (`volume` names the volume on its first push) |
 | `workspace_vars` | `action`, `workspace`, `variables?`, `replace?`, `restart_on_change?` | `get`: the stored variables; a secret shows as its reference. `set`: merges; `replace: true` replaces the set; a secret is the whole value `${{ secrets.NAME }}` |
 | `worktree` | `action`, `workspace`, `name` | `add`, `drop`: a second branch checkout inside one workspace |
 
@@ -24,19 +24,19 @@ One tool per resource. `action` picks the verb; the arguments below are the unio
 | `write` | `workspace`, `path`, `content` | Creates or overwrites one file |
 | `edit` | `workspace`, `files` | Exact text replacements, all or none |
 | `glob`, `grep` | `workspace`, pattern | Matching files, matching lines |
-| `exec` | `workspace`, `cmd`, `cwd?`, `env?`, `soft_ms?`, `detach?`, `head?`, `tail?`, `quiet?` | Output and exit code; past `soft_ms` (25 s) `promoted: true`, `kind: "process"` and a process `id`; with `detach`, a process id |
-| `process` | `action`, `workspace`, `id?`, `timeout_ms?`, `since?`, `since_err?` | `list`, `output` (from an offset), `write`, `close_stdin`, `kill`; `wait` waits for the exit (20 s at most per call), answers `state`, `exit_code`, the new output and `next`/`next_err`; repeat while `timed_out`; an id that ended or never existed answers `state: "gone"` |
+| `exec` | `workspace`, `cmd`, `cwd?`, `env?`, `soft_ms?`, `detach?`, `head?`, `tail?`, `quiet?`, `notify?` | Output and exit code; past `soft_ms` (25 s) `promoted: true`, `kind: "process"` and a process `id`; with `detach`, a process id |
+| `process` | `action`, `workspace`, `id?`, `timeout_ms?`, `since?`, `since_err?` | `list`, `output` (from an offset), `write`, `close_stdin`, `kill`; `wait` waits for the exit (20 s at most per call), answers `state`, `exit_code`, the new output and `next`/`next_err`; repeat while `timed_out`; an id that ended or never existed answers `state: "gone"`; one that a workspace restart killed answers `state: "killed_by_restart"` with `restarted_at`. Any tool answer can start with `notices` (crashed or killed processes) |
 | `watch` | `action`, `workspace` | `start`, `poll`, `stop`: a file or command watch |
-| `packages` | `action`, `workspace`, `packages?` | `list`, `add`, `remove`, `update`: entries `attr` or `attr@version` |
-| `container_build` | `workspace`, `tags`, `soft_ms?` | Builds and pushes to the registry connector; past `soft_ms` it hands off like `exec`, kind `process` |
+| `packages` | `action`, `workspace`, `packages?` | `list` (also `missing`: entries with no binary), `add`, `remove`, `update`: entries `attr` or `attr@version` |
+| `container_build` | `workspace`, `tags`, `soft_ms?` | Builds and pushes to the registry connector; past `soft_ms` it hands off like `exec`, kind `process`; fails with `no_registry` or `unknown_registry` and the connected `registries` |
 | `container_push` | `workspace`, `src`, `dst` | Copies an image to more names |
-| `builder_status` | `team?` | Why a build waits |
+| `builder_status` | `team?` | Why a build waits: `auto_start`, `idle_since`, `reason` |
 
 ## Environments
 
 | Tool | Arguments | Answers |
 |---|---|---|
-| `env` | `action`, `env?`, `name?`, `services?`, `snapshot_id?`, `quota_gb?`, `team?`, `region?`, `source?`, `ttl_secs?`, `clear?`, `message?`, `volume?`, `discard?`, `wait?`, `soft_ms?`, `timeout_ms?` | `list`, `get` (services, state, `interceptedBy`, `proxy`, `restart_required`, `volume`), `create` (a service is `{name, image, ports, env, mounts, command}`; with `source`: an environment copies it, a snapshot id restores it), `start`, `stop`, `delete`, `wait` (`timed_out: true` at the limit), `ttl`, `snapshot`, `restore` (in place; `409 lost` lists services that lose data, `discard` accepts it) |
+| `env` | `action`, `env?`, `name?`, `services?`, `quota_gb?`, `team?`, `region?`, `source?`, `ttl_secs?`, `clear?`, `message?`, `volume?`, `discard?`, `wait?`, `soft_ms?`, `timeout_ms?` | `list`, `get` (services, state, `interceptedBy`, `proxy`, `restart_required`, `volume`), `create` (a service is `{name, image, ports, env, mounts, command}`; with `source`: an environment copies it, a snapshot id restores it), `start`, `stop`, `delete`, `wait` (`timed_out: true` at the limit), `ttl`, `snapshot`, `restore` (in place, `source` is the snapshot id; `409 lost` lists services that lose data, `discard` accepts it) |
 | `service` | `action`, `env`, `service?`, `name?`, `restart?`, `tail?`, `since?`, `previous?`, `wait?`, `soft_ms?` | `add` and `update` (replaces by name; `restart: true` restarts it to read new variables) take `service`; `remove` and `logs` take `name`; `logs` takes `tail` (2000 max), `since` (seconds), `previous` |
 
 ## Intercepts and volumes

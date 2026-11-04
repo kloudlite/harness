@@ -65,7 +65,7 @@ Every scenario ends with its cleanup. To check a result, use `kloudlite-verify`.
 4. When done: `process` action `kill`.
 
 **Done when:** the output shows the process connected to `db`.
-**If it fails:** a name that does not resolve: scenario 3. The process exits: read its output, fix, start again. At most 32 processes.
+**If it fails:** a name that does not resolve: scenario 3. A workspace also resolves another workspace of the same owner by name, for example `http://blog-backend:8080`, and the name follows a restart. The process exits: read its output, fix, start again. At most 32 processes.
 
 ### 5. Intercept one service
 

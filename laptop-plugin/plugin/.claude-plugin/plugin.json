@@ -1,6 +1,6 @@
 {
   "name": "kloudlite",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Kloudlite workspaces, environments and sessions from Claude Code: the remote kl MCP server and the skills; sign in in the browser on the first tool call.",
   "author": { "name": "Kloudlite" },
   "homepage": "https://github.com/kloudlite/harness",
