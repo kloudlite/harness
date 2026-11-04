@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { anyPodTools, podGet, podHold, sessionHold, inflight, podTools, touched, processNotify } from "./pod.ts";
+import { anyPodTools, podGet, podHold, sessionHold, inflight, podTools, touched, processNotify, retryDelays } from "./pod.ts";
 
 const realFetch = globalThis.fetch;
 let log: { url: string; auth: string | null }[] = [];
@@ -58,11 +58,34 @@ test("a network error re-fetches the address once and retries once", async () =>
   const t = await podTools("w1");
   expect(await t.find((x) => x.name === "exec")!.run({ cmd: "ls" })).toContain("done");
   expect(addr).toBe(2);
-  // a second failure is not retried again
+  // a persistent failure gives up after the backoff is spent
+  const saved = retryDelays.splice(0, 4, 0, 0, 0, 0);
   handler = () => {
     throw new TypeError("down");
   };
   await expect(t[0]!.run({})).rejects.toThrow("down");
+  retryDelays.splice(0, 4, ...saved);
+});
+
+test("a restarting tool server is retried with a fresh address until it answers", async () => {
+  const saved = retryDelays.splice(0, 4, 0, 0, 0, 0);
+  let posts = 0;
+  handler = (u) => {
+    if (u.endsWith("/v1/workspaces/w1/tools")) return j({ address: "10.0.0.1:7788" });
+    if (u.endsWith("/tools")) return j({ tools: [] });
+    if (++posts <= 2) throw new TypeError("Unable to connect");
+    return j({ done: true });
+  };
+  const t = await podTools("w1");
+  expect(await t.find((x) => x.name === "exec")!.run({ cmd: "ls" })).toContain("done");
+  expect(posts).toBe(3);
+  retryDelays.splice(0, 4, ...saved);
+});
+
+test("exec lists notify even when the pod gave no schema", async () => {
+  handler = () => j({ error: "workspace not ready" }, 409);
+  const t = await podTools("w1");
+  expect((t.find((x) => x.name === "exec")!.inputSchema as any).properties.notify.enum).toEqual(["never", "on_failure", "always"]);
 });
 
 test("a timeout is never resent: the pod may still be running the first call", async () => {

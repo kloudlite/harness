@@ -6,7 +6,7 @@
 //! `notices` for the next MCP tool answer (mcp.ts), which has no server-to-client push.
 import { apiJson, podPost, processNotify, touched as podTouched, type Notify } from "@kloudlite-tui/tools";
 
-type Proc = { id: string; cmd?: string; state?: string; exit_code?: number | null; restarted_at?: string | number };
+type Proc = { id: string; cmd?: string; state?: string; exit_code?: number | null; restarted_at?: string | number; started_at?: string | number };
 
 export type WatchDeps = {
   touched: Map<string, number>;
@@ -24,7 +24,10 @@ const queue: string[] = [];
 export const queueNotice = (m: string) => void (queue.push(m), queue.length > 50 && queue.shift());
 export const drainNotices = (): string[] => queue.splice(0);
 
-const ms = (t: string | number | undefined) => (typeof t === "number" ? (t < 1e12 ? t * 1000 : t) : Date.parse(String(t)));
+const ms = (t: string | number | undefined) => {
+  const n = typeof t === "number" ? t : /^\d+(\.\d+)?$/.test(String(t)) ? Number(t) : NaN;
+  return Number.isNaN(n) ? Date.parse(String(t)) : n < 1e12 ? n * 1000 : n;
+};
 const tail = (s: string, n = 20) => s.trimEnd().split("\n").slice(-n).join("\n");
 
 export function createWatch(d: WatchDeps) {
@@ -53,7 +56,8 @@ export function createWatch(d: WatchDeps) {
             if (mode === "never") continue;
             const reason = (await d.restarts(ws).catch(() => [])).find((r) => Math.abs(ms(r.at) - ms(p.restarted_at)) <= 60_000)?.reason;
             d.notify(`[process ${p.id} in ${ws} killed by a workspace restart at ${p.restarted_at}${reason ? `, ${reason}` : ""}] ${cmd}`);
-          } else if (state === "exited" && prior === "running") {
+          } else if (state === "exited" && (prior === "running" || (prior === undefined && d.now() - ms(p.started_at) <= 3_600_000))) {
+            // first seen already exited (a short process between two beats): report it once if it started within the hour
             const code = p.exit_code ?? -1;
             if (mode === "never" || (mode === "on_failure" && code === 0)) continue;
             const err = tail(await d.stderr(ws, p.id).catch(() => ""));

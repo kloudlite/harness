@@ -34,6 +34,15 @@ test("notify always reports a clean exit, never stays silent; an exec seen first
   expect(w.out.map((m) => m.split("]")[0])).toEqual(["[process a in w1 exited 0", "[process q in w1 exited 2"]);
 });
 
+test("a process first seen already exited 7 reports once", async () => {
+  const w = setup();
+  w.set([{ id: "s", cmd: "sh -c 'sleep 3; exit 7'", state: "exited", exit_code: 7, started_at: "30" }]);
+  await w.tick();
+  await w.tick();
+  expect(w.out.length).toBe(1);
+  expect(w.out[0]).toStartWith("[process s in w1 exited 7]");
+});
+
 test("killed_by_restart is reported once, with the reason when within a minute", async () => {
   const w = setup();
   w.set([{ id: "k", cmd: "make", state: "killed_by_restart", restarted_at: "2026-11-04T10:00:00Z" }]);

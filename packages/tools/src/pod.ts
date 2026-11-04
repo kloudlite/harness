@@ -52,6 +52,8 @@ export const inflight = new Map<string, number>();
 /** Per-process crash-notice choice from `exec`'s `notify`, keyed `{workspace}/{process id}`; the bench's watch (backend/src/watch.ts) reads it. */
 export type Notify = "never" | "on_failure" | "always";
 export const processNotify = new Map<string, Notify>();
+/** Backoff before each re-resolve after a network error (tests shorten it). */
+export const retryDelays = [2000, 4000, 8000, 16000];
 const NOTIFY: Notify[] = ["never", "on_failure", "always"];
 
 class NotReady extends Error {}
@@ -148,6 +150,7 @@ export async function podTools(ws: string, o: { ensure?: typeof ensureRunning } 
       // Never after our own timeout: the pod got the call and may still be running it, so a resend
       // runs a second `go test` beside the first (2026-10-10: one exec became nine minutes).
       let woke = false;
+      let netTries = 0;
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
           res = await post(name, args, timeout);
@@ -158,7 +161,13 @@ export async function podTools(ws: string, o: { ensure?: typeof ensureRunning } 
             woke = true;
             await (o.ensure ?? ensureRunning)("workspaces", ws);
             attempt--;
-          } else if (e instanceof NotReady || attempt || e?.name === "TimeoutError") throw e;
+          } else if (e instanceof NotReady || e?.name === "TimeoutError") throw e;
+          else if (attempt) {
+            // a container-only restart keeps pod and IP but the tool server is back only after seconds: 2+4+8+16 s, re-resolving each time
+            if (netTries >= retryDelays.length) throw e;
+            await new Promise((r) => setTimeout(r, retryDelays[netTries++]));
+            attempt--;
+          }
         }
         cache = undefined;
       }
@@ -220,7 +229,7 @@ export async function podTools(ws: string, o: { ensure?: typeof ensureRunning } 
     return {
       name,
       description: t?.description ? `${t.description} (This tool runs in workspace ${ws}.)` : `This tool runs in workspace ${ws}.`,
-      inputSchema: name === "exec" && sch.properties ? { ...sch, properties: { ...sch.properties, notify: { type: "string", enum: NOTIFY, description: "Report a detached or promoted process that ends: `on_failure` (default) tells you on a non-zero exit, `always` also on a clean one, `never` stays silent." } } } : sch,
+      inputSchema: name === "exec" ? { ...sch, properties: { ...sch.properties, notify: { type: "string", enum: NOTIFY, description: "Report a detached or promoted process that ends: `on_failure` (default) tells you on a non-zero exit, `always` also on a clean one, `never` stays silent." } } } : sch,
       run: (args: any) => call(name, args),
     };
   });
