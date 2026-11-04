@@ -69,6 +69,14 @@ export async function apiJson<T>(method: string, path: string, body?: unknown): 
 
 export const seg = encodeURIComponent;
 
+/** The workspaces `workspace list` shows: a session (KL_SESSION) serves its own members only, as the sidebar does
+ * (backend/src/session.ts); without it a second session saw the first one's. `status` reads the same rows. */
+export async function sessionWorkspaces(team?: string): Promise<any[]> {
+  const all = await apiJson<any[]>("GET", `/v1/workspaces${qs({ team })}`);
+  const session = process.env.KL_SESSION;
+  return session ? all.filter((w) => w.session === session && w.id !== process.env.KL_BENCH) : all;
+}
+
 const NO_SESSION = "no session is set (KL_SESSION is not set)";
 
 /** The bench's own session: a bench belongs to one session and never joins another, so `session use`
@@ -369,15 +377,7 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
       ws
         ? { ...(noStop ? {} : { stop: stopAct }), snapshot: snapAct }
         : {
-            list: act({ team: S }, [], async (a) => {
-              // A session serves its own workspaces (KL_SESSION): it lists that session's workspaces only, as the
-              // sidebar does (backend/src/session.ts); without it a second session saw the first one's.
-              const path = `/v1/workspaces${qs({ team: a.team })}`;
-              const session = process.env.KL_SESSION;
-              if (!session) return api("GET", path);
-              const all = await apiJson<any[]>("GET", path);
-              return JSON.stringify(all.filter((w) => w.session === session && w.id !== process.env.KL_BENCH), null, 2);
-            }),
+            list: act({ team: S }, [], async (a) => JSON.stringify(await sessionWorkspaces(a.team), null, 2)),
             get: mact({}, [], async (a) => api("GET", `/v1/workspaces/${seg(a.workspace)}`)),
             // In a session (KL_SESSION) a workspace is created and deleted THROUGH it, so it is managed: a
             // direct create would be standalone and then refused by this session's own tools, and a direct

@@ -71,6 +71,7 @@ test("a restarting tool server is retried with a fresh address until it answers"
   const saved = retryDelays.splice(0, 4, 0, 0, 0, 0);
   let posts = 0;
   handler = (u) => {
+    if (u.endsWith("/v1/workspaces/w1")) return j({ id: "w1" });
     if (u.endsWith("/v1/workspaces/w1/tools")) return j({ address: "10.0.0.1:7788" });
     if (u.endsWith("/tools")) return j({ tools: [] });
     if (++posts <= 2) throw new TypeError("Unable to connect");
@@ -91,6 +92,7 @@ test("exec lists notify even when the pod gave no schema", async () => {
 test("a timeout is never resent: the pod may still be running the first call", async () => {
   let posts = 0;
   handler = (u) => {
+    if (u.endsWith("/v1/workspaces/w1")) return j({ id: "w1" });
     if (u.endsWith("/v1/workspaces/w1/tools")) return j({ address: "10.0.0.1:7788" });
     if (u.endsWith("/tools")) return j({ tools: [] });
     posts++;
@@ -280,4 +282,20 @@ test("exec takes notify, keeps it per process id and does not forward it; contai
   expect(JSON.parse((await build.run({}).catch((e) => e)).message)).toEqual({ error: "no_registry", hint: "connect one in the console under Connectors", registries: ["hub"] });
   stderr = "kl: no registry named nope; connected: hub";
   expect(JSON.parse((await build.run({}).catch((e) => e)).message)).toEqual({ error: "unknown_registry", registry: "nope", registries: ["hub"] });
+});
+
+test("a workspace spelled by name is keyed by its id; a detached exec defaults to on_failure; a killed process goes quiet", async () => {
+  handler = (u) => {
+    if (u.endsWith("/v1/workspaces/web-app")) return j({ id: "w9" });
+    if (u.endsWith("/v1/workspaces/web-app/tools")) return j({ address: "10.0.0.5:7788" });
+    if (u.endsWith("/tools")) return j({ tools: [] });
+    return u.endsWith("/tools/exec") ? j({ id: "p1" }) : j({});
+  };
+  const t = await podTools("web-app");
+  await t.find((x) => x.name === "exec")!.run({ cmd: "sleep 9", detach: true });
+  expect(touched.has("w9")).toBe(true);
+  expect(touched.has("web-app")).toBe(false);
+  expect(processNotify.get("w9/p1")).toBe("on_failure");
+  await t.find((x) => x.name === "process")!.run({ action: "kill", id: "p1" });
+  expect(processNotify.get("w9/p1")).toBe("never");
 });

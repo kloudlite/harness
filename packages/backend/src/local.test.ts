@@ -105,7 +105,7 @@ test("registry per session kind", async () => {
   expect(main).not.toContain("subagent");
   // a subagent talks only to its workspace session: none of these, everything else the workspace has
   const sub = (await registryFor({ kind: "subagent", ws: "w1" }, deps, opts)).names();
-  for (const n of ["subagent", "workspace_ask", "main_tell", "intercept", "release", "question", "task"]) expect(sub).not.toContain(n);
+  for (const n of ["subagent", "main_tell", "intercept", "release", "question", "task"]) expect(sub).not.toContain(n);
   for (const n of ws.filter((n) => !["subagent", "main_tell", "intercept", "release", "question", "task"].includes(n))) expect(sub).toContain(n);
   expect(acts(await registryFor({ kind: "subagent", ws: "w1" }, deps, opts), "workspace")).toEqual(["snapshot"]);
   expect(sub).toContain("exec");
@@ -408,15 +408,15 @@ const BENCH_TOOLS = [
   "workspace", "env", "session", "sandbox", "service", "volume", "snapshot", "pipeline", "run", "worktree", "packages", "workspace_vars",
   "process", "watch", "task", "read", "write", "edit", "exec", "glob", "grep", "container_build", "container_push", "builder_status",
   "connector_list", "regions", "quota", "secret_set", "secret_list", "secret_delete", "request_create", "request_get", "requests_list",
-  "intercept", "webhook_rotate", "workspace_ask", "web_fetch", "web_search", "scratch_bash", "status",
+  "intercept", "webhook_rotate", "web_fetch", "web_search", "scratch_bash", "status",
 ];
 
-test("the bench tool list is the spec's 40 names, each described in under 300 characters, with no `because`", async () => {
+test("the bench tool list is the spec's 39 names, each described in under 300 characters, with no `because`", async () => {
   const deps = { live: new Map(), busy: new Set<string>(), open: async () => null as never, permit: async () => ({}), tasks: mkdtempSync(join(tmpdir(), "kl-mcp-")) };
   const tools = await mcpTools(deps);
   const names = tools.map((t) => t.name);
   expect([...names].sort()).toEqual([...BENCH_TOOLS].sort());
-  expect(names.length).toBe(40);
+  expect(names.length).toBe(39);
   const wanders = ["timeout", "timeout_s", "max_wait_ms"];
   for (const t of tools) for (const k of wanders) expect(`${t.name}.${k}: ${(t.inputSchema as any).properties?.[k] ? "listed" : "absent"}`).toBe(`${t.name}.${k}: absent`);
   for (const t of tools) {

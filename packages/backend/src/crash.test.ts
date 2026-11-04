@@ -1,25 +1,28 @@
 import { expect, test } from "bun:test";
-import { createWatch, drainNotices, queueNotice } from "./crash.ts";
+import { createWatch, drainNotices, queueNotice, record, recentNotices } from "./crash.ts";
 import { mcpServer } from "./mcp.ts";
 
-const setup = (notifyOf = new Map<string, any>()) => {
+const setup = (notifyOf = new Map<string, any>([["w1/p1", "on_failure"], ["w1/p2", "on_failure"], ["w1/s", "on_failure"]])) => {
   let procs: any[] = [];
+  let ws: any = { name: "web", state: "ready", restarts: [] };
+  let env: any = null;
   const out: string[] = [];
   const tick = createWatch({
     touched: new Map([["w1", 1000], ["old", 0]]),
-    list: async (ws) => { if (ws === "old") throw new Error("must not be asked"); return procs; },
+    list: async (id) => { if (id === "old") throw new Error("must not be asked"); return procs; },
     stderr: async () => Array.from({ length: 30 }, (_, i) => `e${i}`).join("\n"),
-    restarts: async () => [{ at: "2026-11-04T10:00:30Z", reason: "env-changed" }],
+    workspace: async () => ws,
+    environment: async () => env,
     notify: (m) => out.push(m), notifyOf, now: () => 1000 + 60_000,
   });
-  return { tick, out, set: (p: any[]) => (procs = p) };
+  return { tick, out, set: (p: any[]) => (procs = p), ws: (w: any) => (ws = { ...ws, ...w }), env: (e: any) => (env = e) };
 };
 
 test("running -> exited 7 reports once with the last 20 stderr lines; a clean exit is silent", async () => {
   const w = setup();
-  w.set([{ id: "p1", cmd: "sh -c 'exit 7'", state: "running" }, { id: "p2", cmd: "true", state: "running" }]);
+  w.set([{ id: "p1", cmd: "sh -c 'exit 7'", state: "running", started_at: "1" }, { id: "p2", cmd: "true", state: "running", started_at: "1" }]);
   await w.tick();
-  w.set([{ id: "p1", cmd: "sh -c 'exit 7'", state: "exited", exit_code: 7 }, { id: "p2", cmd: "true", state: "exited", exit_code: 0 }]);
+  w.set([{ id: "p1", cmd: "sh -c 'exit 7'", state: "exited", exit_code: 7, started_at: "1" }, { id: "p2", cmd: "true", state: "exited", exit_code: 0, started_at: "1" }]);
   await w.tick();
   await w.tick();
   expect(w.out.length).toBe(1);
@@ -27,28 +30,60 @@ test("running -> exited 7 reports once with the last 20 stderr lines; a clean ex
   expect(w.out[0]!.split("\n").length).toBe(21);
 });
 
-test("notify always reports a clean exit, never stays silent; an exec seen first when already exited still reports", async () => {
+test("a plain exec that exited 1 (no registered key) is silent; never is silent; default and always report", async () => {
   const w = setup(new Map([["w1/a", "always"], ["w1/n", "never"], ["w1/q", "on_failure"]]));
-  w.set([{ id: "a", cmd: "ok", state: "exited", exit_code: 0 }, { id: "n", cmd: "bad", state: "exited", exit_code: 1 }, { id: "q", cmd: "bad", state: "exited", exit_code: 2 }]);
+  w.set([{ id: "plain", cmd: "false", state: "exited", exit_code: 1, started_at: "30" }, { id: "a", cmd: "ok", state: "exited", exit_code: 0, started_at: "30" }, { id: "n", cmd: "bad", state: "exited", exit_code: 1, started_at: "30" }, { id: "q", cmd: "bad", state: "exited", exit_code: 2, started_at: "30" }]);
   await w.tick();
   expect(w.out.map((m) => m.split("]")[0])).toEqual(["[process a in w1 exited 0", "[process q in w1 exited 2"]);
 });
 
-test("a process first seen already exited 7 reports once", async () => {
+test("one exit is one notice: a process seen exited, running and exited again with the same started_at", async () => {
   const w = setup();
-  w.set([{ id: "s", cmd: "sh -c 'sleep 3; exit 7'", state: "exited", exit_code: 7, started_at: "30" }]);
+  const p = (state: string) => [{ id: "s", cmd: "x", state, exit_code: 7, started_at: "30" }];
+  w.set(p("exited"));
   await w.tick();
+  w.set(p("running"));
+  await w.tick();
+  w.set(p("exited"));
   await w.tick();
   expect(w.out.length).toBe(1);
-  expect(w.out[0]).toStartWith("[process s in w1 exited 7]");
 });
 
-test("killed_by_restart is reported once, with the reason when within a minute", async () => {
+test("killed_by_restart alone is reported once with the reason; a new restart folds it in with the process ids", async () => {
   const w = setup();
+  w.ws({ restarts: [{ at: "2026-11-04T10:00:00Z", reason: "env-changed" }] });
   w.set([{ id: "k", cmd: "make", state: "killed_by_restart", restarted_at: "2026-11-04T10:00:00Z" }]);
   await w.tick();
   await w.tick();
-  expect(w.out).toEqual(["[process k in w1 killed by a workspace restart at 2026-11-04T10:00:00Z, env-changed] make"]);
+  expect(w.out).toEqual(["[process k in web killed by a workspace restart at 2026-11-04T10:00:00Z, env-changed] make"]);
+  w.out.length = 0;
+  w.set([{ id: "k", cmd: "make", state: "killed_by_restart", restarted_at: "2026-11-04T10:05:00Z" }]);
+  w.ws({ restarts: [{ at: "2026-11-04T10:00:00Z", reason: "env-changed" }, { at: "2026-11-04T10:05:00Z", reason: "requested", by: "agent", detail: "vars" }] });
+  await w.tick();
+  expect(w.out).toEqual(["[workspace web requested (by agent) at 2026-11-04T10:05:00Z: vars; killed processes: k]"]);
+});
+
+test("workspace and environment lifecycle: the first read baselines, later changes report", async () => {
+  const w = setup();
+  w.env({ name: "stage", state: "running" });
+  await w.tick();
+  expect(w.out).toEqual([]);
+  w.ws({ state: "stopped" });
+  w.env({ name: "stage", state: "stopped" });
+  await w.tick();
+  await w.tick();
+  expect(w.out).toEqual(["[workspace web stopped]", "[environment stage stopped]"]);
+  w.ws({ state: "ready", restarts: [{ at: "2026-11-04T11:00:00Z", reason: "idle-resume" }] });
+  await w.tick();
+  expect(w.out.at(-1)).toBe("[workspace web idle-resume at 2026-11-04T11:00:00Z]");
+});
+
+test("record keeps a delivered notice read, an undelivered one unread", () => {
+  drainNotices();
+  record("[delivered]", true);
+  record("[queued]", false);
+  expect(recentNotices()).toEqual(["[queued]"]);
+  expect(recentNotices(true)).toContain("[delivered]");
 });
 
 test("queued notices ride on the next MCP tool answer, then clear", async () => {
@@ -56,16 +91,56 @@ test("queued notices ride on the next MCP tool answer, then clear", async () => 
   queueNotice("[process p in w exited 7] x");
   const mcp = mcpServer(async () => [{ name: "echo", description: "", inputSchema: { type: "object" }, run: async () => "hi" }]);
   const call = () => mcp({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "echo" } }) as any;
-  expect((await call()).result.content[0].text).toBe('notices: ["[process p in w exited 7] x"]\nhi');
-  expect((await call()).result.content[0].text).toBe("hi");
+  expect((await call()).result.content).toEqual([{ type: "text", text: "hi" }, { type: "text", text: 'notices: ["[process p in w exited 7] x"]' }]);
+  expect((await call()).result.content).toEqual([{ type: "text", text: "hi" }]);
+  queueNotice("[n]");
+  const bad = mcpServer(async () => [{ name: "boom", description: "", inputSchema: { type: "object" }, run: async () => { throw new Error("409 busy"); } }]);
+  const r = (await bad({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "boom" } })) as any;
+  expect(r.result.content).toEqual([{ type: "text", text: "409 busy" }, { type: "text", text: 'notices: ["[n]"]' }]);
+  expect(r.result.isError).toBe(true);
 });
 
 test("a queued notice appears in status once; all re-lists it", async () => {
   const { statusTool } = await import("./status.ts");
   drainNotices();
+  record("[process p in w exited 9] y", false);
   queueNotice("[process p in w exited 9] y");
   const notices = async (a: object) => JSON.parse(await statusTool.run(a)).notices;
   expect(await notices({})).toEqual(["[process p in w exited 9] y"]);
   expect(await notices({})).toEqual([]);
   expect(await notices({ all: true })).toContain("[process p in w exited 9] y");
+});
+
+test("status lists the session's workspaces and their running processes by name, unioned with touched ones", async () => {
+  const { statusTool } = await import("./status.ts");
+  const { touched } = await import("@kloudlite-tui/tools");
+  const { mkdtempSync, writeFileSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const f = join(mkdtempSync("/tmp/kl-st-"), "t");
+  writeFileSync(f, "tok");
+  const saved = { fetch: globalThis.fetch, url: process.env.KL_API_URL, key: process.env.KL_TOOL_KEY_FILE, ses: process.env.KL_SESSION };
+  process.env.KL_API_URL = "http://api.test";
+  process.env.KL_TOOL_KEY_FILE = f;
+  process.env.KL_SESSION = "s1";
+  touched.set("w3", Date.now());
+  const j = (v: unknown) => new Response(JSON.stringify(v));
+  globalThis.fetch = (async (url: string, init: any = {}) => {
+    const u = String(url);
+    if (u.endsWith("/v1/workspaces")) return j([{ id: "w1", name: "web", state: "ready", session: "s1" }, { id: "w2", name: "other", state: "ready", session: "s2" }]);
+    if (u.endsWith("/v1/sessions/s1")) return j({ environment: null });
+    const m = /\/v1\/workspaces\/(w\d)\/tools$/.exec(u);
+    if (m) return j({ address: `${m[1]}:7788` });
+    if (u.startsWith("http://w1:7788/tools/process_list")) return j({ processes: [{ id: "a", cmd: "dev", state: "running" }, { id: "b", state: "exited" }] });
+    if (u.startsWith("http://w3:7788/tools/process_list")) return j({ processes: [{ id: "c", cmd: "q", state: "running" }] });
+    return new Response("no", { status: 404 });
+  }) as any;
+  try {
+    const r = JSON.parse(await statusTool.run({}));
+    expect(r.workspaces).toEqual([{ name: "web", state: "ready" }]);
+    expect(r.processes).toEqual([{ workspace: "web", id: "a", cmd: "dev" }, { workspace: "w3", id: "c", cmd: "q" }]);
+  } finally {
+    globalThis.fetch = saved.fetch;
+    touched.delete("w3");
+    for (const [k, v] of [["KL_API_URL", saved.url], ["KL_TOOL_KEY_FILE", saved.key], ["KL_SESSION", saved.ses]] as const) v === undefined ? delete process.env[k] : (process.env[k] = v);
+  }
 });

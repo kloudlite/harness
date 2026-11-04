@@ -27,6 +27,7 @@ import {
   type ModelRef,
 } from "@kloudlite-tui/agent";
 import { Registry, anyPodTools, platformTools, podTools, scratchRoot, scratchTools, webFetch, webSearch, type ToolDef } from "@kloudlite-tui/tools";
+import { record } from "./crash.ts";
 import { statusTool } from "./status.ts";
 import { Cards } from "./cards.ts";
 import { WORKSPACE_DIR, callerSettings, deliver, delegateTools, resumeAsks, type DelegateDeps } from "./delegate.ts";
@@ -213,7 +214,7 @@ export async function mcpTools(deps: DelegateDeps): Promise<ToolDef[]> {
   const byName = (n: string) => pod.find((t) => t.name === n);
   const rest = pod.filter((t) => t.name !== "read" && t.name !== "write");
   return new Registry().add(webFetch, webSearch, statusTool, ...rest, ...withScratch(byName("read"), scratch.find((t) => t.name === "read")), ...withScratch(byName("write"), scratch.find((t) => t.name === "write")),
-     ...platformTools("all").map((t) => (t.name === "workspace" ? forgetting(t, deps) : t)), ...delegateTools("main", undefined, deps, { tools: [] } as unknown as SessionOpts, "main"), ...taskTools(tasksFile("main", deps.tasks), deps.tasks),
+     ...platformTools("all").map((t) => (t.name === "workspace" ? forgetting(t, deps) : t)), ...taskTools(tasksFile("main", deps.tasks), deps.tasks),
     ...scratch.filter((t) => t.name === "bash").map((t) => ({ ...t, name: "scratch_bash", description: "Run a shell command in this session's scratch folder, not a workspace. The network works; no credentials. Returns { output, exit_code } (last 50 KiB)." }))).all();
 }
 
@@ -671,7 +672,9 @@ export class LocalBackend implements Backend {
   /** A crash notice: into the main session when one is open, else `queue` for the next MCP answer. */
   notice(msg: string, queue: (m: string) => void): void {
     const deps = this.#deps();
-    if (!this.#live.has("main")) return queue(msg);
+    const live = this.#live.has("main");
+    record(msg, live);
+    if (!live) return queue(msg);
     void deliver(deps, "main", callerSettings(deps, "main", { tools: [] } as unknown as SessionOpts), msg, "watch");
   }
 

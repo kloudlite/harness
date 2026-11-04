@@ -52,15 +52,15 @@ export function mcpServer(tools: () => Promise<ToolDef[]>): (msg: Msg) => Promis
       case "tools/call": {
         const t = (await (last ?? list())).find((t) => t.name === params?.name);
         if (!t) return fail(id, -32602, `unknown tool: ${params?.name}`);
-        // crash notices queued since the last answer ride on this one (no server push on this door)
-        const withNotices = (text: string) => {
+        // notices queued since the last answer ride on this one as a second content item, so the first is the answer or the error alone (no server push on this door)
+        const content = (text: string) => {
           const n = t.name === "status" ? [] : drainNotices();
-          return n.length ? `notices: ${JSON.stringify(n)}\n${text}` : text;
+          return [{ type: "text", text }, ...(n.length ? [{ type: "text", text: `notices: ${JSON.stringify(n)}` }] : [])];
         };
         try {
-          return reply(id, { content: [{ type: "text", text: withNotices(await t.run(params?.arguments ?? {})) }] });
+          return reply(id, { content: content(await t.run(params?.arguments ?? {})) });
         } catch (e: any) {
-          return reply(id, { content: [{ type: "text", text: withNotices(String(e?.message ?? e)) }], isError: true });
+          return reply(id, { content: content(String(e?.message ?? e)), isError: true });
         }
       }
       default:

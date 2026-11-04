@@ -52,6 +52,18 @@ export const inflight = new Map<string, number>();
 /** Per-process crash-notice choice from `exec`'s `notify`, keyed `{workspace}/{process id}`; the bench's watch (backend/src/watch.ts) reads it. */
 export type Notify = "never" | "on_failure" | "always";
 export const processNotify = new Map<string, Notify>();
+const canonIds = new Map<string, string>();
+/** The workspace's id however the model spelled it (id or name), so `touched`, `processNotify` and the watch's
+ * keys are one per workspace. A lookup that fails keeps the spelling it got and is not remembered. */
+async function canonical(ws: string): Promise<string> {
+  const known = canonIds.get(ws);
+  if (known) return known;
+  try {
+    const id = (await apiJson<any>("GET", `/v1/workspaces/${encodeURIComponent(ws)}`))?.id;
+    if (typeof id === "string" && id) return canonIds.set(ws, id), id;
+  } catch {}
+  return ws;
+}
 /** Backoff before each re-resolve after a network error (tests shorten it). */
 export const retryDelays = [2000, 4000, 8000, 16000];
 const NOTIFY: Notify[] = ["never", "on_failure", "always"];
@@ -144,7 +156,8 @@ export async function podTools(ws: string, o: { ensure?: typeof ensureRunning } 
       : name === "container_push" ? 180_000 : 60_000;
     try {
       let res: Response | undefined;
-      touched.set(ws, Date.now());
+      const id = await canonical(ws);
+      touched.set(id, Date.now());
       inflight.set(ws, (inflight.get(ws) ?? 0) + 1);
       // a stale address (pod restarted, token rotated) shows as a network error or 401: re-resolve once.
       // Never after our own timeout: the pod got the call and may still be running it, so a resend
@@ -178,7 +191,9 @@ export async function podTools(ws: string, o: { ensure?: typeof ensureRunning } 
         try {
           const j = JSON.parse(text);
           built = j;
-          if (notify && typeof j?.id === "string") processNotify.set(`${ws}/${j.id}`, notify);
+          // every detached or promoted exec is registered (default on_failure): the watch reports only these, never a plain exec that exited 1
+          if (name === "exec" && typeof j?.id === "string") processNotify.set(`${id}/${j.id}`, notify ?? "on_failure");
+          if (name === "process_kill" && typeof args?.id === "string") processNotify.set(`${id}/${args.id}`, "never");
           out = JSON.stringify(j, null, 2);
         } catch {
           out = text;
