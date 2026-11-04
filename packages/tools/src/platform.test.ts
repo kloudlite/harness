@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, jest, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -795,4 +795,28 @@ test("stop wait: true ignores ready reads and settles on stopped", async () => {
   routes["GET /v1/workspaces/w1"] = () => json({ id: "w1", state: seq[Math.min(n++, 2)] })();
   expect(JSON.parse(await tool(t, "workspace_stop").run({ workspace: "w1", wait: true })).state).toBe("stopped");
   expect(n).toBe(3);
+});
+
+test("soft_ms 60000 on a poll that never finishes hands off before 56 s, inside the client's own deadline", async () => {
+  jest.useFakeTimers();
+  try {
+    const t = platformTools("main", undefined, 1);
+    routes["POST /v1/workspaces"] = json({ id: "w9", state: "creating" }, 202);
+    routes["GET /v1/workspaces/w9"] = json({ id: "w9", state: "creating" });
+    const t0 = Date.now();
+    const p = tool(t, "workspace_create").run({ name: "w", quota_gb: 5, wait: true, soft_ms: 60_000 });
+    // bun has no async advance: step a second at a time and let the fetch/poll microtasks run between steps
+    let done = false;
+    p.then(() => (done = true));
+    for (let i = 0; i < 56 && !done; i++) {
+      jest.advanceTimersByTime(1000);
+      for (let k = 0; k < 20; k++) await Promise.resolve();
+    }
+    expect(done).toBe(true);
+    const out = JSON.parse(await p);
+    expect(out).toMatchObject({ promoted: true, id: "w9", kind: "workspace" });
+    expect(Date.now() - t0).toBeLessThanOrEqual(56_000);
+  } finally {
+    jest.useRealTimers();
+  }
 });

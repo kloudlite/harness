@@ -24,7 +24,7 @@ One tool per resource. `action` picks the verb; the arguments below are the unio
 | `write` | `workspace`, `path`, `content` | Creates or overwrites one file |
 | `edit` | `workspace`, `files` | Exact text replacements, all or none |
 | `glob`, `grep` | `workspace`, pattern | Matching files, matching lines |
-| `exec` | `workspace`, `cmd`, `cwd?`, `env?`, `soft_ms?`, `detach?`, `head?`, `tail?`, `quiet?`, `notify?` | Output and exit code; past `soft_ms` (25 s) `promoted: true`, `kind: "process"` and a process `id`; with `detach`, a process id |
+| `exec` | `workspace`, `cmd`, `cwd?`, `env?`, `soft_ms?`, `detach?`, `head?`, `tail?`, `quiet?`, `notify?` | Output and exit code; past `soft_ms` (25 s; the call answers within it) `promoted: true`, `kind: "process"` and a process `id`; with `detach`, a process id |
 | `process` | `action`, `workspace`, `id?`, `timeout_ms?`, `since?`, `since_err?` | `list`, `output` (from an offset), `write`, `close_stdin`, `kill`; `wait` waits for the exit (20 s at most per call), answers `state`, `exit_code`, the new output and `next`/`next_err`; repeat while `timed_out`; an id that ended or never existed answers `state: "gone"`; one that a workspace restart killed answers `state: "killed_by_restart"` with `restarted_at`; an exited process is never restarted; a detached one killed by a workspace stop is relaunched (same `id`, output opening `[restarted <time>: <reason>]`) unless `exec` passed `relaunch: false`. Any tool answer can carry a second content item `notices: [...]` (crashed or killed processes, workspace restarts and state changes, environment state changes); the first item is the answer or the error alone |
 | `watch` | `action`, `workspace` | `start`, `poll`, `stop`: a file or command watch |
 | `packages` | `action`, `workspace`, `packages?` | `list` (also `missing`: entries with no binary), `add`, `remove`, `update`: entries `attr` or `attr@version` |
@@ -77,5 +77,5 @@ One tool per resource. `action` picks the verb; the arguments below are the unio
 | `quota` | `owner?` | Ceilings and use |
 | `regions` | none | Regions |
 | `requests_list`, `request_get`, `request_create` | `owner?`, `id`, `kind`, `reason` | Requests to an admin |
-| `status` | `all?` | `notices` not yet shown (`all` lists the last 50), `workspaces` (the session's) and `environment` with their states, running `processes` of those workspaces and any a tool touched. Call it once at the start of each turn |
+| `status` | `all?` | `notices` not yet shown (`all` lists the last 50, delivered ones included, kept across bench restarts in `~/.kl/notices.json`), `workspaces` (the session's) and `environment` with their states, running `processes` of those workspaces and any a tool touched. Call it once at the start of each turn |
 | `web_fetch`, `web_search` | `url`; `query` | Page text; results |

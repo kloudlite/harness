@@ -197,7 +197,7 @@ const RUN = { type: "string", description: "The run id (the `id` of a run from `
 const TIMEOUT = { type: "number", description: "Milliseconds this call waits before it answers (default 25000, maximum 900000). At the limit the answer has `timed_out: true`: call again." };
 const WAITING = {
   wait: { type: "boolean", description: "Wait for the object to settle instead of answering at once." },
-  soft_ms: { type: "number", description: "With `wait`: milliseconds before the call hands off with `promoted: true` (default 25000, maximum 600000). Resume with the `wait` action named by `kind`." },
+  soft_ms: { type: "number", description: "With `wait`: the call answers within this many milliseconds, handing off with `promoted: true` if the work is not done (default 25000, maximum 600000). Resume with the `wait` action named by `kind`." },
 };
 const MINE = { type: "boolean", description: "Your own secret in the team `owner` (any active member), not the team's shared one." };
 const TTL = { type: "integer", description: "Seconds of unused time before it is deleted, 600 to 2592000." };
@@ -232,7 +232,12 @@ const timeoutMs = (a: any): number => {
   return clamp(Number(ms) || 25_000, 900_000);
 };
 /** Where a `wait: true` action hands off. */
-const softMs = (a: any): number => clamp(Number(a.soft_ms) || 25_000, 600_000);
+/** The polling bound for `soft_ms`: 5 s short of it, so the hand-off (and the MCP answer) lands INSIDE the client's own deadline of `soft_ms`
+ * (a 60 s call answered at 61.6 s, after the client gave up, 2026-11-04). A `soft_ms` of 5 s or less has no margin to give and is kept. */
+const softMs = (a: any): number => {
+  const s = clamp(Number(a.soft_ms) || 25_000, 600_000);
+  return s <= 5_000 ? s : Math.max(5_000, s - 5_000);
+};
 /** The answer of a call that handed off: nothing keeps running in the bench, the platform does the work, so there is no output offset. */
 const promoted = (id: unknown, kind: string) => JSON.stringify({ promoted: true, id, kind, next: 0, next_err: 0 }, null, 2);
 

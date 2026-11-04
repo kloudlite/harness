@@ -1,4 +1,7 @@
 import { expect, test } from "bun:test";
+import { mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createWatch, drainNotices, queueNotice, record, recentNotices } from "./crash.ts";
 import { mcpServer } from "./mcp.ts";
 
@@ -194,4 +197,16 @@ test("a session member nobody touched within the hour still gets its idle stop r
   expect(out).toEqual(["[workspace quiet idle (by system) at 2026-11-04T13:48:23Z: its session was idle 30 min; starts on next use]"]);
   await tick();
   expect(out.length).toBe(1);
+});
+
+test("the notice ring survives a daemon restart: a new createWatch lists it under all", () => {
+  const dir = mkdtempSync(join(tmpdir(), "kl-notices-"));
+  const deps = { touched: new Map(), list: async () => [], stderr: async () => "", workspace: async () => undefined, environment: async () => null, notify: () => {}, notifyOf: new Map(), now: () => 0, file: join(dir, "watch.json") } as any;
+  createWatch(deps);
+  record("[before restart]", false);
+  recentNotices(); // read, so only `all` shows it after the restart
+  createWatch(deps);
+  expect(recentNotices()).toEqual([]);
+  expect(recentNotices(true)).toContain("[before restart]");
+  expect(JSON.parse(readFileSync(join(dir, "notices.json"), "utf8")).length).toBeGreaterThan(0);
 });

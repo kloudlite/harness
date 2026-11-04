@@ -39,17 +39,33 @@ export const watchFile = () => join(homedir(), ".kl", "watch.json");
 /** Notices waiting for an MCP client's next tool answer (one bench, one person: not per connection). */
 const queue: string[] = [];
 /** The last 50 notices, kept after delivery so the `status` tool can answer ones a client never showed. */
-const recent: { at: number; text: string; read: boolean }[] = [];
+let recent: { at: number; text: string; read: boolean }[] = [];
+/** `notices.json` beside `watch.json`, bound by `createWatch` (so a unit test that never builds a watch writes no file). */
+let noticesPath: string | undefined;
+// persisted so a bench daemon restart (13:4x and 15:31, 2026-11-04) does not lose what a client never showed; tmp + rename like watch.json
+const persist = () => {
+  if (!noticesPath) return;
+  try {
+    mkdirSync(dirname(noticesPath), { recursive: true });
+    writeFileSync(`${noticesPath}.tmp`, JSON.stringify(recent));
+    renameSync(`${noticesPath}.tmp`, noticesPath);
+  } catch {}
+};
 /** Every notice goes through here, delivered (a running main session got it as a message) or not, so `status` can list what a client never showed. */
-export const record = (text: string, delivered: boolean) => void (recent.push({ at: Date.now(), text, read: delivered }), recent.length > 50 && recent.shift());
+export const record = (text: string, delivered: boolean) => {
+  recent.push({ at: Date.now(), text, read: delivered });
+  if (recent.length > 50) recent.shift();
+  persist();
+};
 /** Waits for the next MCP answer; the caller `record`s it (local.ts `notice`). */
 export const queueNotice = (m: string) => void (queue.push(m), queue.length > 50 && queue.shift());
-export const drainNotices = (): string[] => (recent.forEach((r) => (r.read = true)), queue.splice(0));
+export const drainNotices = (): string[] => (recent.forEach((r) => (r.read = true)), persist(), queue.splice(0));
 /** Unread notices (marked read), or all of the last 50 with `all`. */
 export const recentNotices = (all?: boolean): string[] => {
   const out = recent.filter((r) => all || !r.read);
   recent.forEach((r) => (r.read = true));
   queue.length = 0;
+  persist();
   return out.map((r) => r.text);
 };
 
@@ -69,6 +85,11 @@ export function createWatch(d: WatchDeps) {
 
   // a missing or torn file is an empty baseline, never an error
   if (d.file) {
+    noticesPath = join(dirname(d.file), "notices.json");
+    try {
+      const n = JSON.parse(readFileSync(noticesPath, "utf8"));
+      if (Array.isArray(n)) recent = n.filter((r) => typeof r?.text === "string").slice(-50).map((r) => ({ at: Number(r.at) || 0, text: r.text, read: !!r.read }));
+    } catch {}
     try {
       const j = JSON.parse(readFileSync(d.file, "utf8"));
       for (const [ws, at] of Object.entries<number>(j.touched ?? {})) if (!d.touched.has(ws)) d.touched.set(ws, at);
