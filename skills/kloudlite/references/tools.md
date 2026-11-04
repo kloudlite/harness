@@ -65,9 +65,9 @@ One tool per resource. `action` picks the verb; the arguments below are the unio
 
 | Tool | Arguments | Answers |
 |---|---|---|
-| `secret_set` | `owner`, `name`, `value`, `mine?` | Stores the value; the result never carries it. The agent can set, list and delete secrets; a value is never read back |
-| `secret_list` | `owner`, `mine?` | Names and dates, never values |
-| `secret_delete` | `owner`, `name`, `mine?` | Deletes; `409` names the readers |
+| `secret_set` | `owner?`, `name`, `value`, `mine?` | Stores the value; the result never carries it. The agent can set, list and delete secrets; a value is never read back |
+| `secret_list` | `owner?`, `mine?` | Names and dates, never values |
+| `secret_delete` | `owner?`, `name`, `mine?` | Deletes; `409` names the readers |
 | `connector_list` | `owner?` | Code hosts and registries connected |
 
 ## Account and web

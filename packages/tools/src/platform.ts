@@ -181,6 +181,7 @@ async function load(path: string): Promise<{ doc: any } | { err: string }> {
 }
 
 const OWNER = { type: "string", description: "The owner: your handle, or a team slug." };
+const OWNER_DEFAULT = { type: "string", description: "The owner: your handle, or a team slug. Default: this session's team." };
 const SBX = { type: "string", description: "The sandbox id or name." };
 const SES = { type: "string", description: "The session id, name or `team/name`." };
 const PIPE = { type: "string", description: "The pipeline name." };
@@ -586,7 +587,7 @@ function mainOnly(tickMs: number): ToolDef[] {
   const sbx = (a: any) => `/v1/sandboxes/${seg(a.sandbox)}`;
   const pipe = (a: any) => `/v1/pipelines/${seg(a.owner)}/${seg(a.pipeline)}`;
   const run = (a: any) => `${pipe(a)}/runs/${seg(a.run)}`;
-  const secret = (a: any) => `/v1/secrets/${seg(a.owner)}${a.mine ? "/mine" : ""}`;
+  const secret = (a: any) => `/v1/secrets/${seg(a.owner ?? process.env.KL_TEAM)}${a.mine ? "/mine" : ""}`;
   const RUNREF = { owner: OWNER, pipeline: PIPE, run: RUN };
   const RUNREQ = ["owner", "pipeline", "run"];
   /** `run wait` and a waiting `run start`: the run without its definition, plus the log page at `offset` when one is given. */
@@ -713,15 +714,15 @@ function mainOnly(tickMs: number): ToolDef[] {
       }),
     }),
     def("webhook_rotate", "Make a new webhook secret for a pipeline; the old URL stops at once. The answer holds the new `webhookUrl` once: keep it secret. 409 when the webhook trigger is off.", { owner: OWNER, pipeline: PIPE }, ["owner", "pipeline"], async (a) => api("POST", `${pipe(a)}/webhook/rotate`)),
-    def("secret_set", "Store a secret under a name (`A-Z`, `0-9`, `_`), replacing one. The value is never read back; a pod reads it as an env value that is exactly `${{ secrets.NAME }}`. A team's shared secret needs a team admin; `mine` sets your own.", { owner: OWNER, name: S, value: S, mine: MINE }, ["owner", "name", "value"], async (a) => {
+    def("secret_set", "Store a secret under a name (`A-Z`, `0-9`, `_`), replacing one. The value is never read back; a pod reads it as an env value that is exactly `${{ secrets.NAME }}`. A team's shared secret needs a team admin; `mine` sets your own.", { owner: OWNER_DEFAULT, name: S, value: S, mine: MINE }, ["name", "value"], async (a) => {
       await api("PUT", `${secret(a)}/${seg(a.name)}`, { value: a.value });
       // The route answers 204: the date comes from the names list, which never carries a value.
       const list = await raw("GET", secret(a)).catch(() => undefined);
       const row = list && !list.unavailable && Array.isArray(list.data) ? list.data.find((s: any) => s.name === a.name) : undefined;
       return JSON.stringify({ name: a.name, updatedAt: row?.updated_at ?? new Date().toISOString() }, null, 2);
     }),
-    def("secret_list", "List the names of an owner's secrets with when and by whom each was last set. Never a value.", { owner: OWNER, mine: MINE }, ["owner"], async (a) => api("GET", secret(a))),
-    def("secret_delete", "Delete one secret. 409 while a workspace, sandbox, service or pipeline references it; the answer names the referrers.", { owner: OWNER, name: S, mine: MINE }, ["owner", "name"], async (a) => api("DELETE", `${secret(a)}/${seg(a.name)}`)),
+    def("secret_list", "List the names of an owner's secrets with when and by whom each was last set. Never a value.", { owner: OWNER_DEFAULT, mine: MINE }, [], async (a) => api("GET", secret(a))),
+    def("secret_delete", "Delete one secret. 409 while a workspace, sandbox, service or pipeline references it; the answer names the referrers.", { owner: OWNER_DEFAULT, name: S, mine: MINE }, ["name"], async (a) => api("DELETE", `${secret(a)}/${seg(a.name)}`)),
     def("connector_list", "List the git, registry and model-hub connectors of an owner: name, provider, kind, account and state. Read only: connecting happens in the web console.", { owner: { ...OWNER, description: "Your handle or a team slug. Default: your own." } }, [], async (a) => api("GET", `/v1/connectors${qs({ owner: a.owner })}`)),
     def("builder_status", "Check the state of the image builder for a team.", { team: S }, [], async (a) => api("GET", `/v1/builders/me${qs({ team: a.team })}`)),
     def("quota", "Show the limits and the current use of an owner (workspaces, environments, snapshots, diskGb, cpu, memoryGb). To ask for more, use request_create with kind `quota`.", { owner: S }, [], async (a) => api("GET", `/v1/quota${qs({ owner: a.owner ?? process.env.KL_TEAM })}`)),
