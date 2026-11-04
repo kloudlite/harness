@@ -98,7 +98,7 @@ Parallel work: only a managed workspace reaches the environment, and a clone is 
 
 Get ids from the `list` actions of `workspace` and `env`, or from `session` `current`. Tools take the id or the name; write the name to the user. `volume` `get` and `delete` take the volume `id` from `volume` `list`. Restore takes a reference in `snapshot_id`; create takes one in `source`.
 
-A session goes `idle` after 30 minutes without use, and its workspaces stop. A start, a create in the session, or a connect wakes it. What the user stopped stays stopped.
+A session goes `idle` after 30 minutes without use, and its workspaces stop. A start, a create in the session, or a connect wakes it. What the user stopped stays stopped. After a wake, the next tool answer reports each workspace restart and stop that happened while idle.
 
 ## Tools
 

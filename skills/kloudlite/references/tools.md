@@ -12,7 +12,7 @@ One tool per resource. `action` picks the verb; the arguments below are the unio
 
 | Tool | Arguments | Answers |
 |---|---|---|
-| `workspace` | `action`, `workspace?`, `name?`, `quota_gb?`, `image?`, `packages?`, `team?`, `source?`, `task?`, `snapshot_id?`, `ttl_secs?`, `clear?`, `message?`, `volume?`, `wait?`, `soft_ms?`, `timeout_ms?` | `list`, `get` (state, `restarts`, `packages_missing`, packages, volume, `restart_required`), `create` (a managed workspace in a session; with `source` a standalone copy), `restore` (from `snapshot_id`), `start`, `stop` (answers the stopped state; `wait: true` waits for it), `restart` (to read new variables; answers the object with `restart`, the new entry of `restarts`, once `restart_required` clears, or `null` and a `hint` at `soft_ms`), `delete`, `wait`, `ttl`, `snapshot` (`volume` names the volume on its first push) |
+| `workspace` | `action`, `workspace?`, `name?`, `quota_gb?`, `image?`, `packages?`, `team?`, `source?`, `task?`, `snapshot_id?`, `ttl_secs?`, `clear?`, `message?`, `volume?`, `wait?`, `soft_ms?`, `timeout_ms?` | `list`, `get` (state, `restarts`, `packages_missing`, packages, volume, `restart_required`), `create` (a managed workspace in a session; with `source` a standalone copy), `restore` (from `snapshot_id`), `start`, `stop` (answers the stopped state; `wait: true` waits for stopped, not ready), `restart` (to read new variables; answers the object with `restart`, the new entry of `restarts`, once `restart_required` clears, or `null` and a `hint` at `soft_ms`), `delete`, `wait`, `ttl`, `snapshot` (`volume` names the volume on its first push) |
 | `workspace_vars` | `action`, `workspace`, `variables?`, `replace?`, `restart_on_change?` | `get`: the stored variables; a secret shows as its reference. `set`: merges; `replace: true` replaces the set; a secret is the whole value `${{ secrets.NAME }}` |
 | `worktree` | `action`, `workspace`, `name`, `soft_ms?` | `add` (waits until the tree is cut; pass `tree: "<name>"` to `exec`, `read` and `write`, since its path is not visible from the main tree), `drop`: a second branch checkout inside one workspace |
 
@@ -36,15 +36,15 @@ One tool per resource. `action` picks the verb; the arguments below are the unio
 
 | Tool | Arguments | Answers |
 |---|---|---|
-| `env` | `action`, `env?`, `name?`, `services?`, `quota_gb?`, `team?`, `region?`, `source?`, `ttl_secs?`, `clear?`, `message?`, `volume?`, `discard?`, `wait?`, `soft_ms?`, `timeout_ms?` | `list`, `get` (services, state, `interceptedBy`, `proxy`, `restart_required`, `volume`), `create` (a service is `{name, image, ports, env, mounts, command}`; with `source`: an environment copies it, a snapshot id restores it), `start`, `stop` (answers the stopped state; `wait: true` waits for it), `delete`, `wait` (`timed_out: true` at the limit), `ttl`, `snapshot`, `restore` (in place, `source` is the snapshot id; `409 lost` lists services that lose data, `discard` accepts it) |
-| `service` | `action`, `env`, `service?`, `name?`, `restart?`, `tail?`, `since?`, `previous?`, `wait?`, `soft_ms?` | `add` and `update` (replaces by name; `restart: true` restarts it to read new variables) take `service`; `remove` and `logs` take `name`; `logs` takes `tail` (2000 max), `since` (seconds), `previous` |
+| `env` | `action`, `env?`, `name?`, `services?`, `quota_gb?`, `team?`, `region?`, `source?`, `ttl_secs?`, `clear?`, `message?`, `volume?`, `discard?`, `wait?`, `soft_ms?`, `timeout_ms?` | `list`, `get` (services, state, `interceptedBy`, `proxy`, `restart_required`, `volume`), `create` (a service is `{name, image, ports, env, mounts, command}`; with `source`: an environment copies it, a snapshot id restores it), `start`, `stop` (answers the stopped state; `wait: true` waits for stopped, not ready), `delete`, `wait` (`timed_out: true` at the limit), `ttl`, `snapshot`, `restore` (in place, `source` is the snapshot id; `409 lost` lists services that lose data, `discard` accepts it) |
+| `service` | `action`, `env`, `service?`, `name?`, `restart?`, `tail?`, `since?`, `previous?`, `wait?`, `soft_ms?` | `add` and `update` (`update` merges into the live service by name: fields given replace those fields, absent ones keep their values, `env` merges by key and `{X: null}` removes X; `restart: true` restarts it to read new variables) take `service`; `remove` and `logs` take `name`; `logs` takes `tail` (2000 max), `since` (seconds), `previous` |
 
 ## Intercepts and volumes
 
 | Tool | Arguments | Answers |
 |---|---|---|
 | `intercept` | `action`, `env`, `service`, `workspace?`, `ports?` `[{service, workspace}]`, `wait?`, `soft_ms?` | `start` sends the service's traffic to the workspace (kind `env` when promoted); `stop` gives the service back |
-| `volume` | `action`, `volume?`, `kind?`, `owner?` | `list`, `get` (snapshots and branch tips; takes the volume id or the name a snapshot gave it), `delete` (a detached volume) |
+| `volume` | `action`, `volume?`, `kind?`, `owner?` | `list`, `get` (snapshots, `refs` with the newest push under `latest`, and `working`: where each current workspace or environment stands on the volume, with `working_copies` on each snapshot; takes the volume id or the name a snapshot gave it), `delete` (a detached volume) |
 | `snapshot` | `action`, `volume`, `snapshot` | `delete` one snapshot |
 
 ## Sandboxes
