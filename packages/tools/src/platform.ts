@@ -108,7 +108,7 @@ export const qs = (p: Record<string, string | undefined>) => {
   const s = u.toString();
   return s ? `?${s}` : "";
 };
-const VOLUME = { type: "string", description: "The volume's name: required on its first push, optional (but equal) after." };
+const VOLUME = { type: "string", description: "The name this snapshot gives its volume (volume list shows it; volume get takes it): required on its first push, optional (but equal) after." };
 const strip = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined));
 
 type Props = Record<string, unknown>;
@@ -264,6 +264,8 @@ const envDone = (d: any) => {
   const svcs: any[] = Array.isArray(d?.services) ? d.services : [];
   return d?.state === "error" || d?.state === "deleted" || svcs.some((x) => x.failing) || (d?.state === "running" && svcs.every((x) => x.ready));
 };
+const restartMarked = (d: any) => !!(d?.restart_required || d?.restartRequired || (Array.isArray(d?.service_status) ? d.service_status : []).some((x: any) => x?.restartRequired || x?.restart_required));
+const stoppedDone = (d: any) => d?.state === "stopped" || d?.state === "error" || d?.state === "deleted";
 const wsDone = (stopped: boolean) => (d: any) => d?.state === "ready" || d?.state === "error" || d?.state === "deleted" || (stopped && d?.state === "stopped");
 const RUN_ENDED = ["success", "failure", "cancelled"];
 
@@ -272,7 +274,7 @@ async function sandboxWait(path: string, limitMs: number, limit?: () => string):
   const end = Date.now() + limitMs;
   for (;;) {
     const d = JSON.parse(await api("POST", `${path}/wait`, { timeout_ms: Math.max(1, Math.min(20000, Math.round(end - Date.now()))) }));
-    if (d.phase === "terminated") return JSON.stringify(d, null, 2);
+    if (d.phase === "terminated" || d.exit_code !== undefined || d.finished_at) return JSON.stringify(d, null, 2);
     if (Date.now() >= end) return limit ? limit() : JSON.stringify({ ...d, timed_out: true }, null, 2);
   }
 }
@@ -347,8 +349,8 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
       throw e;
     }
   };
-  const thenWaitEnv = (out: string, a: any, env?: string, reread = false) =>
-    thenWait(out, a, { kind: "env", path: (d) => `/v1/environments/${env ?? seg(d.id)}`, done: envDone, id: (d) => (env ? decodeURIComponent(env) : d.id), get: async (p) => withReady(await api("GET", p)), reread });
+  const thenWaitEnv = (out: string, a: any, env?: string, reread = false, done = envDone) =>
+    thenWait(out, a, { kind: "env", path: (d) => `/v1/environments/${env ?? seg(d.id)}`, done, id: (d) => (env ? decodeURIComponent(env) : d.id), get: async (p) => withReady(await api("GET", p)), reread });
   const thenWaitWs = (out: string, a: any, o: { stopped?: boolean; ws?: string; reread?: boolean } = {}) =>
     thenWait(out, a, { kind: "workspace", path: (d) => `/v1/workspaces/${o.ws ? seg(o.ws) : seg(d.id)}`, done: wsDone(!!o.stopped), id: (d) => o.ws ?? d.id, reread: o.reread });
 
@@ -360,13 +362,15 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
       if (typeof next === "string") return next;
       const out = await api("PATCH", `/v1/environments/${env}`, { services: next });
       await after?.(env, a);
+      // a restart re-reads the environment and waits for the "restart required" mark to clear, so the answer is the settled state, not the patch body
+      if (a.restart) return thenWaitEnv(out, { ...a, wait: true }, env, true, (d) => envDone(d) && !restartMarked(d));
       return thenWaitEnv(out, a, env);
     });
 
   const tools: ToolDef[] = [];
 
   // ---- workspace
-  const stopAct = act({}, [], async () => (await api("POST", `${W}/stop`), api("GET", W)));
+  const stopAct = act(WAITING, [], async (a) => thenWaitWs(await api("POST", `${W}/stop`), a, { stopped: true, ws: wsId }));
   /** The workspace as it is after the snapshot, with the snapshot's own answer under `snapshot` (its id is the one thing the object does not hold). */
   const snapAct = wact({ message: S, volume: VOLUME }, [], async (a) => {
     const snapshot = JSON.parse(await api("POST", `${wsPath(a)}/snapshots`, strip({ message: a.message, volume: a.volume })));
@@ -392,19 +396,25 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
             restore: act({ name: S, snapshot_id: { type: "string", description: "A volume name, `name@N` or a snapshot id." }, team: S, image: S, packages: SL, quota_gb: N, ...WAITING }, ["name", "snapshot_id"], async (a) =>
               thenWaitWs(await api("POST", "/v1/workspaces/restore", strip({ name: a.name, snapshot_id: a.snapshot_id, team: a.team, image: a.image, packages: a.packages, quota_gb: a.quota_gb })), a)),
             start: mact(WAITING, [], async (a) => thenWaitWs(await api("POST", `/v1/workspaces/${seg(a.workspace)}/start`), a, { ws: a.workspace, reread: true })),
-            stop: mact({}, [], async (a) => (await api("POST", `/v1/workspaces/${seg(a.workspace)}/stop`), api("GET", `/v1/workspaces/${seg(a.workspace)}`))),
-            restart: mact({}, [], async (a) => {
+            stop: mact(WAITING, [], async (a) => thenWaitWs(await api("POST", `/v1/workspaces/${seg(a.workspace)}/stop`), a, { stopped: true, ws: a.workspace })),
+            restart: mact({ soft_ms: WAITING.soft_ms }, [], async (a) => {
               const url = `/v1/workspaces/${seg(a.workspace)}`;
               const lastAt = (o: any) => { const r = o?.restarts; return Array.isArray(r) && r.length ? r[r.length - 1] : undefined; };
               const before: any = JSON.parse(await api("GET", url));
               const n0 = before?.restarts?.length ?? 0, last0 = JSON.stringify(lastAt(before));
               await api("POST", `${url}/restart`);
-              for (let t = 0; t < 20; t++) {
+              // answered once the new record is there and the "restart required" mark has cleared, within soft_ms
+              const end = Date.now() + softMs(a);
+              let d: any;
+              for (;;) {
                 await new Promise((r) => setTimeout(r, Math.min(1000, tickMs)));
-                const d: any = JSON.parse(await api("GET", url));
-                if ((d?.restarts?.length ?? 0) > n0 || (lastAt(d) !== undefined && JSON.stringify(lastAt(d)) !== last0)) return JSON.stringify({ ...d, restart: lastAt(d) });
+                d = JSON.parse(await api("GET", url));
+                const recorded = (d?.restarts?.length ?? 0) > n0 || (lastAt(d) !== undefined && JSON.stringify(lastAt(d)) !== last0);
+                if (recorded && !d.restart_required) return JSON.stringify({ ...d, restart: lastAt(d) });
+                if (Date.now() >= end) break;
               }
-              return JSON.stringify({ ...JSON.parse(await api("GET", url)), restart: null, hint: "the restart was accepted; its record follows on the next get" });
+              const recorded = (d?.restarts?.length ?? 0) > n0 || (lastAt(d) !== undefined && JSON.stringify(lastAt(d)) !== last0);
+              return JSON.stringify(recorded ? { ...d, restart: lastAt(d), hint: "restarted; restart_required is still set" } : { ...d, restart: null, hint: "the restart was accepted; its record follows on the next get" });
             }),
             delete: mact({}, [], async (a) => {
               const ses = process.env.KL_SESSION;
@@ -438,7 +448,7 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
               return thenWaitEnv(await api("POST", "/v1/environments", strip({ name: a.name, snapshot_id: a.source, services, owner: a.team, quota_gb: a.quota_gb })), a);
             }),
             start: eact(WAITING, [], async (env, a) => thenWaitEnv(await api("POST", `/v1/environments/${env}/start`), a, env, true)),
-            stop: eact({}, [], async (env) => (await api("POST", `/v1/environments/${env}/stop`), envView(env))),
+            stop: eact(WAITING, [], async (env, a) => thenWaitEnv(await api("POST", `/v1/environments/${env}/stop`), a, env, false, stoppedDone)),
             delete: eact({}, [], async (env) => deleting(`/v1/environments/${env}`, () => api("DELETE", `/v1/environments/${env}`))),
             wait: eact({ timeout_ms: TIMEOUT }, [], async (env, a) => (await wake(env), waitEnv(env, a))),
             ttl: eact({ ttl_secs: TTL, clear: CLEAR }, [], async (env, a) => { const b = ttlBody(a); return typeof b === "string" ? b : (await api("PUT", `/v1/environments/${env}/ttl`, b), envView(env)); }),
@@ -482,7 +492,13 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
               return currentSession();
             }, ["environment"]),
             start: act({ session: SES, ...WAITING }, ["session"], async (a) => thenWait(await api("POST", `/v1/sessions/${seg(a.session)}/start`), a, { kind: "session", path: () => `/v1/sessions/${seg(a.session)}`, done: (d) => d?.state === "running", id: () => a.session, reread: true })),
-            stop: act({ session: SES }, ["session"], async (a) => (await api("POST", `/v1/sessions/${seg(a.session)}/stop`), api("GET", `/v1/sessions/${seg(a.session)}`))),
+            // no follow-up read: a stop of the bench's own session ends the link before a second call answers
+            stop: act({ session: SES }, ["session"], async (a) => {
+              const out = await api("POST", `/v1/sessions/${seg(a.session)}/stop`);
+              let body: any;
+              try { body = JSON.parse(out); } catch {}
+              return JSON.stringify({ id: a.session, state: "stopping", ...(body && typeof body === "object" ? body : {}) }, null, 2);
+            }),
             delete: act({ session: SES }, ["session"], async (a) => deleting(`/v1/sessions/${seg(a.session)}`, () => api("DELETE", `/v1/sessions/${seg(a.session)}`))),
             ttl: act({ session: SES, ttl_secs: TTL, clear: CLEAR }, ["session"], async (a) => { const b = ttlBody(a); return typeof b === "string" ? b : (await api("PUT", `/v1/sessions/${seg(a.session)}/ttl`, b), api("GET", `/v1/sessions/${seg(a.session)}`)); }),
           }),
@@ -608,8 +624,11 @@ function mainOnly(tickMs: number): ToolDef[] {
     }),
     resource("volume", "Volumes: the stored state of workspaces and environments. Actions: list, get (history and branch tips), delete a detached volume.", {
       list: act({ kind: S, owner: S }, [], async (a) => api("GET", `/v1/volumes${qs({ kind: a.kind, owner: a.owner })}`)),
-      get: act({ volume: S }, ["volume"], async (a) => {
-        const [history, refs] = await Promise.all([api("GET", `/v1/volumes/${seg(a.volume)}/history`), api("GET", `/v1/volumes/${seg(a.volume)}/refs`)]);
+      get: act({ volume: { type: "string", description: "The volume's id or its given name." } }, ["volume"], async (a) => {
+        // /history and /refs are keyed by the volume id; a name given at a snapshot is a claim on the list row
+        const rows = await apiJson<any[]>("GET", "/v1/volumes").catch(() => []);
+        const id = (Array.isArray(rows) ? rows : []).find((r) => r?.name === a.volume)?.id ?? a.volume;
+        const [history, refs] = await Promise.all([api("GET", `/v1/volumes/${seg(id)}/history`), api("GET", `/v1/volumes/${seg(id)}/refs`)]);
         return JSON.stringify({ volume: a.volume, history: JSON.parse(history), refs: JSON.parse(refs) }, null, 2);
       }),
       delete: act({ volume: S }, ["volume"], async (a) => (await api("DELETE", `/v1/volumes/${seg(a.volume)}`), JSON.stringify({ volume: a.volume, state: "deleted" }, null, 2))),
@@ -664,7 +683,17 @@ function mainOnly(tickMs: number): ToolDef[] {
       cancel: act(RUNREF, RUNREQ, async (a) => (await api("POST", `${run(a)}/cancel`), api("GET", run(a)))),
     }),
     resource("worktree", "Worktrees of a workspace. Actions: add, drop.", {
-      add: act({ workspace: WS, name: S }, ["workspace", "name"], async (a) => api("POST", `/v1/workspaces/${seg(a.workspace)}/trees`, { name: a.name })),
+      add: act({ workspace: WS, name: S, soft_ms: WAITING.soft_ms }, ["workspace", "name"], async (a) => {
+        const out = JSON.parse(await api("POST", `/v1/workspaces/${seg(a.workspace)}/trees`, { name: a.name }));
+        // the node cuts the subvolume on its next pass: wait for the row to be ready, within soft_ms
+        const end = Date.now() + softMs(a);
+        let ready = false;
+        while (!ready && Date.now() < end) {
+          await new Promise((r) => setTimeout(r, Math.min(1000, tickMs)));
+          ready = !!JSON.parse(await api("GET", `/v1/workspaces/${seg(a.workspace)}`))?.trees?.some((t: any) => t.name === a.name && t.ready);
+        }
+        return JSON.stringify({ name: out?.name ?? a.name, path: out?.path, ...(ready ? {} : { ready: false }), note: `pass tree: "${a.name}" to exec, read and write; the path is not visible from the main tree` }, null, 2);
+      }),
       drop: act({ workspace: WS, name: S }, ["workspace", "name"], async (a) => api("DELETE", `/v1/workspaces/${seg(a.workspace)}/trees/${seg(a.name)}`)),
     }),
     resource("workspace_vars", "A workspace's variables as stored (a secret shows as its reference). Actions: get, set (merges unless `replace`).", {
@@ -675,7 +704,12 @@ function mainOnly(tickMs: number): ToolDef[] {
           const cur = JSON.parse(await api("GET", `/v1/workspaces/${seg(a.workspace)}/env`));
           env = { ...(cur?.env ?? {}), ...a.variables };
         }
-        return api("PUT", `/v1/workspaces/${seg(a.workspace)}/env`, strip({ env, restartOnEnvChange: a.restart_on_change }));
+        const out = await api("PUT", `/v1/workspaces/${seg(a.workspace)}/env`, strip({ env, restartOnEnvChange: a.restart_on_change }));
+        const state = a.restart_on_change === true ? undefined : (await apiJson<any>("GET", `/v1/workspaces/${seg(a.workspace)}`).catch(() => undefined))?.state;
+        if (state !== "ready") return out;
+        let body: any;
+        try { body = JSON.parse(out); } catch {}
+        return JSON.stringify({ ...(body && typeof body === "object" ? body : {}), note: "takes effect after restart" }, null, 2);
       }),
     }),
     def("webhook_rotate", "Make a new webhook secret for a pipeline; the old URL stops at once. The answer holds the new `webhookUrl` once: keep it secret. 409 when the webhook trigger is off.", { owner: OWNER, pipeline: PIPE }, ["owner", "pipeline"], async (a) => api("POST", `${pipe(a)}/webhook/rotate`)),
@@ -690,7 +724,7 @@ function mainOnly(tickMs: number): ToolDef[] {
     def("secret_delete", "Delete one secret. 409 while a workspace, sandbox, service or pipeline references it; the answer names the referrers.", { owner: OWNER, name: S, mine: MINE }, ["owner", "name"], async (a) => api("DELETE", `${secret(a)}/${seg(a.name)}`)),
     def("connector_list", "List the git, registry and model-hub connectors of an owner: name, provider, kind, account and state. Read only: connecting happens in the web console.", { owner: { ...OWNER, description: "Your handle or a team slug. Default: your own." } }, [], async (a) => api("GET", `/v1/connectors${qs({ owner: a.owner })}`)),
     def("builder_status", "Check the state of the image builder for a team.", { team: S }, [], async (a) => api("GET", `/v1/builders/me${qs({ team: a.team })}`)),
-    def("quota", "Show the limits and the current use of an owner (workspaces, environments, snapshots, diskGb, cpu, memoryGb). To ask for more, use request_create with kind `quota`.", { owner: S }, [], async (a) => api("GET", `/v1/quota${qs({ owner: a.owner })}`)),
+    def("quota", "Show the limits and the current use of an owner (workspaces, environments, snapshots, diskGb, cpu, memoryGb). To ask for more, use request_create with kind `quota`.", { owner: S }, [], async (a) => api("GET", `/v1/quota${qs({ owner: a.owner ?? process.env.KL_TEAM })}`)),
     def("requests_list", "List the requests of the person and of their teams (quota, access, region, other) with their state and decision note.", { owner: S }, [], async (a) => api("GET", `/v1/requests${qs({ owner: a.owner })}`)),
     def("request_get", "Show one request and its decision.", { id: S }, ["id"], async (a) => api("GET", `/v1/requests/${seg(a.id)}`)),
     def(
@@ -711,7 +745,13 @@ function mainOnly(tickMs: number): ToolDef[] {
         body: S,
       },
       ["kind", "reason"],
-      async (a) => api("POST", "/v1/requests", strip({ owner: a.owner, kind: a.kind, reason: a.reason, quota: a.quota, access: a.access, region: a.region ? { region: a.region } : undefined, other: a.kind === "other" ? { title: a.title, body: a.body } : undefined })),
+      async (a) => {
+        const out = await api("POST", "/v1/requests", strip({ owner: a.owner, kind: a.kind, reason: a.reason, quota: a.quota, access: a.access, region: a.region ? { region: a.region } : undefined, other: a.kind === "other" ? { title: a.title, body: a.body } : undefined }));
+        // the stored request holds the title and body under `other`; the answer repeats what was sent
+        let doc: any;
+        try { doc = JSON.parse(out); } catch { return out; }
+        return JSON.stringify({ ...doc, ...strip({ title: a.title, body: a.body }) }, null, 2);
+      },
     ),
     def("regions", "List the regions a team can live in. A team has one region, set when it is made.", {}, [], async () => api("GET", "/v1/regions")),
   ];

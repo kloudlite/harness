@@ -97,11 +97,10 @@ test("a workspace session has the slice its token reaches, folded; main keeps to
   expect(actions(main, "packages")).toEqual(["list"]);
   expect(main.map((x) => x.name)).not.toContain("intercept");
   expect(actions(platformTools("all"), "packages")).toEqual(["list", "add", "remove", "update"]);
-  routes["POST /v1/workspaces/w1/stop"] = json({}, 202);
-  routes["GET /v1/workspaces/w1"] = json({ id: "w1", state: "stopping" });
+  routes["POST /v1/workspaces/w1/stop"] = json({ id: "w1", state: "stopped" }, 202);
   const stop = tool(slice, "workspace_stop");
   expect((tool(slice, "workspace").inputSchema as any).properties.workspace).toBeUndefined();
-  await stop.run({});
+  expect(JSON.parse(await stop.run({}))).toEqual({ id: "w1", state: "stopped" });
   expect(calls.filter((c) => c.method === "POST").at(-1)!.url).toBe("/v1/workspaces/w1/stop");
   await expect(tool(main, "workspace_stop").run({})).rejects.toThrow("`workspace` is required");
 });
@@ -434,15 +433,19 @@ test("sandbox delete ends the sandbox first and ignores a refusal; pipeline get 
 });
 
 test("volume get answers history and refs; service update with restart restarts after the patch", async () => {
-  const t = platformTools("main");
+  const t = platformTools("main", undefined, 1);
   routes["GET /v1/volumes/pg/history"] = json([{ id: "s1" }]);
   routes["GET /v1/volumes/pg/refs"] = json({ main: "s1" });
   expect(JSON.parse(await tool(t, "volume_get").run({ volume: "pg" }))).toEqual({ volume: "pg", history: [{ id: "s1" }], refs: { main: "s1" } });
   routes["GET /v1/environments/e1"] = json({ services: [{ name: "api", image: "a:1" }] });
   routes["PATCH /v1/environments/e1"] = json({});
   routes["POST /v1/environments/e1/services/api/restart"] = json({}, 202);
-  await tool(t, "service_update").run({ env: "e1", service: { name: "api", image: "a:2" }, restart: true });
-  expect(calls.slice(-2).map((c) => `${c.method} ${c.url}`)).toEqual(["PATCH /v1/environments/e1", "POST /v1/environments/e1/services/api/restart"]);
+  let marked = 2;
+  routes["GET /v1/environments/e1"] = () => new Response(JSON.stringify({ state: "running", services: [{ name: "api", image: "a:2" }], service_status: [{ name: "api", ready: true, restartRequired: marked-- > 0 }] }));
+  const out = JSON.parse(await tool(t, "service_update").run({ env: "e1", service: { name: "api", image: "a:2" }, restart: true }));
+  expect(calls.filter((c) => c.method !== "GET").map((c) => `${c.method} ${c.url}`)).toEqual(["PATCH /v1/environments/e1", "POST /v1/environments/e1/services/api/restart"]);
+  // the settled state, not the patch body: the mark has cleared
+  expect(out.service_status[0].restartRequired).toBe(false);
 });
 
 test("wait: true polls the created object to its settled state; a no-wait create answers the 202 document", async () => {
@@ -600,9 +603,15 @@ test("workspace_env_set merges into the stored env unless replace is set", async
   routes["PUT /v1/workspaces/w1/env"] = json({});
   const t = tool(platformTools("main"), "workspace_env_set");
   await t.run({ workspace: "w1", variables: { B: "3", C: "4" } });
-  expect(calls.at(-1)!.body).toEqual({ env: { A: "1", B: "3", C: "4" } });
+  const put = () => calls.filter((c) => c.method === "PUT").at(-1)!.body;
+  await t.run({ workspace: "w1", variables: { B: "3", C: "4" } });
+  expect(put()).toEqual({ env: { A: "1", B: "3", C: "4" } });
   await t.run({ workspace: "w1", variables: { C: "4" }, replace: true });
-  expect(calls.at(-1)!.body).toEqual({ env: { C: "4" } });
+  expect(put()).toEqual({ env: { C: "4" } });
+  // a running workspace needs a restart to read them
+  routes["GET /v1/workspaces/w1"] = json({ id: "w1", state: "ready" });
+  expect(JSON.parse(await t.run({ workspace: "w1", variables: { C: "5" } })).note).toBe("takes effect after restart");
+  expect(JSON.parse(await t.run({ workspace: "w1", variables: { C: "5" }, restart_on_change: true })).note).toBeUndefined();
 });
 
 test("sandbox_logs and run_logs keep the last 200 lines by default, tail and head choose", async () => {
@@ -635,7 +644,7 @@ test("a refusal from /v1 answers JSON {error, hint}; an argument error carries t
   const t = platformTools("main");
   routes["GET /v1/workspaces/nope"] = json({ error: "no such workspace" }, 404);
   const e1 = await tool(t, "workspace_get").run({ workspace: "nope" }).catch((e) => JSON.parse(e.message));
-  expect(e1).toEqual({ error: '404: {"error":"no such workspace"}', hint: "check the list action" });
+  expect(e1).toEqual({ error: "404: no such workspace", hint: "check the list action" });
   routes["POST /v1/workspaces"] = () => new Response("workspaces: 5 of 5 in use, request more under Quota", { status: 409 });
   const e2 = await tool(t, "workspace_create").run({ name: "w", quota_gb: 5 }).catch((e) => JSON.parse(e.message));
   expect(e2.hint).toContain("request_create");
@@ -648,9 +657,9 @@ test("a refusal from /v1 answers JSON {error, hint}; an argument error carries t
 test("every verb answers the object; delete answers the last-read object with state deleted", async () => {
   const t = platformTools("main");
   routes["GET /v1/environments/e1"] = json({ id: "e1", state: "running", services: [] });
-  routes["POST /v1/environments/e1/stop"] = json({}, 202);
+  routes["POST /v1/environments/e1/stop"] = json({ id: "e1", state: "stopped" }, 202);
   routes["DELETE /v1/environments/e1"] = () => new Response(null, { status: 204 });
-  expect(JSON.parse(await tool(t, "env_stop").run({ env: "e1" }))).toMatchObject({ id: "e1", state: "running" });
+  expect(JSON.parse(await tool(t, "env_stop").run({ env: "e1" }))).toMatchObject({ id: "e1", state: "stopped" });
   expect(JSON.parse(await tool(t, "env_delete").run({ env: "e1" }))).toMatchObject({ id: "e1", state: "deleted" });
 });
 
@@ -689,3 +698,55 @@ test("workspace restart answers the new restart record, or null with a hint on t
   routes["GET /v1/workspaces/w9"] = () => new Response(JSON.stringify({ id: "w9", restarts: n++ < 2 ? [{ at: 1, reason: "old" }] : [{ at: 1, reason: "old" }, { at: 2, reason: "requested" }] }));
   expect(JSON.parse(await tool(t, "workspace_restart").run({ workspace: "w9" })).restart).toEqual({ at: 2, reason: "requested" });
 }, 30000);
+
+test("stop answers the POST body; wait polls until stopped", async () => {
+  const t = platformTools("main");
+  routes["POST /v1/workspaces/w1/stop"] = json({ id: "w1", state: "stopped" }, 202);
+  expect(JSON.parse(await tool(t, "workspace_stop").run({ workspace: "w1" }))).toEqual({ id: "w1", state: "stopped" });
+  expect(calls.filter((c) => c.method === "GET")).toHaveLength(0);
+  routes["POST /v1/workspaces/w2/stop"] = json({ id: "w2", state: "stopping" }, 202);
+  let n = 0;
+  routes["GET /v1/workspaces/w2"] = () => new Response(JSON.stringify({ id: "w2", state: n++ < 1 ? "stopping" : "stopped" }));
+  expect(JSON.parse(await tool(platformTools("main", undefined, 1), "workspace_stop").run({ workspace: "w2", wait: true })).state).toBe("stopped");
+  routes["POST /v1/environments/e2/stop"] = json({ id: "e2", state: "stopping" }, 202);
+  let m = 0;
+  routes["GET /v1/environments/e2"] = () => new Response(JSON.stringify({ id: "e2", state: m++ < 1 ? "stopping" : "stopped", services: [] }));
+  expect(JSON.parse(await tool(platformTools("main", undefined, 1), "env_stop").run({ env: "e2", wait: true })).state).toBe("stopped");
+});
+
+test("session stop answers without a second read", async () => {
+  routes["POST /v1/sessions/s1/stop"] = json({}, 202);
+  expect(JSON.parse(await tool(platformTools("main"), "session_stop").run({ session: "s1" }))).toEqual({ id: "s1", state: "stopping" });
+  expect(calls.filter((c) => c.method === "GET")).toHaveLength(0);
+});
+
+test("workspace restart waits for restart_required to clear", async () => {
+  routes["POST /v1/workspaces/w9/restart"] = json({}, 202);
+  let n = 0;
+  routes["GET /v1/workspaces/w9"] = () => new Response(JSON.stringify({ id: "w9", restarts: n++ < 1 ? [] : [{ at: 2, reason: "requested" }], restart_required: n < 4 }));
+  const r = JSON.parse(await tool(platformTools("main", undefined, 1), "workspace_restart").run({ workspace: "w9" }));
+  expect(r.restart).toEqual({ at: 2, reason: "requested" });
+  expect(r.restart_required).toBe(false);
+});
+
+test("volume get resolves a given name to the volume id", async () => {
+  routes["GET /v1/volumes"] = json([{ id: "ws-ab12", name: "pg" }]);
+  routes["GET /v1/volumes/ws-ab12/history"] = json([{ id: "s1" }]);
+  routes["GET /v1/volumes/ws-ab12/refs"] = json({});
+  expect(JSON.parse(await tool(platformTools("main"), "volume_get").run({ volume: "pg" })).history).toEqual([{ id: "s1" }]);
+});
+
+test("worktree add waits for the row and says how to reach it; request_create echoes the title; quota defaults to KL_TEAM", async () => {
+  const t = platformTools("main", undefined, 1);
+  routes["POST /v1/workspaces/w1/trees"] = json({ name: "fix", path: "/home/kl/.agents/fix/workspace" }, 202);
+  let n = 0;
+  routes["GET /v1/workspaces/w1"] = () => new Response(JSON.stringify({ trees: n++ < 1 ? [] : [{ name: "fix", ready: true }] }));
+  const w = JSON.parse(await tool(t, "worktree_add").run({ workspace: "w1", name: "fix" }));
+  expect(w).toEqual({ name: "fix", path: "/home/kl/.agents/fix/workspace", note: 'pass tree: "fix" to exec, read and write; the path is not visible from the main tree' });
+  routes["POST /v1/requests"] = json({ id: "r1", kind: "other" }, 201);
+  expect(JSON.parse(await tool(t, "request_create").run({ kind: "other", reason: "x", title: "T", body: "B" }))).toMatchObject({ id: "r1", title: "T", body: "B" });
+  process.env.KL_TEAM = "acme";
+  routes["GET /v1/quota?owner=acme"] = json({ owner: "acme" });
+  expect(JSON.parse(await tool(t, "quota").run({})).owner).toBe("acme");
+  delete process.env.KL_TEAM;
+});

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { resource } from "./actions.ts";
+import { failure, resource } from "./actions.ts";
 
 const t = resource("thing", "A thing.", {
   get: { properties: { id: { type: "string" } }, required: ["id"], run: async (a) => `got ${a.id}` },
@@ -31,4 +31,9 @@ test("an unlisted alias is read as its key, and a 403 with missing_scope keeps b
   expect(Object.keys((a.inputSchema as any).properties)).not.toContain("snapshot_id");
   const b = resource("al", "x", { go: { properties: {}, required: [], run: async () => { throw new Error('403: {"error":"not in this token","missing_scope":"snapshots:delete"}'); } } });
   expect(JSON.parse((await b.run({ action: "go" }).catch((e) => e)).message)).toEqual({ error: "not in this token", missing_scope: "snapshots:delete", hint: "use the console or the CLI as yourself" });
+});
+
+test("a JSON error body behind a status code reads as the sentence", () => {
+  expect(JSON.parse(failure('409: {"error":"workspaces: 5 of 5 in use"}').message).error).toBe("409: workspaces: 5 of 5 in use");
+  expect(JSON.parse(failure("500: {not json").message).error).toBe("500: {not json");
 });

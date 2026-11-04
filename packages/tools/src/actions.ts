@@ -33,6 +33,14 @@ export function failure(message: string, schema?: unknown): Error {
       if (j?.missing_scope) return new Error(JSON.stringify({ error: j.error ?? message, missing_scope: j.missing_scope, hint: "use the console or the CLI as yourself", ...(schema ? { schema } : {}) }));
     } catch {}
   }
+  // "409: {"error":"…"}" reads as the sentence, not as JSON inside JSON
+  const e = /^(\d{3}): (\{.*\})$/s.exec(message);
+  if (e) {
+    try {
+      const j = JSON.parse(e[2]!);
+      if (typeof j?.error === "string") message = `${e[1]}: ${j.error}`;
+    } catch {}
+  }
   const hint = hintFor(message);
   return new Error(JSON.stringify({ error: message, ...(hint ? { hint } : {}), ...(schema ? { schema } : {}) }));
 }
