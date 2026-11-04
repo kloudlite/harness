@@ -4,7 +4,10 @@
 //! writer per session file, and a turn keeps running when this pipe goes away. The daemon may still
 //! be booting after a pod restart, so connecting retries for KL_HOST_WAIT_MS (default 15 s).
 import { connect } from "node:net";
-import { sockPath } from "./daemon.ts";
+import { homedir } from "node:os";
+import { join } from "node:path";
+
+const sockPath = () => process.env.KL_HOST_SOCK ?? join(homedir(), ".kl", "host.sock");
 
 const wait = Number(process.env.KL_HOST_WAIT_MS ?? 15000);
 const sock = sockPath();

@@ -1,6 +1,6 @@
 //! The backend the TUI was booted with, and what it said at hello. Set once by cli.tsx (local) or
 //! remote.tsx (over the pipe) BEFORE app.tsx is imported: models.ts and theme.ts read it at import.
-import type { Backend, Hello } from "@kloudlite-tui/backend";
+import type { Backend, Hello } from "./wire/index.ts";
 
 let b: Backend | undefined;
 let h: Hello | undefined;

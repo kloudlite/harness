@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { spawn } from "node:child_process";
 import { useKeyboard } from "@opentui/react";
 import { TextAttributes } from "@opentui/core";
-import type { AuthEvent, AuthPrompt } from "@kloudlite-tui/agent";
+import type { AuthEvent, AuthPrompt } from "@earendil-works/pi-ai";
 import { backend } from "../hello.ts";
 import { theme } from "../theme.ts";
 import { Input } from "./Input.tsx";

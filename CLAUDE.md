@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 kloudlite — a terminal agent harness for cloud dev environments. Bun + Turborepo monorepo:
 
 - `apps/tui` — the TUI (opentui/React)
-- `packages/agent` — wrapper over the pi SDK (`@earendil-works/pi-*`): models, auth, sessions
+- `apps/tui/src/wire/` — the TUI's wire client and types (`PROTOCOL = 2`); the agents themselves run in the Kloudlite runtime (rustic-git `bins/runtime`), so the old in-process `packages/agent` and `packages/backend` are gone and the sections below about them are history
 - `packages/tools` — provider-agnostic tool registry (`ToolDef`/`Registry`); ships **no** built-in tools
 
 ## Commands

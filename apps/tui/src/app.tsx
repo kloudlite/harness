@@ -31,8 +31,8 @@ import type {
   SessionMeta,
   LiveSessionMeta,
   ThinkingLevel,
-} from "@kloudlite-tui/backend";
-import type { TeamView } from "@kloudlite-tui/backend";
+} from "./wire/index.ts";
+import type { TeamView } from "./wire/index.ts";
 import { backend, hello } from "./hello.ts";
 import { applyState, autoAnswer, grant, keepFocus, transcript, upsertById, userRow } from "./sync.ts";
 

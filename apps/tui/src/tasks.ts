@@ -3,7 +3,7 @@
 //! still open, the others show as "waits"; finished tasks leave (^q lists them) and messages are chat
 //! cards, never plan rows. Main sees every session with something open; a workspace sees only itself. Pure so grouping, tree and fold are tested without a renderer. Processes live
 //! on the Jobs screen (^j), not here.
-import type { BoardTask } from "@kloudlite-tui/backend";
+import type { BoardTask } from "./wire/index.ts";
 
 export type Board = { session: string; tasks: BoardTask[] };
 export type Tone = "accent" | "muted" | "error" | "success" | "warning";

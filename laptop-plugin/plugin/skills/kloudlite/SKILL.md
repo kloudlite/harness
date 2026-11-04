@@ -48,7 +48,7 @@ Read your row. The task skills never name a host.
 | Claude Code with the plugin (remote server) | `mcp__plugin_kloudlite_kl__*`, without `web_fetch`, `web_search` and `scratch_*` | yes | yes | the one agent |
 | MCP client with `kloudlite mcp` | server `kl`, all scopes in one list | only with a shell tool | only with file tools | the one agent |
 | Remote connector (claude.ai, ChatGPT) | `/mcp` over OAuth | no | no | the one agent |
-| Kloudlite harness | split by role: main, workspace, subagent | no | no | the role skills |
+| Kloudlite runtime (shared) | split by role: main, workspace, subagent | no | no | the role skills |
 
 `session` with `action: "use"` exists on the laptop door (`kloudlite mcp`, which also takes `action: "pick"`) and on the remote server (the plugin and a remote connector), where it picks among your sessions in the teams you connected (`team` moves between them). Only the harness drives one fixed session and cannot switch; `workspace` with `action: "create"` always uses the current session. In the harness, a task that needs another session is for the user to open.
 

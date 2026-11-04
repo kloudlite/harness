@@ -1,7 +1,7 @@
 import { relative } from "node:path";
 import { hello } from "./hello.ts";
 
-export type { Change, ChangeStatus, Match, TreeNode } from "@kloudlite-tui/backend";
+export type { Change, ChangeStatus, Match, TreeNode } from "./wire/index.ts";
 
 // The root is a path on the backend's machine (the bench, over the pipe), so shorten it against that
 // machine's home and cwd from hello, never this process's.

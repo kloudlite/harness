@@ -1,6 +1,6 @@
 //! Test fixture only (never imported by production code): the demo workspaces and environments the
 //! sidebar once showed, kept so app.test.tsx can feed them through the backend `teamView()` seam.
-import type { TeamView } from "@kloudlite-tui/backend";
+import type { TeamView } from "./wire/index.ts";
 import type { Environment, Workspace } from "./workspaces.ts";
 
 /** The working session's workspaces — they move with it, never with an environment. */

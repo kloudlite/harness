@@ -1,7 +1,7 @@
 //! What the sidebar draws, and `fromTeam`, which maps the backend's `TeamView` (the platform's
 //! real workspaces, environments and ide-server processes) onto it. The demo data lives in
 //! ./fixtures.ts for tests only.
-import type { TeamView } from "@kloudlite-tui/backend";
+import type { TeamView } from "./wire/index.ts";
 
 export type WorkspaceStatus = "running" | "attached" | "stopped" | "cloning";
 

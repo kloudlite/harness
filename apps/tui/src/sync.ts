@@ -1,6 +1,6 @@
 //! What a TUI does with what the daemon pushes. Pure: app.tsx owns React state and calls these.
 //! The daemon holds every session's state; nothing here invents state the daemon did not send.
-import type { Ask, SessionState, TeamView } from "@kloudlite-tui/backend";
+import type { Ask, SessionState, TeamView } from "./wire/index.ts";
 import type { Entry } from "./components/Transcript.tsx";
 import { fromTeam } from "./workspaces";
 

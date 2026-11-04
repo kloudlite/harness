@@ -8,12 +8,11 @@
   },
   "scripts": {
     "dev": "bun run src/cli.tsx",
-    "check": "tsc --noEmit",
-    "e2e": "bun run e2e/model-state.e2e.ts"
+    "check": "tsc --noEmit"
   },
   "dependencies": {
-    "@kloudlite-tui/agent": "workspace:*",
-    "@kloudlite-tui/backend": "workspace:*",
+    "@earendil-works/pi-ai": "1.4.0",
+    "@earendil-works/pi-coding-agent": "1.4.0",
     "@kloudlite-tui/tools": "workspace:*",
     "@opentui/core": "^0.5.1",
     "@opentui/react": "^0.5.1",

@@ -1,8 +1,8 @@
-// Records the frames the wire tests exercise (packages/backend/src/wire.test.ts and serve.ts) as JSON, so
+// Records the frames the wire tests exercise (apps/tui/src/wire/wire.test.ts and serve.ts) as JSON, so
 // the Rust runtime replays them and must answer byte-identically (bins/runtime/tests/fixtures/wire-frames.json).
 // Usage: bun run scripts/dump-wire.ts > wire-frames.json
-import { serve } from "../packages/backend/src/serve.ts";
-import { encode, Peer, PROTOCOL } from "../packages/backend/src/wire.ts";
+import { serve } from "../apps/tui/src/wire/serve.ts";
+import { encode, Peer, PROTOCOL } from "../apps/tui/src/wire/wire.ts";
 
 type Row = { case: string; dir: "in" | "out"; line: string };
 const rows: Row[] = [];

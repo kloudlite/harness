@@ -6,7 +6,7 @@ One tool per resource. `action` picks the verb; the arguments below are the unio
 
 | Tool | Arguments | Answers |
 |---|---|---|
-| `session` | `action`, `team?`, `name?`, `environment?`, `ttl_secs?`, `session?`, `wait?`, `soft_ms?`, `clear?` | `current`: the session, its team, its environment. `use`: picks the session among yours (laptop door and remote server; not the harness) and connects `environment` (null disconnects). `pick` (laptop door, which also takes `id` and `new_environment`): picks by `id` when several exist. `create`, `start`, `stop`, `delete`, `list`, `ttl` (`ttl_secs` 600..2592000, or `clear`) |
+| `session` | `action`, `team?`, `name?`, `environment?`, `ttl_secs?`, `session?`, `wait?`, `soft_ms?`, `clear?` | `current`: the session, its team, its environment. `use`: picks the session among yours (laptop door and remote server; not the harness) and connects `environment` (null disconnects). `pick` (laptop door, which also takes `id` and `new_environment`): picks by `id` when several exist. `create`, `start`, `stop`, `delete`, `list`, `ttl` (`ttl_secs` 600..2592000, or `clear`). `queue` (read, owner only): the messages waiting for the session's agents as `{pending, oldest_age_secs, failed}`; `failed` counts those that were dead-lettered after three failed slices |
 
 ## Workspaces
 
@@ -79,3 +79,4 @@ One tool per resource. `action` picks the verb; the arguments below are the unio
 | `requests_list`, `request_get`, `request_create` | `owner?`, `id`, `kind`, `reason` | Requests to an admin |
 | `status` | `all?` | `notices` not yet shown (`all` lists the last 50, delivered ones included, kept across bench restarts in `~/.kl/notices.json`), `workspaces` (the session's) and `environment` with their states, running `processes` of those workspaces and any a tool touched. Call it once at the start of each turn |
 | `web_fetch`, `web_search` | `url`; `query` | Page text; results |
+| `codemode` | `code`, `timeout_s?` | The value the script returns, else what it printed. `code` is the body of an async JavaScript function; `tools.<name>(args)` calls any other tool you hold and returns a promise of that tool's answer, in the same shape as a direct call (a blocked call or bad arguments reject with an `Error`). Limits: 60 s and 64 MiB by default, `timeout_s` raises the time to 600 s at most; no `fetch`, no filesystem, no timers beyond `setTimeout`; `console.log` is captured |

@@ -1,14 +1,14 @@
 #!/usr/bin/env bun
-// The pod's TUI: a client of the bench daemon (packages/backend/src/daemon.ts), through a relay. The agent lives in the daemon, not here, so closing this terminal (ttyd tab,
+// The pod's TUI: a client of the bench daemon (the Kloudlite runtime), through a relay. The agent lives in the daemon, not here, so closing this terminal (ttyd tab,
 // reload) leaves a running turn going and the next TUI finds it busy.
 import { fileURLToPath } from "node:url";
-import { connect } from "@kloudlite-tui/backend";
+import { connect } from "./wire/index.ts";
 import { boot } from "./hello.ts";
 import { start } from "./start.tsx";
 
 let c: Awaited<ReturnType<typeof connect>>;
 try {
-  c = await connect([process.execPath, "run", "--silent", fileURLToPath(new URL("../../../packages/backend/src/relay.ts", import.meta.url))]);
+  c = await connect([process.execPath, "run", "--silent", fileURLToPath(new URL("./wire/relay.ts", import.meta.url))]);
 } catch (e: any) {
   process.stderr.write(`kl: ${e.message}\n`);
   process.exit(e.code ?? 1);

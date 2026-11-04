@@ -1,4 +1,4 @@
-import type { Backend } from "@kloudlite-tui/backend";
+import type { Backend } from "./wire/index.ts";
 
 /**
  * The reads Files draws from. A workspace view reads that workspace's pod (`podfs`) and ignores

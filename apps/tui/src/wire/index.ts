@@ -1,18 +1,11 @@
 //! The seam between the TUI and the agent. `LocalBackend` (./local) runs the agent in-process; a
 //! `RemoteBackend` (./remote) reaches the same thing on the bench over a websocket through bench-proxy (./wire). The TUI
-//! imports only this file and ./remote at runtime, so the laptop binary bundles no agent.
+//! imports only this file and ./remote at runtime, so the laptop binary bundles no agent. The agent itself is the Kloudlite
+//! runtime now (Rust); the pi types here are type-only.
 //! Design: docs/superpowers/specs/2026-10-08-local-tui-design.md.
-import type {
-  AgentSession,
-  AgentSessionEvent,
-  listSessions,
-  loginOptions,
-  loginProvider,
-  ModelRef,
-  providerAuth,
-  readSettings,
-  ThinkingLevel,
-} from "@kloudlite-tui/agent";
+import type { AgentSession, AgentSessionEvent } from "@earendil-works/pi-coding-agent";
+import type { AuthInteraction, AuthType } from "@earendil-works/pi-ai";
+import type { ModelRef, ProviderCheck, ThinkingLevel } from "./agent-types.ts";
 import type { ToolDef } from "@kloudlite-tui/tools";
 import type { FileDiff, DiffLine } from "./diff.ts";
 import type { Change, ChangeStatus, Match, TreeNode } from "./git.ts";
@@ -23,16 +16,24 @@ export type { ModelRef, ThinkingLevel, ToolDef };
 export { PROTOCOL } from "./wire.ts";
 export { connect, RemoteBackend } from "./remote.ts";
 
-export type Settings = ReturnType<typeof readSettings>;
-export type SessionMeta = ReturnType<typeof listSessions>[number];
+export type Settings = {
+  defaultModel?: ModelRef; theme?: string; sidebar?: "show" | "hide"; sidebarWidth?: number; thinking?: "show" | "hide";
+  thinkingLevel?: ThinkingLevel; autoCompact?: "on" | "off"; codemode?: "on" | "off"; vim?: "on" | "off";
+};
+export type SessionMeta = { key: string; name?: string; description?: string; updated: number };
 export type LiveSessionMeta = SessionMeta & { busy: boolean };
-export type LoginOption = ReturnType<typeof loginOptions>[number];
-export type ProviderAuth = Awaited<ReturnType<typeof providerAuth>>[number];
-export type { ProviderCheck } from "@kloudlite-tui/agent";
-import type { ProviderCheck } from "@kloudlite-tui/agent";
-export type LoginType = Parameters<typeof loginProvider>[1];
+export type LoginOption = { provider: string; type: AuthType; label: string };
+export type ProviderAuth = {
+  provider: string;
+  /** Credentials resolve (env key, OAuth token, ambient) - a request can run. */
+  ok: boolean;
+  /** Env var(s) that would configure this provider, for the "how to add" hint. */
+  envKeys: string[];
+};
+export type { ProviderCheck };
+export type LoginType = AuthType;
 /** pi's `AuthInteraction`: `{ signal?, prompt(p): Promise<string>, notify(e): void }`. */
-export type LoginUi = Parameters<typeof loginProvider>[2];
+export type LoginUi = AuthInteraction;
 export type CatalogModel = { provider: string; id: string; name: string; input: string[] };
 /** What the sidebar shows, read by the bench from the platform (./session). JSON-safe: it crosses the websocket. */
 export type TeamProcess = { id: string; tree?: string; cmd: string; state: string; exit_code?: number | null; failed?: boolean; started_at?: string; logs: { text: string; err?: true }[] };

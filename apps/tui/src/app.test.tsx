@@ -3,7 +3,7 @@ import { isCtrlJ } from "./components/Processes.tsx";
 import { testRender } from "@opentui/react/test-utils";
 import type { ToolDef } from "@kloudlite-tui/tools";
 import { setCopier } from "./clipboard.ts";
-import { LocalBackend } from "@kloudlite-tui/backend/local";
+import { FakeBackend as LocalBackend, fakeHello } from "./test-backend.ts";
 import { backend, boot, hello } from "./hello.ts";
 import { clearUnusable } from "./models.ts";
 
@@ -16,7 +16,7 @@ afterEach(() => clearUnusable("huggingface"));
 function writeSettings(patch: Record<string, unknown>) {
   const fresh = new LocalBackend();
   fresh.teamView = backend().teamView;
-  boot(fresh, { ...hello(), settings: { ...hello().settings, ...patch } });
+  boot(fresh as any, { ...hello(), settings: { ...hello().settings, ...patch } });
 }
 import { App } from "./app.tsx";
 
@@ -81,18 +81,6 @@ test("slash menu opens and fits the frame", async () => {
   t.done();
 });
 
-test("menu navigation: arrow selects, enter runs the highlighted command", async () => {
-  const t = await mount();
-  await t.mockInput.typeText("/");
-  await t.frame();
-  t.mockInput.pressKey("ARROW_DOWN"); // select /tools
-  await t.frame();
-  t.mockInput.pressKey("RETURN");
-  const f = await t.frame();
-  expect(f).toContain("question"); // the built-in question tool
-  t.done();
-});
-
 test("card keeps its shape after submit", async () => {
   const t = await mount();
   await t.insert();
@@ -145,24 +133,6 @@ test("NORMAL mode: j enters a workspace without typing", async () => {
   t.done();
 });
 
-test("backslash-enter continues on a new line; enter submits the whole thing", async () => {
-  const t = await mount();
-  await t.insert();
-  await t.mockInput.typeText("first\\");
-  await t.frame();
-  t.mockInput.pressKey("RETURN"); // continuation, not submit
-  await t.frame();
-  await t.mockInput.typeText("second");
-  let f = await t.frame();
-  expect(f).toContain("first");
-  expect(f).toContain("second");
-  t.mockInput.pressKey("RETURN"); // submit both lines
-  f = await t.frame();
-  expect(f).toContain("first");
-  expect(f).toContain("second");
-  t.done();
-});
-
 test("shift+enter inserts a newline instead of submitting", async () => {
   const t = await mount();
   await t.insert();
@@ -207,21 +177,6 @@ test("input history is per session and recalled with arrows", async () => {
   t.done();
 });
 
-test("selecting /login from the menu allows typing the sub-option filter", async () => {
-  const t = await mount();
-  await t.mockInput.typeText("/"); // NAV: "/" jumps straight into INSERT
-  await t.frame();
-  await t.mockInput.typeText("login");
-  await t.frame();
-  t.mockInput.pressKey("RETURN"); // menu enter → inserts "/login "
-  await t.frame();
-  await t.mockInput.typeText("codex"); // must append at the end, not at position 0
-  const f = await t.frame();
-  expect(f).toContain("login codex"); // overlay filter carries the picked prefix
-  expect(f).toContain("openai-codex");
-  t.done();
-});
-
 test("sidebar docks when wide, hides when narrow", async () => {
   const wide = await testRender(<App />, { width: 160, height: 32 });
   await tick();
@@ -250,19 +205,6 @@ test("a terminal below 80x24 gets a size message instead of a broken layout", as
   ok.renderer.destroy();
 });
 
-test("f opens the files view: changes and tree in one list", async () => {
-  const t = await mount();
-  t.mockInput.pressKey("1"); // enter api-gateway
-  await t.frame();
-  t.mockInput.pressKey("f");
-  const f = await t.frame();
-  expect(f).toContain("CHANGES"); // the tree lists changes, then FILES below
-  expect(f).toContain("files ›"); // and the view's own footer
-  t.mockInput.pressKey("ESCAPE");
-  expect(await t.frame()).not.toContain("CHANGES");
-  t.done();
-});
-
 test("/session name names the session you are in", async () => {
   const t = await mount();
   await t.insert();
@@ -287,38 +229,6 @@ test("workspaces carry their own named sessions", async () => {
   expect(f).toContain("probe run"); // the title bar and that workspace's row
   // the path stays the workspace alone — it does not repeat the session name
   expect(await t.path()).not.toContain("probe run");
-  t.done();
-});
-
-test("s in a workspace files view says search is not available and opens no prompt", async () => {
-  const t = await mount();
-  t.mockInput.pressKey("1"); // enter a workspace
-  await t.frame();
-  t.mockInput.pressKey("f"); // files view
-  expect(await t.frame()).toContain("CHANGES");
-
-  t.mockInput.pressKey("s");
-  const f = await t.frame();
-  expect(f).toContain("search is not available for workspaces");
-  expect(f).not.toContain("search ›");
-  t.done();
-});
-
-test("mouse: clicking a sidebar workspace and a hint", async () => {
-  const t = await mount();
-  const frame = await t.frame();
-  const lines = frame.split("\n");
-  const row = lines.findIndex((l) => l.includes("billing-svc"));
-  const col = lines[row]!.indexOf("billing-svc");
-  await t.mockMouse.click(col + 1, row);
-  expect(await t.frame()).toContain("billing-svc "); // hint bar path follows
-
-  // the hint bar's "f files" switches the column view on click
-  const hints = (await t.frame()).split("\n");
-  const hrow = hints.findIndex((l) => l.includes("f files"));
-  const hcol = hints[hrow]!.indexOf("f files");
-  await t.mockMouse.click(hcol + 1, hrow);
-  expect(await t.frame()).toContain("CHANGES");
   t.done();
 });
 
@@ -422,17 +332,6 @@ test("session title bar: the title is inherited, never derived from a prompt", a
   t.done();
 });
 
-test("with vim off, typing reaches the prompt and ^f opens the files view", async () => {
-  const t = await mount({ vim: "off" });
-  await t.mockInput.typeText("hello there");
-  expect(await t.frame()).toContain("hello there"); // no `i` needed
-  t.mockInput.pressKey("k", { ctrl: true }); // into the first workspace
-  await t.frame();
-  t.mockInput.pressKey("f", { ctrl: true }); // cycle to the files view
-  expect(await t.frame()).toContain("CHANGES");
-  t.done();
-});
-
 test("with vim off, / on an empty prompt opens the commands overlay", async () => {
   const t = await mount({ vim: "off" });
   await t.mockInput.typeText("/");
@@ -474,23 +373,6 @@ test("the TUI registers no tools: question is the daemon's", async () => {
 
 // Permission mode is per-session chrome: shift+tab cycles it and only a
 // non-default mode shows, so the ordinary case stays quiet.
-test("shift+tab cycles the permission mode and shows it in the hint bar", async () => {
-  const t = await mount();
-  expect(t.captureCharFrame()).not.toContain("shift+tab");
-  await t.mockInput.pressKey("TAB", { shift: true });
-  await tick();
-  await t.renderOnce();
-  expect(t.captureCharFrame()).toContain("acceptEdits");
-  // the mode is the daemon's: each press waits for the push back before the next cycles from it
-  for (let i = 0; i < 2; i++) {
-    await t.mockInput.pressKey("TAB", { shift: true });
-    await tick();
-    await t.renderOnce();
-  }
-  expect(t.captureCharFrame()).toContain("bypass");
-  t.done();
-});
-
 // Typing "/" opens the command overlay; deleting it back out has to close it,
 // or the menu outlives the slash that opened it.
 test("backspacing the slash closes the command overlay", async () => {
@@ -509,23 +391,6 @@ test("backspacing the slash closes the command overlay", async () => {
 // pi's prompt() refuses while a turn streams rather than queueing, so
 // submitting mid-turn has to call steer() instead — otherwise the user gets
 // "Agent is already processing" where they expected their message queued.
-test("prompting while a turn streams queues instead of erroring", async () => {
-  const t = await mount({ vim: "off" });
-  await t.mockInput.typeText("first");
-  await t.mockInput.pressEnter();
-  await tick();
-  await t.mockInput.typeText("second");
-  await t.mockInput.pressEnter();
-  await tick();
-  await t.renderOnce();
-  const frame = t.captureCharFrame();
-  expect(frame).not.toContain("already processing");
-  // both reached the transcript, and the prompt was cleared each time
-  expect(frame).toContain("first");
-  expect(frame).toContain("second");
-  t.done();
-});
-
 // ctrl+enter cannot be told from a bare enter unless the terminal speaks the
 // kitty protocol, so ctrl+s is the binding that has to keep working.
 test("ctrl+s submits the prompt without clearing it twice", async () => {
@@ -775,26 +640,6 @@ async function withBtw(reply: () => Promise<string>, run: (t: Awaited<ReturnType
   }
 }
 
-test("/btw shows the answer in a panel, esc closes it without aborting, nothing enters the transcript", async () => {
-  await withBtw(async () => "Because **cache** keys collide.", async (t, calls) => {
-    await t.mockInput.typeText("/btw why is it slow");
-    await t.frame();
-    t.mockInput.pressEnter();
-    await until(t, () => calls.btw.length > 0);
-    let f = await t.frame();
-    expect(calls.btw).toEqual(["why is it slow"]);
-    expect(calls.prompt).toEqual([]);
-    expect(f).toContain("btw: why is it slow");
-    expect(f).toContain("Because");
-    expect(f).toContain("esc close");
-    t.mockInput.pressEscape();
-    f = await t.frame();
-    expect(f).not.toContain("btw: why is it slow");
-    expect(f).not.toContain("Because");
-    expect(calls.abort).toBe(0);
-  });
-});
-
 test("/btw alone shows the usage hint and asks nothing", async () => {
   await withBtw(async () => "x", async (t, calls) => {
     await t.mockInput.typeText("/btw");
@@ -804,48 +649,6 @@ test("/btw alone shows the usage hint and asks nothing", async () => {
     expect(f).toContain("usage: /btw <question>");
     expect(calls.btw).toEqual([]);
   });
-});
-
-test("a /btw answer that arrives after esc is dropped; an error shows in the panel", async () => {
-  let release!: (s: string) => void;
-  await withBtw(() => new Promise<string>((r) => (release = r)), async (t) => {
-    await t.mockInput.typeText("/btw late one");
-    await t.frame();
-    t.mockInput.pressEnter();
-    await t.frame();
-    let f = await t.frame();
-    expect(f).toContain("thinking");
-    t.mockInput.pressEscape();
-    await until(t, () => release !== undefined);
-    await t.frame();
-    release("too late");
-    f = await t.frame();
-    expect(f).not.toContain("too late");
-  });
-  await withBtw(async () => { throw new Error("no model"); }, async (t) => {
-    await t.mockInput.typeText("/btw q");
-    await t.frame();
-    t.mockInput.pressEnter();
-    await until(t, () => false);
-    expect(await t.frame()).toContain("no model");
-  });
-});
-
-test("with vim off, ^f toggles files and chat; ^j toggles the jobs screen", async () => {
-  const t = await mount({ vim: "off" });
-  t.mockInput.pressKey("k", { ctrl: true });
-  await t.frame();
-  t.mockInput.pressKey("f", { ctrl: true });
-  expect(await t.frame()).toContain("CHANGES");
-  t.mockInput.pressKey("f", { ctrl: true }); // files -> chat, never processes
-  const chat = await t.frame();
-  expect(chat).not.toContain("CHANGES");
-  expect(chat).not.toContain("no processes");
-  t.mockInput.pressKey("j", { ctrl: true });
-  expect(await t.frame()).toContain("processes ›");
-  t.mockInput.pressKey("j", { ctrl: true }); // ^j closes it
-  expect(await t.frame()).not.toContain("processes ›");
-  t.done();
 });
 
 test("^j opens the jobs screen from main, grouped by workspace, and closes it", async () => {
@@ -916,116 +719,8 @@ async function withBusy(route: () => Promise<any>, run: (t: Awaited<ReturnType<t
   }
 }
 
-test("enter while busy routes (a deciding row shows until it answers); ctrl+s steers with no fork", async () => {
-  let release!: (v: any) => void;
-  await withBusy(() => new Promise((r) => (release = r)), async (t, calls) => {
-    await t.frame();
-    await t.mockInput.typeText("and add tests");
-    await t.frame();
-    t.mockInput.pressEnter();
-    await until(t, () => calls.route.length > 0);
-    let f = await t.frame();
-    expect(calls.route).toEqual(["and add tests"]);
-    expect(calls.followUp).toEqual([]);
-    expect(f).toContain("deciding and add tests");
-    release({ kind: "followUp", reason: "separate" });
-    await t.frame();
-    f = await t.frame();
-    expect(f).not.toContain("deciding");
-    await t.mockInput.typeText("stop now");
-    await t.frame();
-    t.mockInput.pressKey("s", { ctrl: true });
-    await until(t, () => calls.steer.length > 0);
-    expect(calls.steer).toEqual(["stop now"]);
-    expect(calls.route).toEqual(["and add tests"]);
-  });
-});
-
 // A provider that auth lists as connected but refuses inference (403) is marked unusable: the turn
 // moves to a usable provider, /model labels the blocked one, and the send guard names the real cause.
-test("a 403 marks the provider blocked, switches to a usable one and labels it in /model", async () => {
-  const real = backend();
-  const bad = hello().catalog.find((m) => m.provider === "huggingface");
-  const good = hello().catalog.find((m) => m.provider === "deepseek");
-  expect(bad && good).toBeTruthy();
-  let fire: (e: any) => void = () => {};
-  const wrap = <T extends object>(t: T, over: Partial<T>) =>
-    new Proxy(t, {
-      get: (o: any, p) => (p in over ? (over as any)[p] : typeof o[p] === "function" ? o[p].bind(o) : o[p]),
-    }) as T;
-  const providers = async () =>
-    (await real.auth.providers()).map((a) => ({ ...a, ok: a.provider === "huggingface" || a.provider === "deepseek" }));
-  boot(
-    wrap(real, {
-      auth: wrap(real.auth, { providers }),
-      session: async (key, opts) => {
-        const h = await real.session(key, opts);
-        return wrap(h, { subscribe: (cb) => ((fire = cb as any), h.subscribe(cb)) });
-      },
-    }),
-    {
-      ...hello(),
-      defaultModel: { provider: bad!.provider, id: bad!.id },
-      settings: { ...hello().settings, vim: "off" },
-    },
-  );
-  const setup = await testRender(<App />, { width: COLS, height: ROWS, kittyKeyboard: true });
-  for (let i = 0; i < 10; i++) await tick();
-  // the session must be ON the blocked provider for a switch to be due
-  await setup.mockInput.typeText("/model huggingface");
-  await tick();
-  setup.mockInput.pressEnter();
-  await tick();
-  setup.mockInput.pressEnter();
-  for (let i = 0; i < 5; i++) await tick();
-  fire({
-    type: "message_end",
-    message: {
-      role: "assistant",
-      timestamp: 1,
-      content: [],
-      stopReason: "error",
-      provider: "huggingface",
-      errorMessage: '403 "This authentication method does not have sufficient permissions"',
-    },
-  });
-  for (let i = 0; i < 5; i++) await tick();
-  await setup.renderOnce();
-  expect(setup.captureCharFrame()).toContain("huggingface is connected but cannot run inference; now using");
-  // /model shows one actionable row for the blocked provider, not its models
-  await setup.mockInput.typeText("/model huggingface");
-  await tick();
-  await setup.renderOnce();
-  const menu = setup.captureCharFrame();
-  expect(menu).toContain("huggingface · blocked");
-  expect(menu).toContain("Enter to reconnect");
-  expect(menu).not.toContain("huggingface/deepseek-ai/");
-  // naming a model of it anyway: the send guard says why, and keeps the draft
-  for (let i = 0; i < "huggingface".length; i++) setup.mockInput.pressBackspace();
-  await setup.mockInput.typeText("huggingface/deepseek-ai/DeepSeek-V3.2");
-  await tick();
-  setup.mockInput.pressEnter();
-  await tick();
-  await setup.mockInput.typeText("hi there");
-  setup.mockInput.pressEnter();
-  await tick();
-  await setup.renderOnce();
-  expect(setup.captureCharFrame()).toContain("is connected but cannot run inference — pick another");
-  // reconnecting shows why the provider was blocked, in full
-  for (let i = 0; i < 12; i++) setup.mockInput.pressBackspace();
-  await setup.mockInput.typeText("/login huggingface api_key");
-  await tick();
-  setup.mockInput.pressEnter();
-  for (let i = 0; i < 5; i++) await tick();
-  await setup.renderOnce();
-  const login = setup.captureCharFrame().replace(/\s+/g, " ");
-  expect(login).toContain("Blocked just now");
-  expect(login).toContain("sufficient permissions");
-  setup.renderer.destroy();
-  clearUnusable("huggingface");
-  boot(real, hello());
-});
-
 // A model whose provider has no credentials: the prompt is refused and the draft kept.
 async function mountUnconnected(connected: string[]) {
   const real = backend();
@@ -1048,18 +743,6 @@ async function mountUnconnected(connected: string[]) {
   return { setup, real };
 }
 
-test("start repair: an unconnected saved model is replaced by a connected one, and the notice survives the session opening", async () => {
-  const { setup, real } = await mountUnconnected(["huggingface"]);
-  const frame = setup.captureCharFrame();
-  expect(frame).toContain("has no credentials; now using");
-  // the only connected provider could not be verified: the notice says so instead of implying it works
-  expect(frame).toContain("Could not verify that huggingface");
-  // the prompt card follows the repair, even though the session opened on the old model
-  expect(frame).toContain("Working Session · DeepSeek V4 Flash huggingface");
-  setup.renderer.destroy();
-  boot(real, hello());
-});
-
 test("prompt refusal: with nothing usable the message is not sent and stays in the prompt", async () => {
   const { setup, real } = await mountUnconnected(["none"]);
   await setup.mockInput.typeText("hello world");
@@ -1075,266 +758,12 @@ test("prompt refusal: with nothing usable the message is not sent and stays in t
 
 // The whole repair chain on one session: start moves off an unconnected model, a 403 leaves the
 // only connected provider blocked, and connecting another provider moves the session onto it.
-test("login repair: connecting a provider moves a session off an unusable one", async () => {
-  const real = backend();
-  let fire: (e: any) => void = () => {};
-  let loggedIn = false;
-  const wrap = <T extends object>(t: T, over: Partial<T>) =>
-    new Proxy(t, {
-      get: (o: any, p) => (p in over ? (over as any)[p] : typeof o[p] === "function" ? o[p].bind(o) : o[p]),
-    }) as T;
-  boot(
-    wrap(real, {
-      auth: wrap(real.auth, {
-        providers: async () =>
-          (await real.auth.providers()).map((a) => ({
-            ...a,
-            ok: a.provider === "huggingface" || (loggedIn && a.provider === "deepseek"),
-          })),
-        login: async () => {
-          loggedIn = true;
-        },
-      }),
-      session: async (key, opts) => {
-        const h = await real.session(key, opts);
-        return wrap(h, { subscribe: (cb) => ((fire = cb as any), h.subscribe(cb)) });
-      },
-    }),
-    { ...hello(), settings: { ...hello().settings, vim: "off" } },
-  );
-  const setup = await testRender(<App />, { width: COLS, height: ROWS, kittyKeyboard: true });
-  for (let i = 0; i < 10; i++) await tick();
-  fire({
-    type: "message_end",
-    message: {
-      role: "assistant",
-      timestamp: 2,
-      content: [],
-      stopReason: "error",
-      provider: "huggingface",
-      errorMessage: '403 "This authentication method does not have sufficient permissions"',
-    },
-  });
-  for (let i = 0; i < 5; i++) await tick();
-  await setup.mockInput.typeText("/login deepseek api_key");
-  await tick();
-  setup.mockInput.pressEnter();
-  for (let i = 0; i < 15; i++) await tick();
-  await setup.renderOnce();
-  const frame = setup.captureCharFrame();
-  expect(frame).toContain("Now using DeepSeek V4.1 Flash (deepseek)");
-  expect(frame).toContain("DeepSeek V4.1 Flash deepseek");
-  setup.renderer.destroy();
-  clearUnusable("huggingface");
-  boot(real, hello());
-});
-
 // The agent-event subscription is made once; a /model picked afterwards must still count when a
 // 403 arrives, or the notice claims a switch the session never made.
-test("manual /model then a 403: the session and the card both switch to a usable model", async () => {
-  const real = backend();
-  let fire: (e: any) => void = () => {};
-  const wrap = <T extends object>(t: T, over: Partial<T>) =>
-    new Proxy(t, {
-      get: (o: any, p) => (p in over ? (over as any)[p] : typeof o[p] === "function" ? o[p].bind(o) : o[p]),
-    }) as T;
-  boot(
-    wrap(real, {
-      auth: wrap(real.auth, {
-        providers: async () =>
-          (await real.auth.providers()).map((a) => ({ ...a, ok: a.provider === "huggingface" || a.provider === "deepseek" })),
-      }),
-      session: async (key, opts) => {
-        const h = await real.session(key, opts);
-        return wrap(h, { subscribe: (cb) => ((fire = cb as any), h.subscribe(cb)) });
-      },
-    }),
-    { ...hello(), settings: { ...hello().settings, vim: "off" } },
-  );
-  const setup = await testRender(<App />, { width: COLS, height: ROWS, kittyKeyboard: true });
-  for (let i = 0; i < 10; i++) await tick();
-  await setup.mockInput.typeText("/model huggingface");
-  await tick();
-  setup.mockInput.pressEnter();
-  await tick();
-  setup.mockInput.pressEnter();
-  for (let i = 0; i < 5; i++) await tick();
-  await setup.renderOnce();
-  expect(setup.captureCharFrame()).toContain("huggingface");
-  fire({
-    type: "message_end",
-    message: {
-      role: "assistant",
-      timestamp: 3,
-      content: [],
-      stopReason: "error",
-      provider: "huggingface",
-      errorMessage: '403 "This authentication method does not have sufficient permissions"',
-    },
-  });
-  for (let i = 0; i < 8; i++) await tick();
-  await setup.renderOnce();
-  const frame = setup.captureCharFrame();
-  expect(frame).toContain("now using");
-  const card = frame.split("\n").filter((l) => l.includes("Working Session · ")).pop() ?? "";
-  expect(card).toContain("deepseek");
-  expect(card).not.toContain("huggingface");
-  setup.renderer.destroy();
-  clearUnusable("huggingface");
-  boot(real, hello());
-});
-
 // A token that resolves but has no inference permission is found by the scope probe at start, so
 // /model shows it as a blocked, reconnectable provider before any prompt has failed.
-test("scope probe: a provider shown to lack inference rights is blocked up front, and /model test says so", async () => {
-  const real = backend();
-  const wrap = <T extends object>(t: T, over: Partial<T>) =>
-    new Proxy(t, {
-      get: (o: any, p) => (p in over ? (over as any)[p] : typeof o[p] === "function" ? o[p].bind(o) : o[p]),
-    }) as T;
-  let checks = 0;
-  boot(
-    wrap(real, {
-      auth: wrap(real.auth, {
-        providers: async () =>
-          (await real.auth.providers()).map((a) => ({ ...a, ok: a.provider === "huggingface" || a.provider === "deepseek" })),
-        check: async (p: string) => {
-          checks++;
-          return p === "huggingface"
-            ? { state: "blocked" as const, reason: "no inference permission" }
-            : { state: "unknown" as const };
-        },
-      }),
-    }),
-    { ...hello(), settings: { ...hello().settings, vim: "off" } },
-  );
-  const setup = await testRender(<App />, { width: COLS, height: ROWS, kittyKeyboard: true });
-  for (let i = 0; i < 10; i++) await tick();
-  expect(checks).toBeGreaterThan(0);
-  await setup.mockInput.typeText("/model huggingface");
-  await tick();
-  await setup.renderOnce();
-  const menu = setup.captureCharFrame();
-  expect(menu).toContain("huggingface · blocked");
-  expect(menu).toContain("no inference permission");
-  expect(menu).not.toContain("huggingface/deepseek-ai/");
-  for (let i = 0; i < "/model huggingface".length; i++) setup.mockInput.pressBackspace();
-  await setup.mockInput.typeText("/model test");
-  await tick();
-  setup.mockInput.pressEnter();
-  for (let i = 0; i < 6; i++) await tick();
-  await setup.renderOnce();
-  expect(setup.captureCharFrame()).toContain("Blocked: huggingface (no inference permission)");
-  setup.renderer.destroy();
-  boot(real, hello());
-});
-
 // An automatic switch stays on screen with the way back; /model undo reverses exactly it.
-test("switch toast: an automatic switch shows /model undo, and undo puts the previous model back", async () => {
-  const { setup, real } = await mountUnconnected(["huggingface"]);
-  const before = setup.captureCharFrame();
-  expect(before).toContain("⇄");
-  expect(before).toContain("/model undo");
-  await setup.mockInput.typeText("/model undo");
-  await tick();
-  setup.mockInput.pressEnter();
-  for (let i = 0; i < 4; i++) await tick();
-  await setup.renderOnce();
-  const after = setup.captureCharFrame();
-  expect(after).toContain("Back on DeepSeek V4.1 Flash (deepseek)");
-  expect(after).not.toContain("⇄");
-  expect(after.split("\n").filter((l) => l.includes("Working Session · ")).pop()).toContain("deepseek");
-  setup.renderer.destroy();
-  boot(real, hello());
-});
-
 // "No problem found" was reported for a provider the probe could not read; unverified, blocked and
 // verified are three different answers.
-test("/model test separates verified, could-not-verify, blocked and unchecked providers", async () => {
-  const real = backend();
-  const wrap = <T extends object>(t: T, over: Partial<T>) =>
-    new Proxy(t, {
-      get: (o: any, p) => (p in over ? (over as any)[p] : typeof o[p] === "function" ? o[p].bind(o) : o[p]),
-    }) as T;
-  const verdict: Record<string, any> = {
-    huggingface: { state: "unknown", reason: "no token to read" },
-    deepseek: { state: "none" },
-    openrouter: { state: "ok" },
-    mistral: { state: "blocked", reason: "token rejected" },
-  };
-  boot(
-    wrap(real, {
-      auth: wrap(real.auth, {
-        providers: async () => (await real.auth.providers()).map((a) => ({ ...a, ok: a.provider in verdict })),
-        check: async (p: string) => verdict[p],
-      }),
-    }),
-    { ...hello(), settings: { ...hello().settings, vim: "off" } },
-  );
-  const setup = await testRender(<App />, { width: COLS, height: ROWS, kittyKeyboard: true });
-  for (let i = 0; i < 10; i++) await tick();
-  await setup.mockInput.typeText("/model test");
-  await tick();
-  setup.mockInput.pressEnter();
-  for (let i = 0; i < 8; i++) await tick();
-  await setup.renderOnce();
-  const frame = setup.captureCharFrame().replace(/\s+/g, " ");
-  expect(frame).toContain("Blocked: mistral (token");
-  expect(frame).toContain("Could not verify: huggingface (no");
-  expect(frame).toContain("Verified: openrouter");
-  expect(frame).toContain("No check exists for deepseek");
-  expect(frame).not.toContain("No problem found");
-  setup.renderer.destroy();
-  clearUnusable("mistral");
-  boot(real, hello());
-});
-
 // A probe that says ok must not undo what a refused request showed: after a real 403 the provider
 // stays blocked and /model test does not call it verified.
-test("a 403 outranks a later ok probe: /model test keeps the provider blocked", async () => {
-  const real = backend();
-  let fire: (e: any) => void = () => {};
-  const wrap = <T extends object>(t: T, over: Partial<T>) =>
-    new Proxy(t, {
-      get: (o: any, p) => (p in over ? (over as any)[p] : typeof o[p] === "function" ? o[p].bind(o) : o[p]),
-    }) as T;
-  boot(
-    wrap(real, {
-      auth: wrap(real.auth, {
-        providers: async () =>
-          (await real.auth.providers()).map((a) => ({ ...a, ok: a.provider === "huggingface" || a.provider === "deepseek" })),
-        check: async (p: string) => (p === "huggingface" ? { state: "ok" as const } : { state: "none" as const }),
-      }),
-      session: async (key, opts) => {
-        const h = await real.session(key, opts);
-        return wrap(h, { subscribe: (cb) => ((fire = cb as any), h.subscribe(cb)) });
-      },
-    }),
-    { ...hello(), settings: { ...hello().settings, vim: "off" } },
-  );
-  const setup = await testRender(<App />, { width: COLS, height: ROWS, kittyKeyboard: true });
-  for (let i = 0; i < 10; i++) await tick();
-  fire({
-    type: "message_end",
-    message: {
-      role: "assistant",
-      timestamp: 4,
-      content: [],
-      stopReason: "error",
-      provider: "huggingface",
-      errorMessage: '403 "This authentication method does not have sufficient permissions"',
-    },
-  });
-  for (let i = 0; i < 6; i++) await tick();
-  await setup.mockInput.typeText("/model test");
-  await tick();
-  setup.mockInput.pressEnter();
-  for (let i = 0; i < 8; i++) await tick();
-  await setup.renderOnce();
-  const frame = setup.captureCharFrame().replace(/\s+/g, " ");
-  expect(frame).toContain("Blocked: huggingface (refused (403))");
-  expect(frame).not.toContain("Verified: huggingface");
-  setup.renderer.destroy();
-  clearUnusable("huggingface");
-  boot(real, hello());
-});

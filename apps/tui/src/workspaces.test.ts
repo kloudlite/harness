@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { TeamView } from "@kloudlite-tui/backend";
+import type { TeamView } from "./wire/index.ts";
 import { fromTeam, isoStart, procName, wsPath, type Workspace } from "./workspaces.ts";
 
 const w = (id: string, parent?: string): Workspace =>

@@ -3,7 +3,7 @@
 // (kloudlite's wss pipe to the bench daemon); kloudlite builds the argv and reports exit 3
 // (protocol mismatch) as "update kloudlite and kl-tui".
 import { writeSync } from "node:fs";
-import { connect } from "@kloudlite-tui/backend";
+import { connect } from "./wire/index.ts";
 import { boot } from "./hello.ts";
 import { pipeArgv } from "./remote-args.ts";
 import { start } from "./start.tsx";

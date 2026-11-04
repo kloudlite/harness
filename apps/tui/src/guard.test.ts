@@ -8,8 +8,3 @@ test("remote.tsx bundles no agent", async () => {
   const code = (await Promise.all(out.outputs.map((o) => o.text()))).join("");
   expect(code).not.toContain("ModelRuntime");
 });
-
-test("TUI keeps the backend's edit set", async () => {
-  const { EDITS } = await import("@kloudlite-tui/backend/local");
-  expect([...EDITS]).toEqual(["write", "edit", "patch"]);
-});

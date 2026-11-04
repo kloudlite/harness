@@ -1,1 +1,1 @@
-export type { DiffLine, FileDiff } from "@kloudlite-tui/backend";
+export type { DiffLine, FileDiff } from "./wire/index.ts";

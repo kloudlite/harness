@@ -1,4 +1,4 @@
-import type { CatalogModel, ModelRef } from "@kloudlite-tui/backend";
+import type { CatalogModel, ModelRef } from "./wire/index.ts";
 import { backend, hello } from "./hello.ts";
 
 export type { ModelRef };
