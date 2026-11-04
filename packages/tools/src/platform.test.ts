@@ -695,6 +695,21 @@ test("env restore takes source; snapshot_id is an unlisted alias", async () => {
   expect(props.snapshot_id).toBeUndefined();
 });
 
+test("env restore with wait holds until the restore landed, not the running state it started in", async () => {
+  const t = platformTools("main", undefined, 5);
+  let n = 0;
+  routes["POST /v1/environments/e1/restore"] = json({ id: "e1", state: "running", services: [{ name: "db", ready: true }], restore_requested_at: "t0", restored_to: "s0" });
+  routes["GET /v1/environments/e1"] = () => {
+    n += 1;
+    // the first GET is the pre-restore read; the restore lands on the third poll
+    const landed = n >= 4;
+    return json({ id: "e1", state: "running", services: [{ name: "db" }], service_status: [{ name: "db", ready: true }], restore_requested_at: landed ? "t1" : "t0", restored_to: landed ? "s1" : "s0" })();
+  };
+  const out = JSON.parse(await tool(t, "env").run({ action: "restore", env: "e1", source: "s1", wait: true }));
+  expect(out.restored_to).toBe("s1");
+  expect(n).toBeGreaterThanOrEqual(4);
+});
+
 test("workspace restart answers the new restart record, or null with a hint on timeout", async () => {
   const t = platformTools("main", undefined, 5);
   let n = 0;

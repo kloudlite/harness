@@ -457,8 +457,13 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
               const snapshot = JSON.parse(await api("POST", `/v1/environments/${env}/snapshots`, strip({ message: a.message, volume: a.volume })));
               return JSON.stringify({ ...JSON.parse(await envView(env)), snapshot }, null, 2);
             }),
-            restore: eact({ source: { type: "string", description: "A volume name, `name@N` or a snapshot id." }, discard: { type: "array", items: S, description: "Names of the services from the 409 `lost` list whose data you accept losing." }, ...WAITING }, ["source"], async (env, a) =>
-              thenWaitEnv(await api("POST", `/v1/environments/${env}/restore`, strip({ snapshot_id: a.source, discard: a.discard })), a, env, true), { snapshot_id: "source" }),
+            restore: eact({ source: { type: "string", description: "A volume name, `name@N` or a snapshot id." }, discard: { type: "array", items: S, description: "Names of the services from the 409 `lost` list whose data you accept losing." }, ...WAITING }, ["source"], async (env, a) => {
+              // an in-place restore keeps the environment "running" throughout, so done is the restore
+              // having landed (`restore_requested_at` moved on) with every service back and ready
+              const before = (await apiJson<any>("GET", `/v1/environments/${env}`).catch(() => undefined))?.restore_requested_at;
+              const out = await api("POST", `/v1/environments/${env}/restore`, strip({ snapshot_id: a.source, discard: a.discard }));
+              return thenWaitEnv(out, a, env, true, (d) => envDone(d) && d?.restore_requested_at !== before && !!d?.restored_to);
+            }, { snapshot_id: "source" }),
           }),
   );
 
