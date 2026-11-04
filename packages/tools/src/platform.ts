@@ -393,7 +393,19 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
               thenWaitWs(await api("POST", "/v1/workspaces/restore", strip({ name: a.name, snapshot_id: a.snapshot_id, team: a.team, image: a.image, packages: a.packages, quota_gb: a.quota_gb })), a)),
             start: mact(WAITING, [], async (a) => thenWaitWs(await api("POST", `/v1/workspaces/${seg(a.workspace)}/start`), a, { ws: a.workspace, reread: true })),
             stop: mact({}, [], async (a) => (await api("POST", `/v1/workspaces/${seg(a.workspace)}/stop`), api("GET", `/v1/workspaces/${seg(a.workspace)}`))),
-            restart: mact({}, [], async (a) => (await api("POST", `/v1/workspaces/${seg(a.workspace)}/restart`), api("GET", `/v1/workspaces/${seg(a.workspace)}`))),
+            restart: mact({}, [], async (a) => {
+              const url = `/v1/workspaces/${seg(a.workspace)}`;
+              const lastAt = (o: any) => { const r = o?.restarts; return Array.isArray(r) && r.length ? r[r.length - 1] : undefined; };
+              const before: any = JSON.parse(await api("GET", url));
+              const n0 = before?.restarts?.length ?? 0, last0 = JSON.stringify(lastAt(before));
+              await api("POST", `${url}/restart`);
+              for (let t = 0; t < 20; t++) {
+                await new Promise((r) => setTimeout(r, Math.min(1000, tickMs)));
+                const d: any = JSON.parse(await api("GET", url));
+                if ((d?.restarts?.length ?? 0) > n0 || (lastAt(d) !== undefined && JSON.stringify(lastAt(d)) !== last0)) return JSON.stringify({ ...d, restart: lastAt(d) });
+              }
+              return JSON.stringify({ ...JSON.parse(await api("GET", url)), restart: null, hint: "the restart was accepted; its record follows on the next get" });
+            }),
             delete: mact({}, [], async (a) => {
               const ses = process.env.KL_SESSION;
               return deleting(`/v1/workspaces/${seg(a.workspace)}`, () => api("DELETE", ses ? `/v1/sessions/${seg(ses)}/workspaces/${seg(a.workspace)}` : `/v1/workspaces/${seg(a.workspace)}`));

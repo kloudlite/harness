@@ -12,7 +12,7 @@ export const POD_TOOLS = ["read", "write", "edit", "glob", "grep", "exec", "proc
 /** The tools the pod serves one per verb, folded here into one tool per resource: `{action}` -> the pod's own tool.
  * The pod keeps `patch` and `process_close_stdin` for its HTTP users; `close_stdin` stays an action, `patch` is not forwarded. */
 const FOLDED: Record<string, { description: string; pod: Record<string, string> }> = {
-  process: { description: "Detached processes of a workspace (a long exec job becomes one). Actions: list, output, wait, write, close_stdin, kill.", pod: { list: "process_list", output: "process_output", wait: "process_wait", write: "process_write", close_stdin: "process_close_stdin", kill: "process_kill" } },
+  process: { description: "Detached processes of a workspace (a long exec job becomes one). Actions: list, output, wait, write, close_stdin, kill. An exited process is never restarted; one killed by a workspace stop is relaunched unless the exec passed `relaunch: false` (state `killed_by_restart`).", pod: { list: "process_list", output: "process_output", wait: "process_wait", write: "process_write", close_stdin: "process_close_stdin", kill: "process_kill" } },
   watch: { description: "Watch paths of a workspace for changes. Actions: start, poll, stop.", pod: { start: "watch", poll: "watch_poll", stop: "watch_stop" } },
 };
 

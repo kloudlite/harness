@@ -386,7 +386,6 @@ const CASES: [string, any, string, string, any?][] = [
   ["secret_list", { owner: "acme" }, "GET", "/v1/secrets/acme"],
   ["secret_delete", { owner: "acme", name: "DB_URL", mine: true }, "DELETE", "/v1/secrets/acme/mine/DB_URL"],
   ["workspace_env_set", { workspace: "w1", variables: { A: "${{ secrets.A }}" }, replace: true, restart_on_change: true }, "PUT", "/v1/workspaces/w1/env", { env: { A: "${{ secrets.A }}" }, restartOnEnvChange: true }],
-  ["workspace_restart", { workspace: "w1" }, "POST", "/v1/workspaces/w1/restart"],
   ["connector_list", { owner: "acme" }, "GET", "/v1/connectors?owner=acme"],
   ["session_create", { name: "fix", team: "acme", environment: "dev" }, "POST", "/v1/sessions", { name: "fix", team: "acme", environment: "dev" }],
   ["session_stop", { session: "s1" }, "POST", "/v1/sessions/s1/stop"],
@@ -682,3 +681,11 @@ test("env restore takes source; snapshot_id is an unlisted alias", async () => {
   const props = (t.find((x) => x.name === "env")!.inputSchema as any).properties;
   expect(props.snapshot_id).toBeUndefined();
 });
+
+test("workspace restart answers the new restart record, or null with a hint on timeout", async () => {
+  const t = platformTools("main", undefined, 5);
+  let n = 0;
+  routes["POST /v1/workspaces/w9/restart"] = json({}, 202);
+  routes["GET /v1/workspaces/w9"] = () => new Response(JSON.stringify({ id: "w9", restarts: n++ < 2 ? [{ at: 1, reason: "old" }] : [{ at: 1, reason: "old" }, { at: 2, reason: "requested" }] }));
+  expect(JSON.parse(await tool(t, "workspace_restart").run({ workspace: "w9" })).restart).toEqual({ at: 2, reason: "requested" });
+}, 30000);

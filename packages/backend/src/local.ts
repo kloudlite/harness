@@ -27,6 +27,7 @@ import {
   type ModelRef,
 } from "@kloudlite-tui/agent";
 import { Registry, anyPodTools, platformTools, podTools, scratchRoot, scratchTools, webFetch, webSearch, type ToolDef } from "@kloudlite-tui/tools";
+import { statusTool } from "./status.ts";
 import { Cards } from "./cards.ts";
 import { WORKSPACE_DIR, callerSettings, deliver, delegateTools, resumeAsks, type DelegateDeps } from "./delegate.ts";
 import { asksDir, listAsks } from "./asks.ts";
@@ -211,7 +212,7 @@ export async function mcpTools(deps: DelegateDeps): Promise<ToolDef[]> {
   const scratch = scratchTools(scratchRoot("main"));
   const byName = (n: string) => pod.find((t) => t.name === n);
   const rest = pod.filter((t) => t.name !== "read" && t.name !== "write");
-  return new Registry().add(webFetch, webSearch, ...rest, ...withScratch(byName("read"), scratch.find((t) => t.name === "read")), ...withScratch(byName("write"), scratch.find((t) => t.name === "write")),
+  return new Registry().add(webFetch, webSearch, statusTool, ...rest, ...withScratch(byName("read"), scratch.find((t) => t.name === "read")), ...withScratch(byName("write"), scratch.find((t) => t.name === "write")),
      ...platformTools("all").map((t) => (t.name === "workspace" ? forgetting(t, deps) : t)), ...delegateTools("main", undefined, deps, { tools: [] } as unknown as SessionOpts, "main"), ...taskTools(tasksFile("main", deps.tasks), deps.tasks),
     ...scratch.filter((t) => t.name === "bash").map((t) => ({ ...t, name: "scratch_bash", description: "Run a shell command in this session's scratch folder, not a workspace. The network works; no credentials. Returns { output, exit_code } (last 50 KiB)." }))).all();
 }

@@ -54,7 +54,7 @@ export function mcpServer(tools: () => Promise<ToolDef[]>): (msg: Msg) => Promis
         if (!t) return fail(id, -32602, `unknown tool: ${params?.name}`);
         // crash notices queued since the last answer ride on this one (no server push on this door)
         const withNotices = (text: string) => {
-          const n = drainNotices();
+          const n = t.name === "status" ? [] : drainNotices();
           return n.length ? `notices: ${JSON.stringify(n)}\n${text}` : text;
         };
         try {

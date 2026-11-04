@@ -21,8 +21,17 @@ export type WatchDeps = {
 
 /** Notices waiting for an MCP client's next tool answer (one bench, one person: not per connection). */
 const queue: string[] = [];
-export const queueNotice = (m: string) => void (queue.push(m), queue.length > 50 && queue.shift());
-export const drainNotices = (): string[] => queue.splice(0);
+/** The last 50 notices, kept after delivery so the `status` tool can answer ones a client never showed. */
+const recent: { at: number; text: string; read: boolean }[] = [];
+export const queueNotice = (m: string) => void (queue.push(m), queue.length > 50 && queue.shift(), recent.push({ at: Date.now(), text: m, read: false }), recent.length > 50 && recent.shift());
+export const drainNotices = (): string[] => (recent.forEach((r) => (r.read = true)), queue.splice(0));
+/** Unread notices (marked read), or all of the last 50 with `all`. */
+export const recentNotices = (all?: boolean): string[] => {
+  const out = recent.filter((r) => all || !r.read);
+  recent.forEach((r) => (r.read = true));
+  queue.length = 0;
+  return out.map((r) => r.text);
+};
 
 const ms = (t: string | number | undefined) => {
   const n = typeof t === "number" ? t : /^\d+(\.\d+)?$/.test(String(t)) ? Number(t) : NaN;

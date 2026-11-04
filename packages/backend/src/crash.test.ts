@@ -59,3 +59,13 @@ test("queued notices ride on the next MCP tool answer, then clear", async () => 
   expect((await call()).result.content[0].text).toBe('notices: ["[process p in w exited 7] x"]\nhi');
   expect((await call()).result.content[0].text).toBe("hi");
 });
+
+test("a queued notice appears in status once; all re-lists it", async () => {
+  const { statusTool } = await import("./status.ts");
+  drainNotices();
+  queueNotice("[process p in w exited 9] y");
+  const notices = async (a: object) => JSON.parse(await statusTool.run(a)).notices;
+  expect(await notices({})).toEqual(["[process p in w exited 9] y"]);
+  expect(await notices({})).toEqual([]);
+  expect(await notices({ all: true })).toContain("[process p in w exited 9] y");
+});
