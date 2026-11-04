@@ -649,7 +649,7 @@ function mainOnly(tickMs: number): ToolDef[] {
         // /history and /refs are keyed by the volume id; a name given at a snapshot is a claim on the list row
         const rows = await apiJson<any[]>("GET", "/v1/volumes").catch(() => []);
         const id = (Array.isArray(rows) ? rows : []).find((r) => r?.name === a.volume)?.id ?? a.volume;
-        const [history, refs] = await Promise.all([api("GET", `/v1/volumes/${seg(id)}/history`), api("GET", `/v1/volumes/${seg(id)}/refs`)]);
+        const [history, refs] = await Promise.all([api("GET", `/v1/volumes/${seg(id)}/history?include=working`), api("GET", `/v1/volumes/${seg(id)}/refs`)]);
         // `working` and each row's `working_copies` come from the api untouched; an object answer ({history, working}) is spread, a bare list stays `history`
         const h = JSON.parse(history);
         return JSON.stringify({ volume: a.volume, ...(Array.isArray(h) ? { history: h } : h), refs: JSON.parse(refs) }, null, 2);

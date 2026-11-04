@@ -445,10 +445,10 @@ test("sandbox delete ends the sandbox first and ignores a refusal; pipeline get 
 
 test("volume get answers history and refs; service update with restart restarts after the patch", async () => {
   const t = platformTools("main", undefined, 1);
-  routes["GET /v1/volumes/pg/history"] = json([{ id: "s1", working_copies: ["w"] }]);
+  routes["GET /v1/volumes/pg/history?include=working"] = json([{ id: "s1", working_copies: ["w"] }]);
   routes["GET /v1/volumes/pg/refs"] = json({ latest: "s1" });
   expect(JSON.parse(await tool(t, "volume_get").run({ volume: "pg" }))).toEqual({ volume: "pg", history: [{ id: "s1", working_copies: ["w"] }], refs: { latest: "s1" } });
-  routes["GET /v1/volumes/pg/history"] = json({ history: [{ id: "s1" }], working: [{ name: "w", head: "s1" }] });
+  routes["GET /v1/volumes/pg/history?include=working"] = json({ history: [{ id: "s1" }], working: [{ name: "w", head: "s1" }] });
   expect(JSON.parse(await tool(t, "volume_get").run({ volume: "pg" })).working).toEqual([{ name: "w", head: "s1" }]);
   routes["GET /v1/environments/e1"] = json({ services: [{ name: "api", image: "a:1" }] });
   routes["PATCH /v1/environments/e1"] = json({});
@@ -759,7 +759,7 @@ test("workspace restart waits for restart_required to clear", async () => {
 
 test("volume get resolves a given name to the volume id", async () => {
   routes["GET /v1/volumes"] = json([{ id: "ws-ab12", name: "pg" }]);
-  routes["GET /v1/volumes/ws-ab12/history"] = json([{ id: "s1" }]);
+  routes["GET /v1/volumes/ws-ab12/history?include=working"] = json([{ id: "s1" }]);
   routes["GET /v1/volumes/ws-ab12/refs"] = json({});
   expect(JSON.parse(await tool(platformTools("main"), "volume_get").run({ volume: "pg" })).history).toEqual([{ id: "s1" }]);
 });
