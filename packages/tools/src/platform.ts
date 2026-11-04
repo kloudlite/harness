@@ -383,8 +383,21 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
   // ---- workspace
   const stopAct = act(WAITING, [], async (a) => thenWaitWs(await api("POST", `${W}/stop`), a, { stopped: true, ws: wsId }));
   /** The workspace as it is after the snapshot, with the snapshot's own answer under `snapshot` (its id is the one thing the object does not hold). */
+  /** A push answers before its record is `ready`; wait (bounded) so `volume get` right after lists it. */
+  const settled = async (snapshot: any): Promise<any> => {
+    const id = snapshot?.id; const vol = snapshot?.volume;
+    if (!id || !vol || snapshot?.phase === "ready") return snapshot;
+    const until = Date.now() + 25_000;
+    while (Date.now() < until) {
+      await new Promise((r) => setTimeout(r, 1000));
+      const rows = await apiJson<any[]>("GET", `/v1/volumes/${seg(vol)}/history`).catch(() => undefined);
+      const row = Array.isArray(rows) ? rows.find((r) => r?.id === id) : undefined;
+      if (row) return { ...snapshot, ...row, phase: "ready" };
+    }
+    return { ...snapshot, note: "still being written; it lists in volume get once ready" };
+  };
   const snapAct = wact({ message: S, volume: VOLUME }, [], async (a) => {
-    const snapshot = JSON.parse(await api("POST", `${wsPath(a)}/snapshots`, strip({ message: a.message, volume: a.volume })));
+    const snapshot = await settled(JSON.parse(await api("POST", `${wsPath(a)}/snapshots`, strip({ message: a.message, volume: a.volume }))));
     // the POST succeeded: a failed re-read must not turn a saved snapshot into an error
     try { return JSON.stringify({ ...JSON.parse(await api("GET", wsPath(a))), snapshot }, null, 2); }
     catch (e) { return JSON.stringify({ snapshot, note: `saved; the workspace was not re-read: ${(e as Error).message}` }, null, 2); }
@@ -466,7 +479,7 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
             wait: eact({ timeout_ms: TIMEOUT }, [], async (env, a) => (await wake(env), waitEnv(env, a))),
             ttl: eact({ ttl_secs: TTL, clear: CLEAR }, [], async (env, a) => { const b = ttlBody(a); return typeof b === "string" ? b : (await api("PUT", `/v1/environments/${env}/ttl`, b), envView(env)); }),
             snapshot: eact({ message: S, volume: VOLUME }, [], async (env, a) => {
-              const snapshot = JSON.parse(await api("POST", `/v1/environments/${env}/snapshots`, strip({ message: a.message, volume: a.volume })));
+              const snapshot = await settled(JSON.parse(await api("POST", `/v1/environments/${env}/snapshots`, strip({ message: a.message, volume: a.volume }))));
               try { return JSON.stringify({ ...JSON.parse(await envView(env)), snapshot }, null, 2); }
               catch (e) { return JSON.stringify({ snapshot, note: `saved; the environment was not re-read: ${(e as Error).message}` }, null, 2); }
             }),
