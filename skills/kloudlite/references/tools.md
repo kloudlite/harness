@@ -12,9 +12,9 @@ One tool per resource. `action` picks the verb; the arguments below are the unio
 
 | Tool | Arguments | Answers |
 |---|---|---|
-| `workspace` | `action`, `workspace?`, `name?`, `quota_gb?`, `image?`, `packages?`, `team?`, `source?`, `task?`, `snapshot_id?`, `ttl_secs?`, `clear?`, `message?`, `volume?`, `wait?`, `soft_ms?`, `timeout_ms?` | `list`, `get` (state, `restarts`, `packages_missing`, packages, volume, `restart_required`), `create` (a managed workspace in a session; with `source` a standalone copy), `restore` (from `snapshot_id`), `start`, `stop`, `restart` (to read new variables; answers the object with `restart`, the new entry of `restarts`, or `null` and a `hint` after 20 s), `delete`, `wait`, `ttl`, `snapshot` (`volume` names the volume on its first push) |
+| `workspace` | `action`, `workspace?`, `name?`, `quota_gb?`, `image?`, `packages?`, `team?`, `source?`, `task?`, `snapshot_id?`, `ttl_secs?`, `clear?`, `message?`, `volume?`, `wait?`, `soft_ms?`, `timeout_ms?` | `list`, `get` (state, `restarts`, `packages_missing`, packages, volume, `restart_required`), `create` (a managed workspace in a session; with `source` a standalone copy), `restore` (from `snapshot_id`), `start`, `stop` (answers the stopped state; `wait: true` waits for it), `restart` (to read new variables; answers the object with `restart`, the new entry of `restarts`, once `restart_required` clears, or `null` and a `hint` at `soft_ms`), `delete`, `wait`, `ttl`, `snapshot` (`volume` names the volume on its first push) |
 | `workspace_vars` | `action`, `workspace`, `variables?`, `replace?`, `restart_on_change?` | `get`: the stored variables; a secret shows as its reference. `set`: merges; `replace: true` replaces the set; a secret is the whole value `${{ secrets.NAME }}` |
-| `worktree` | `action`, `workspace`, `name` | `add`, `drop`: a second branch checkout inside one workspace |
+| `worktree` | `action`, `workspace`, `name`, `soft_ms?` | `add` (waits until the tree is cut; pass `tree: "<name>"` to `exec`, `read` and `write`, since its path is not visible from the main tree), `drop`: a second branch checkout inside one workspace |
 
 ## Code, run, packages, images
 
@@ -25,7 +25,7 @@ One tool per resource. `action` picks the verb; the arguments below are the unio
 | `edit` | `workspace`, `files` | Exact text replacements, all or none |
 | `glob`, `grep` | `workspace`, pattern | Matching files, matching lines |
 | `exec` | `workspace`, `cmd`, `cwd?`, `env?`, `soft_ms?`, `detach?`, `head?`, `tail?`, `quiet?`, `notify?` | Output and exit code; past `soft_ms` (25 s) `promoted: true`, `kind: "process"` and a process `id`; with `detach`, a process id |
-| `process` | `action`, `workspace`, `id?`, `timeout_ms?`, `since?`, `since_err?` | `list`, `output` (from an offset), `write`, `close_stdin`, `kill`; `wait` waits for the exit (20 s at most per call), answers `state`, `exit_code`, the new output and `next`/`next_err`; repeat while `timed_out`; an id that ended or never existed answers `state: "gone"`; one that a workspace restart killed answers `state: "killed_by_restart"` with `restarted_at`; an exited process is never restarted; a detached one killed by a workspace stop is relaunched (same `id`, output opening `[restarted <time>: <reason>]`) unless `exec` passed `relaunch: false`. Any tool answer can start with `notices` (crashed or killed processes) |
+| `process` | `action`, `workspace`, `id?`, `timeout_ms?`, `since?`, `since_err?` | `list`, `output` (from an offset), `write`, `close_stdin`, `kill`; `wait` waits for the exit (20 s at most per call), answers `state`, `exit_code`, the new output and `next`/`next_err`; repeat while `timed_out`; an id that ended or never existed answers `state: "gone"`; one that a workspace restart killed answers `state: "killed_by_restart"` with `restarted_at`; an exited process is never restarted; a detached one killed by a workspace stop is relaunched (same `id`, output opening `[restarted <time>: <reason>]`) unless `exec` passed `relaunch: false`. Any tool answer can carry a second content item `notices: [...]` (crashed or killed processes, workspace restarts and state changes, environment state changes); the first item is the answer or the error alone |
 | `watch` | `action`, `workspace` | `start`, `poll`, `stop`: a file or command watch |
 | `packages` | `action`, `workspace`, `packages?` | `list` (also `missing`: entries with no binary), `add`, `remove`, `update`: entries `attr` or `attr@version` |
 | `container_build` | `workspace`, `tags`, `soft_ms?` | Builds and pushes to the registry connector; past `soft_ms` it hands off like `exec`, kind `process`; fails with `no_registry` or `unknown_registry` and the connected `registries` |
@@ -36,7 +36,7 @@ One tool per resource. `action` picks the verb; the arguments below are the unio
 
 | Tool | Arguments | Answers |
 |---|---|---|
-| `env` | `action`, `env?`, `name?`, `services?`, `quota_gb?`, `team?`, `region?`, `source?`, `ttl_secs?`, `clear?`, `message?`, `volume?`, `discard?`, `wait?`, `soft_ms?`, `timeout_ms?` | `list`, `get` (services, state, `interceptedBy`, `proxy`, `restart_required`, `volume`), `create` (a service is `{name, image, ports, env, mounts, command}`; with `source`: an environment copies it, a snapshot id restores it), `start`, `stop`, `delete`, `wait` (`timed_out: true` at the limit), `ttl`, `snapshot`, `restore` (in place, `source` is the snapshot id; `409 lost` lists services that lose data, `discard` accepts it) |
+| `env` | `action`, `env?`, `name?`, `services?`, `quota_gb?`, `team?`, `region?`, `source?`, `ttl_secs?`, `clear?`, `message?`, `volume?`, `discard?`, `wait?`, `soft_ms?`, `timeout_ms?` | `list`, `get` (services, state, `interceptedBy`, `proxy`, `restart_required`, `volume`), `create` (a service is `{name, image, ports, env, mounts, command}`; with `source`: an environment copies it, a snapshot id restores it), `start`, `stop` (answers the stopped state; `wait: true` waits for it), `delete`, `wait` (`timed_out: true` at the limit), `ttl`, `snapshot`, `restore` (in place, `source` is the snapshot id; `409 lost` lists services that lose data, `discard` accepts it) |
 | `service` | `action`, `env`, `service?`, `name?`, `restart?`, `tail?`, `since?`, `previous?`, `wait?`, `soft_ms?` | `add` and `update` (replaces by name; `restart: true` restarts it to read new variables) take `service`; `remove` and `logs` take `name`; `logs` takes `tail` (2000 max), `since` (seconds), `previous` |
 
 ## Intercepts and volumes
@@ -44,7 +44,7 @@ One tool per resource. `action` picks the verb; the arguments below are the unio
 | Tool | Arguments | Answers |
 |---|---|---|
 | `intercept` | `action`, `env`, `service`, `workspace?`, `ports?` `[{service, workspace}]`, `wait?`, `soft_ms?` | `start` sends the service's traffic to the workspace (kind `env` when promoted); `stop` gives the service back |
-| `volume` | `action`, `volume?`, `kind?`, `owner?` | `list`, `get` (snapshots and branch tips; takes the volume id), `delete` (a detached volume) |
+| `volume` | `action`, `volume?`, `kind?`, `owner?` | `list`, `get` (snapshots and branch tips; takes the volume id or the name a snapshot gave it), `delete` (a detached volume) |
 | `snapshot` | `action`, `volume`, `snapshot` | `delete` one snapshot |
 
 ## Sandboxes
@@ -65,7 +65,7 @@ One tool per resource. `action` picks the verb; the arguments below are the unio
 
 | Tool | Arguments | Answers |
 |---|---|---|
-| `secret_set` | `owner`, `name`, `value`, `mine?` | Stores the value; the result never carries it |
+| `secret_set` | `owner`, `name`, `value`, `mine?` | Stores the value; the result never carries it. The agent can set, list and delete secrets; a value is never read back |
 | `secret_list` | `owner`, `mine?` | Names and dates, never values |
 | `secret_delete` | `owner`, `name`, `mine?` | Deletes; `409` names the readers |
 | `connector_list` | `owner?` | Code hosts and registries connected |
@@ -77,5 +77,5 @@ One tool per resource. `action` picks the verb; the arguments below are the unio
 | `quota` | `owner?` | Ceilings and use |
 | `regions` | none | Regions |
 | `requests_list`, `request_get`, `request_create` | `owner?`, `id`, `kind`, `reason` | Requests to an admin |
-| `status` | `all?` | `notices` not yet shown (`all` lists the last 50), `workspaces` and `environment` with their states, running `processes`. Call it once at the start of each turn |
+| `status` | `all?` | `notices` not yet shown (`all` lists the last 50), `workspaces` (the session's) and `environment` with their states, running `processes` of those workspaces and any a tool touched. Call it once at the start of each turn |
 | `web_fetch`, `web_search` | `url`; `query` | Page text; results |
