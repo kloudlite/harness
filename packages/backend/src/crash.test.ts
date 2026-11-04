@@ -26,7 +26,7 @@ test("running -> exited 7 reports once with the last 20 stderr lines; a clean ex
   await w.tick();
   await w.tick();
   expect(w.out.length).toBe(1);
-  expect(w.out[0]).toStartWith("[process p1 in w1 exited 7] sh -c 'exit 7'\ne10\n");
+  expect(w.out[0]).toStartWith("[process p1 in web exited 7] sh -c 'exit 7'\ne10\n");
   expect(w.out[0]!.split("\n").length).toBe(21);
 });
 
@@ -34,7 +34,7 @@ test("a plain exec that exited 1 (no registered key) is silent; never is silent;
   const w = setup(new Map([["w1/a", "always"], ["w1/n", "never"], ["w1/q", "on_failure"]]));
   w.set([{ id: "plain", cmd: "false", state: "exited", exit_code: 1, started_at: "30" }, { id: "a", cmd: "ok", state: "exited", exit_code: 0, started_at: "30" }, { id: "n", cmd: "bad", state: "exited", exit_code: 1, started_at: "30" }, { id: "q", cmd: "bad", state: "exited", exit_code: 2, started_at: "30" }]);
   await w.tick();
-  expect(w.out.map((m) => m.split("]")[0])).toEqual(["[process a in w1 exited 0", "[process q in w1 exited 2"]);
+  expect(w.out.map((m) => m.split("]")[0])).toEqual(["[process a in web exited 0", "[process q in web exited 2"]);
 });
 
 test("one exit is one notice: a process seen exited, running and exited again with the same started_at", async () => {
@@ -143,4 +143,35 @@ test("status lists the session's workspaces and their running processes by name,
     touched.delete("w3");
     for (const [k, v] of [["KL_API_URL", saved.url], ["KL_TOOL_KEY_FILE", saved.key], ["KL_SESSION", saved.ses]] as const) v === undefined ? delete process.env[k] : (process.env[k] = v);
   }
+});
+
+test("the watch persists: a restarted watch reports restarts and stops newer than the saved set", async () => {
+  const { mkdtempSync, existsSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const file = join(mkdtempSync(join(tmpdir(), "kl-watch-")), ".kl", "watch.json");
+  let ws: any = { name: "web", state: "ready", restarts: [{ at: "2026-11-04T10:00:00Z" }] };
+  const out: string[] = [];
+  const make = (touched: Map<string, number>) =>
+    createWatch({ touched, list: async () => [], stderr: async () => "", workspace: async () => ws, environment: async () => null, notify: (m) => out.push(m), notifyOf: new Map(), now: () => 70_000, file });
+  await make(new Map([["w1", 1000]]))();
+  expect(existsSync(file)).toBe(true);
+  // a new process (empty touched): the file seeds touched and the baseline, so the offline restart and stop are reported
+  ws = { name: "web", state: "stopped", restarts: [{ at: "2026-11-04T10:00:00Z" }, { at: "2026-11-04T11:00:00Z", reason: "idle" }] };
+  const touched = new Map<string, number>();
+  await make(touched)();
+  expect(touched.get("w1")).toBe(1000);
+  expect(out).toEqual(["[workspace web idle at 2026-11-04T11:00:00Z]"]);
+  ws = { ...ws, restarts: ws.restarts.slice(0, 2) };
+  out.length = 0;
+  await make(new Map())();
+  expect(out).toEqual([]);
+  // state change with no new restart: stopped after a persisted ready
+  const f2 = join(mkdtempSync(join(tmpdir(), "kl-watch-")), "watch.json");
+  const mk2 = () => createWatch({ touched: new Map([["w1", 1000]]), list: async () => [], stderr: async () => "", workspace: async () => ws, environment: async () => null, notify: (m) => out.push(m), notifyOf: new Map(), now: () => 70_000, file: f2 });
+  ws = { name: "web", state: "ready", restarts: [] };
+  await mk2()();
+  ws = { name: "web", state: "stopped", restarts: [] };
+  await mk2()();
+  expect(out).toEqual(["[workspace web stopped]"]);
 });

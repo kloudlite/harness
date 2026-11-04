@@ -125,7 +125,7 @@ const SERVICE = {
     name: S,
     image: { type: "string", description: "repo:tag. The platform pins it to the tag's current digest (repo:tag@sha256:…), so redeploying a rebuilt tag runs the new bytes." },
     command: { type: "array", items: S, description: "The argv of the container; empty runs the image's own entrypoint." },
-    env: { type: "object", additionalProperties: S, description: "Environment variables, name to string value." },
+    env: { type: "object", additionalProperties: { type: ["string", "null"] }, description: "Environment variables, name to string value (null removes one on update)." },
     mounts: { type: "array", items: { type: "object", properties: { folder: { type: "string", description: "A single name ([A-Za-z0-9._-]) of a folder inside the environment's own volume, created on demand." }, path: { type: "string", description: "Where it appears in the container (absolute)." } }, required: ["folder", "path"] }, description: "Persistent folders of the environment's volume." },
     ports: { type: "array", items: I, description: "Container ports the service answers on, as integers. Siblings reach it by service name on these." },
     resources: {
@@ -134,12 +134,20 @@ const SERVICE = {
       properties: { cpuRequest: { type: "string", description: "e.g. 250m" }, cpuLimit: { type: "string", description: "e.g. 2" }, memoryRequest: { type: "string", description: "e.g. 512Mi" }, memoryLimit: { type: "string", description: "e.g. 2Gi" } },
     },
   },
-  required: ["name", "image"],
-  description: "The `command`, `env` and `mounts` fields default to empty.",
+  required: ["name"],
+  description: "`add` needs `name` and `image`; `command`, `env` and `mounts` default to empty. `update` needs `name` and the fields to change: absent fields keep the live service's values, and `env` merges by key (`{X: null}` removes X).",
 };
 
 /** The API requires command, env and mounts on every service; the schema asks only for name and image. */
 const noName = (a: any): string | undefined => (typeof a.service?.name === "string" && a.service.name && typeof a.service.image === "string" ? undefined : "error: `service` needs `name` and `image` (an object like {name, image, ports?})");
+const nameOnly = (a: any): string | undefined => (typeof a.service?.name === "string" && a.service.name ? undefined : "error: `service` needs `name`");
+/** Fields given replace those fields, absent ones keep the live service's; `env` merges by key and `{X: null}` removes X. */
+const mergeService = (cur: any, given: any) => {
+  const { env, ...rest } = given;
+  const merged: Record<string, any> = { ...(cur.env ?? {}), ...(env ?? {}) };
+  for (const k of Object.keys(merged)) if (merged[k] === null) delete merged[k];
+  return { ...cur, ...rest, env: merged };
+};
 const withServiceDefaults = (s: any) => ({ command: [], env: {}, mounts: [], ...s });
 
 /** Fold service_status into each services[] entry so a poll reads ready where the spec is. */
@@ -267,7 +275,9 @@ const envDone = (d: any) => {
 };
 const restartMarked = (d: any) => !!(d?.restart_required || d?.restartRequired || (Array.isArray(d?.service_status) ? d.service_status : []).some((x: any) => x?.restartRequired || x?.restart_required));
 const stoppedDone = (d: any) => d?.state === "stopped" || d?.state === "error" || d?.state === "deleted";
-const wsDone = (stopped: boolean) => (d: any) => d?.state === "ready" || d?.state === "error" || d?.state === "deleted" || (stopped && d?.state === "stopped");
+// stopping waits for stopped only: a "ready" read right after the POST is the old state, not a finished stop
+const wsDone = (stopped: boolean) => (d: any) => d?.state === "error" || d?.state === "deleted" || d?.state === (stopped ? "stopped" : "ready");
+const wsAny = (d: any) => wsDone(true)(d) || d?.state === "ready";
 const RUN_ENDED = ["success", "failure", "cancelled"];
 
 /** The sandbox's own server-side wait, looped to the bound; at it `limit()` (a hand-off) or the last view with `timed_out`. */
@@ -375,7 +385,9 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
   /** The workspace as it is after the snapshot, with the snapshot's own answer under `snapshot` (its id is the one thing the object does not hold). */
   const snapAct = wact({ message: S, volume: VOLUME }, [], async (a) => {
     const snapshot = JSON.parse(await api("POST", `${wsPath(a)}/snapshots`, strip({ message: a.message, volume: a.volume })));
-    return JSON.stringify({ ...JSON.parse(await api("GET", wsPath(a))), snapshot }, null, 2);
+    // the POST succeeded: a failed re-read must not turn a saved snapshot into an error
+    try { return JSON.stringify({ ...JSON.parse(await api("GET", wsPath(a))), snapshot }, null, 2); }
+    catch (e) { return JSON.stringify({ snapshot, note: `saved; the workspace was not re-read: ${(e as Error).message}` }, null, 2); }
   });
   tools.push(
     resource("workspace", ws ? "This workspace. Actions: stop (snapshots first), snapshot." : "Workspaces: dev machines with a home volume. Actions: list, get, create (clone with `source`), restore, start, stop, restart, delete, wait, ttl, snapshot.",
@@ -421,7 +433,7 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
               const ses = process.env.KL_SESSION;
               return deleting(`/v1/workspaces/${seg(a.workspace)}`, () => api("DELETE", ses ? `/v1/sessions/${seg(ses)}/workspaces/${seg(a.workspace)}` : `/v1/workspaces/${seg(a.workspace)}`));
             }),
-            wait: mact({ timeout_ms: TIMEOUT }, [], async (a) => pollUntil(() => api("GET", `/v1/workspaces/${seg(a.workspace)}`), wsDone(true), timeoutMs(a), tickMs)),
+            wait: mact({ timeout_ms: TIMEOUT }, [], async (a) => pollUntil(() => api("GET", `/v1/workspaces/${seg(a.workspace)}`), wsAny, timeoutMs(a), tickMs)),
             ttl: mact({ ttl_secs: TTL, clear: CLEAR }, [], async (a) => { const b = ttlBody(a); return typeof b === "string" ? b : (await api("PUT", `/v1/workspaces/${seg(a.workspace)}/ttl`, b), api("GET", `/v1/workspaces/${seg(a.workspace)}`)); }),
             snapshot: snapAct,
           }),
@@ -455,7 +467,8 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
             ttl: eact({ ttl_secs: TTL, clear: CLEAR }, [], async (env, a) => { const b = ttlBody(a); return typeof b === "string" ? b : (await api("PUT", `/v1/environments/${env}/ttl`, b), envView(env)); }),
             snapshot: eact({ message: S, volume: VOLUME }, [], async (env, a) => {
               const snapshot = JSON.parse(await api("POST", `/v1/environments/${env}/snapshots`, strip({ message: a.message, volume: a.volume })));
-              return JSON.stringify({ ...JSON.parse(await envView(env)), snapshot }, null, 2);
+              try { return JSON.stringify({ ...JSON.parse(await envView(env)), snapshot }, null, 2); }
+              catch (e) { return JSON.stringify({ snapshot, note: `saved; the environment was not re-read: ${(e as Error).message}` }, null, 2); }
             }),
             restore: eact({ source: { type: "string", description: "A volume name, `name@N` or a snapshot id." }, discard: { type: "array", items: S, description: "Names of the services from the 409 `lost` list whose data you accept losing." }, ...WAITING }, ["source"], async (env, a) => {
               // an in-place restore keeps the environment "running" throughout, so done is the restore
@@ -512,12 +525,12 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
 
   // ---- services of an environment
   tools.push(
-    resource("service", "Services of an environment. Actions: add, update (replaces by name; `restart` restarts it), remove, logs.", {
+    resource("service", "Services of an environment. Actions: add, update (merges into the live service by name: given fields replace, absent ones stay, `env` merges by key; `restart` restarts it), remove, logs.", {
       add: services({ service: SERVICE }, ["service"], (cur, a) => noName(a) ?? (cur.some((s) => s.name === a.service?.name) ? `error: service exists: ${a.service?.name}` : [...cur, withServiceDefaults(a.service)])),
       update: services(
         { service: SERVICE, restart: { type: "boolean", description: "Restart the service after the change so it reads its current variables and secrets." } },
         ["service"],
-        (cur, a) => noName(a) ?? (cur.some((s) => s.name === a.service?.name) ? cur.map((s) => (s.name === a.service.name ? withServiceDefaults(a.service) : s)) : `error: no such service: ${a.service?.name}`),
+        (cur, a) => nameOnly(a) ?? (cur.some((s) => s.name === a.service?.name) ? cur.map((s) => (s.name === a.service.name ? mergeService(s, a.service) : s)) : `error: no such service: ${a.service?.name}`),
         async (env, a) => {
           if (a.restart) await api("POST", `/v1/environments/${env}/services/${seg(a.service.name)}/restart`).catch((e) => { throw new Error(`service updated; restart failed: ${e?.message ?? e}`); });
         },
@@ -637,7 +650,9 @@ function mainOnly(tickMs: number): ToolDef[] {
         const rows = await apiJson<any[]>("GET", "/v1/volumes").catch(() => []);
         const id = (Array.isArray(rows) ? rows : []).find((r) => r?.name === a.volume)?.id ?? a.volume;
         const [history, refs] = await Promise.all([api("GET", `/v1/volumes/${seg(id)}/history`), api("GET", `/v1/volumes/${seg(id)}/refs`)]);
-        return JSON.stringify({ volume: a.volume, history: JSON.parse(history), refs: JSON.parse(refs) }, null, 2);
+        // `working` and each row's `working_copies` come from the api untouched; an object answer ({history, working}) is spread, a bare list stays `history`
+        const h = JSON.parse(history);
+        return JSON.stringify({ volume: a.volume, ...(Array.isArray(h) ? { history: h } : h), refs: JSON.parse(refs) }, null, 2);
       }),
       delete: act({ volume: S }, ["volume"], async (a) => (await api("DELETE", `/v1/volumes/${seg(a.volume)}`), JSON.stringify({ volume: a.volume, state: "deleted" }, null, 2))),
     }),

@@ -114,11 +114,18 @@ test("service add/update/remove PATCH the whole list; duplicates and strangers e
   await tool(t, "service_add").run({ env: "e1", service: b });
   expect(calls.at(-1)!.body).toEqual({ services: [a, { ...b, command: [], env: {}, mounts: [] }] });
   await tool(t, "service_update").run({ env: "e1", service: { name: "a", image: "a:2" } });
-  expect(calls.at(-1)!.body).toEqual({ services: [{ name: "a", image: "a:2", command: [], env: {}, mounts: [] }] });
+  expect(calls.at(-1)!.body).toEqual({ services: [{ name: "a", image: "a:2", env: {} }] });
   await tool(t, "service_update").run({ env: "e1", service: { name: "a", image: "a:3", env: { K: "v" } } });
-  expect(calls.at(-1)!.body).toEqual({ services: [{ name: "a", image: "a:3", command: [], env: { K: "v" }, mounts: [] }] });
+  expect(calls.at(-1)!.body).toEqual({ services: [{ name: "a", image: "a:3", env: { K: "v" } }] });
   await tool(t, "service_remove").run({ env: "e1", name: "a" });
   expect(calls.at(-1)!.body).toEqual({ services: [] });
+  // merge: absent fields stay, env merges by key, null removes
+  routes["GET /v1/environments/e1"] = json({ services: [{ name: "a", image: "a:1", env: { X: "1", Y: "2" }, ports: [80] }] });
+  await tool(t, "service_update").run({ env: "e1", service: { name: "a", image: "a:2", env: { X: null, Z: "3" } } });
+  expect(calls.at(-1)!.body).toEqual({ services: [{ name: "a", image: "a:2", env: { Y: "2", Z: "3" }, ports: [80] }] });
+  await tool(t, "service_update").run({ env: "e1", service: { name: "a" } });
+  expect(calls.at(-1)!.body).toEqual({ services: [{ name: "a", image: "a:1", env: { X: "1", Y: "2" }, ports: [80] }] });
+  routes["GET /v1/environments/e1"] = json({ services: [a] });
   await expect(tool(t, "service_add").run({ env: "e1", service: a })).rejects.toThrow("service exists: a");
   await expect(tool(t, "service_update").run({ env: "e1", service: b })).rejects.toThrow("no such service");
   await expect(tool(t, "service_remove").run({ env: "e1", name: "q" })).rejects.toThrow("no such service");
@@ -438,9 +445,11 @@ test("sandbox delete ends the sandbox first and ignores a refusal; pipeline get 
 
 test("volume get answers history and refs; service update with restart restarts after the patch", async () => {
   const t = platformTools("main", undefined, 1);
-  routes["GET /v1/volumes/pg/history"] = json([{ id: "s1" }]);
-  routes["GET /v1/volumes/pg/refs"] = json({ main: "s1" });
-  expect(JSON.parse(await tool(t, "volume_get").run({ volume: "pg" }))).toEqual({ volume: "pg", history: [{ id: "s1" }], refs: { main: "s1" } });
+  routes["GET /v1/volumes/pg/history"] = json([{ id: "s1", working_copies: ["w"] }]);
+  routes["GET /v1/volumes/pg/refs"] = json({ latest: "s1" });
+  expect(JSON.parse(await tool(t, "volume_get").run({ volume: "pg" }))).toEqual({ volume: "pg", history: [{ id: "s1", working_copies: ["w"] }], refs: { latest: "s1" } });
+  routes["GET /v1/volumes/pg/history"] = json({ history: [{ id: "s1" }], working: [{ name: "w", head: "s1" }] });
+  expect(JSON.parse(await tool(t, "volume_get").run({ volume: "pg" })).working).toEqual([{ name: "w", head: "s1" }]);
   routes["GET /v1/environments/e1"] = json({ services: [{ name: "api", image: "a:1" }] });
   routes["PATCH /v1/environments/e1"] = json({});
   routes["POST /v1/environments/e1/services/api/restart"] = json({}, 202);
@@ -768,4 +777,22 @@ test("worktree add waits for the row and says how to reach it; request_create ec
   routes["GET /v1/quota?owner=acme"] = json({ owner: "acme" });
   expect(JSON.parse(await tool(t, "quota").run({})).owner).toBe("acme");
   delete process.env.KL_TEAM;
+});
+
+test("a snapshot whose re-read fails still answers success with its id", async () => {
+  routes["POST /v1/workspaces/w1/snapshots"] = json({ id: "s7" });
+  routes["GET /v1/workspaces/w1"] = () => { throw new Error("boom"); };
+  const out = JSON.parse(await tool(platformTools("workspace", "w1"), "workspace_snapshot").run({}));
+  expect(out.snapshot).toEqual({ id: "s7" });
+  expect(out.note).toContain("saved; the workspace was not re-read");
+});
+
+test("stop wait: true ignores ready reads and settles on stopped", async () => {
+  const t = platformTools("main", undefined, 1);
+  const seq = ["ready", "ready", "stopped"];
+  let n = 0;
+  routes["POST /v1/workspaces/w1/stop"] = json({ id: "w1", state: "ready" }, 202);
+  routes["GET /v1/workspaces/w1"] = () => json({ id: "w1", state: seq[Math.min(n++, 2)] })();
+  expect(JSON.parse(await tool(t, "workspace_stop").run({ workspace: "w1", wait: true })).state).toBe("stopped");
+  expect(n).toBe(3);
 });

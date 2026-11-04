@@ -7,6 +7,9 @@
 //! environment changing state, are notices; a `killed_by_restart` process of the same restart folds into it.
 //! Delivery is the daemon's: a running main session gets it as a message, otherwise it waits in
 //! `notices` for the next MCP tool answer (mcp.ts), which has no server-to-client push.
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
 import { apiJson, podPost, processNotify, touched as podTouched, type Notify } from "@kloudlite-tui/tools";
 
 type Proc = { id: string; cmd?: string; state?: string; exit_code?: number | null; restarted_at?: string | number; started_at?: string | number };
@@ -25,7 +28,11 @@ export type WatchDeps = {
   notify(msg: string): void;
   notifyOf: Map<string, Notify>;
   now(): number;
+  /** Where `touched` and `seen` persist (tmp + rename like asks.ts), so a bench that returns after an idle stop still has its baseline. */
+  file?: string;
 };
+
+export const watchFile = () => join(homedir(), ".kl", "watch.json");
 
 /** Notices waiting for an MCP client's next tool answer (one bench, one person: not per connection). */
 const queue: string[] = [];
@@ -58,13 +65,39 @@ export function createWatch(d: WatchDeps) {
   const seen = new Map<string, { at: Set<string>; state?: string }>();
   let env: { name: string; state: string } | null | undefined;
 
-  async function workspace(ws: string, killed: Proc[]): Promise<void> {
-    const doc = await d.workspace(ws).catch(() => undefined);
+  // a missing or torn file is an empty baseline, never an error
+  if (d.file) {
+    try {
+      const j = JSON.parse(readFileSync(d.file, "utf8"));
+      for (const [ws, at] of Object.entries<number>(j.touched ?? {})) if (!d.touched.has(ws)) d.touched.set(ws, at);
+      for (const [ws, v] of Object.entries<any>(j.seen ?? {})) seen.set(ws, { at: new Set(v.at ?? []), state: v.state });
+    } catch {}
+  }
+  let saved = "";
+  let touchedSavedAt = 0;
+  const save = (seenChanged: boolean) => {
+    if (!d.file) return;
+    if (!seenChanged && d.now() - touchedSavedAt < 60_000) return;
+    const body = JSON.stringify({ touched: Object.fromEntries(d.touched), seen: Object.fromEntries([...seen].map(([k, v]) => [k, { at: [...v.at], state: v.state }])) });
+    if (body === saved) return;
+    try {
+      mkdirSync(dirname(d.file), { recursive: true });
+      writeFileSync(`${d.file}.tmp`, body);
+      renameSync(`${d.file}.tmp`, d.file);
+      saved = body;
+      touchedSavedAt = d.now();
+    } catch {}
+  };
+
+  async function workspace(ws: string, doc: WsDoc | undefined, killed: Proc[]): Promise<void> {
     const name = doc?.name ?? ws;
     const restarts = doc?.restarts ?? [];
     const base = seen.get(ws);
     const now = { at: new Set(restarts.map((r) => String(ms(r.at)))), state: doc?.state };
-    if (doc) seen.set(ws, now);
+    if (doc) {
+      seen.set(ws, now);
+      if (!base || base.state !== now.state || [...now.at].some((x) => !base.at.has(x))) save(true);
+    }
     const fresh = base ? restarts.filter((r) => !base.at.has(String(ms(r.at)))) : [];
     const folded = new Set<Proc>();
     for (const r of fresh) {
@@ -93,6 +126,7 @@ export function createWatch(d: WatchDeps) {
       } catch {
         continue;
       }
+      const doc = await d.workspace(ws).catch(() => undefined);
       const killed: Proc[] = [];
       for (const p of procs) {
         const key = `${ws}/${p.id}`;
@@ -111,11 +145,12 @@ export function createWatch(d: WatchDeps) {
           const code = p.exit_code ?? -1;
           if (mode === "never" || (mode === "on_failure" && code === 0)) continue;
           const err = tail(await d.stderr(ws, p.id).catch(() => ""));
-          d.notify(`[process ${p.id} in ${ws} exited ${code}] ${p.cmd ?? ""}${err ? `\n${err}` : ""}`);
+          d.notify(`[process ${p.id} in ${doc?.name ?? ws} exited ${code}] ${p.cmd ?? ""}${err ? `\n${err}` : ""}`);
         } catch {}
       }
-      await workspace(ws, killed);
+      await workspace(ws, doc, killed);
     }
+    save(false);
     const e = await d.environment().catch(() => undefined);
     if (e !== undefined) {
       if (e && env && env.name === e.name && env.state !== e.state) d.notify(`[environment ${e.name} ${e.state}]`);
@@ -147,4 +182,5 @@ export const liveWatch = (notify: (m: string) => void) =>
     notify,
     notifyOf: processNotify,
     now: Date.now,
+    file: watchFile(),
   });
