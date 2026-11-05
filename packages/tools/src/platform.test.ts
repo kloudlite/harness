@@ -227,40 +227,24 @@ test("request_create sends only the kind's own payload; requests_list filters by
   expect(calls.at(-1)!.url).toBe("/v1/requests?owner=acme");
 });
 
-test("service_logs reads the build gate's logs port, defaulting env in a workspace session", async () => {
-  process.env.KL_LOGS_URL = "http://logs.test";
-  try {
-    const seen: string[] = [];
-    const inner = globalThis.fetch;
-    globalThis.fetch = (async (url: string, init: any = {}) => {
-      if (!String(url).startsWith("http://logs.test")) return inner(url as any, init);
-      seen.push(String(url).replace("http://logs.test", ""));
-      expect(init.headers?.authorization).toBeUndefined();
-      return String(url).includes("/nope") ? new Response("{\"error\":\"no such service\"}", { status: 404 }) : new Response("{\"pods\":[]}");
-    }) as any;
-    // main: env is required and goes into the path; a name resolves to the id the gate takes
-    routes["GET /v1/environments/e1"] = json({ id: "env-e1" });
-    routes["GET /v1/environments/e9"] = json({ id: "env-e9" });
-    const m = platformTools("main");
-    expect(await tool(m, "service_logs").run({ env: "e1", name: "web", tail: 50, previous: true })).toBe("{\"pods\":[]}");
-    expect(seen.at(-1)).toBe("/logs/env-e1/web?tail=50&previous=true");
-    await tool(m, "service_logs").run({ env: "env-e1", name: "web", tail: 50, previous: true });
-    expect(seen.at(-1)).toBe("/logs/env-e1/web?tail=50&previous=true");
-    // a quoted flag reads as the flag: "false" must not ask for the crashed container
-    await tool(m, "service_logs").run({ env: "e1", name: "web", previous: "false" });
-    expect(seen.at(-1)).toBe("/logs/env-e1/web");
-    await tool(m, "service_logs").run({ env: "e1", name: "web", previous: "true" });
-    expect(seen.at(-1)).toBe("/logs/env-e1/web?previous=true");
-    await expect(tool(m, "service_logs").run({ name: "web" })).rejects.toThrow("`env` is required");
-    // workspace: env defaults through the workspace's session
-    const t = platformTools("workspace", "w1");
-    routes["GET /v1/workspaces/w1"] = json({ team: "acme", session: "ses-1", environment: "e9", packages: [] });
-    await tool(t, "service_logs").run({ name: "web" });
-    expect(seen.at(-1)).toBe("/logs/env-e9/web");
-    await expect(tool(t, "service_logs").run({ name: "nope" })).rejects.toThrow(/404: .*no such service/);
-  } finally {
-    delete process.env.KL_LOGS_URL;
-  }
+test("service_logs reads the api route, defaulting env in a workspace session", async () => {
+  const lines = (...l: string[]) => json({ lines: l, pod: "web-0", truncated: false });
+  routes["GET /v1/environments/e1"] = json({ id: "env-e1" });
+  routes["GET /v1/environments/e1/services/web/logs?tail=50&previous=true"] = lines("a", "b");
+  routes["GET /v1/environments/e1/services/web/logs"] = json({ lines: ["c"], pod: "web-0", truncated: true });
+  routes["GET /v1/environments/e1/services/web/logs?previous=true"] = lines("d");
+  const m = platformTools("main");
+  expect(await tool(m, "service_logs").run({ env: "e1", name: "web", tail: 50, previous: true })).toBe("a\nb");
+  expect(calls.at(-1)!.url).toBe("/v1/environments/e1/services/web/logs?tail=50&previous=true");
+  // a quoted flag reads as the flag: "false" must not ask for the crashed container
+  expect(await tool(m, "service_logs").run({ env: "e1", name: "web", previous: "false" })).toBe("c\n[truncated]");
+  expect(await tool(m, "service_logs").run({ env: "e1", name: "web", previous: "true" })).toBe("d");
+  await expect(tool(m, "service_logs").run({ name: "web" })).rejects.toThrow("`env` is required");
+  // workspace: env defaults through the workspace's session
+  const t = platformTools("workspace", "w1");
+  routes["GET /v1/workspaces/w1"] = json({ team: "acme", session: "ses-1", environment: "e9", packages: [] });
+  routes["GET /v1/environments/e9/services/web/logs"] = lines("z");
+  expect(await tool(t, "service_logs").run({ name: "web" })).toBe("z");
 });
 
 test("every workspace and env param takes the id or the name, and no sentence says otherwise", () => {

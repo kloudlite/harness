@@ -556,15 +556,8 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
       remove: services({ name: { type: "string", description: "The service's name." } }, ["name"], (cur, a) => (cur.some((s) => s.name === a.name) ? cur.filter((s) => s.name !== a.name) : `error: no such service: ${a.name}`)),
       logs: eact({ name: { type: "string", description: "The service's name." }, tail: N, since: N, previous: { type: "boolean" } }, ["name"], async (env, a) => {
         await wake(env);
-        // the gate takes the id alone (a name is the api's convenience, never the CR's name)
-        const id = env.startsWith("env-") ? env : String((await apiJson<any>("GET", `/v1/environments/${env}`))?.id ?? env);
-        const base = (process.env.KL_LOGS_URL ?? "http://builder-gate.kloudlite-system.svc:1235").replace(/\/$/, "");
-        const q = qs({ tail: a.tail === undefined ? undefined : String(a.tail), since: a.since === undefined ? undefined : String(a.since), previous: a.previous === true || String(a.previous).trim().toLowerCase() === "true" ? "true" : undefined });
-        // no auth header: the gate identifies this pod by its source IP
-        const res = await fetch(`${base}/logs/${seg(id)}/${seg(a.name)}${q}`, { signal: AbortSignal.timeout(15_000) });
-        const text = await res.text();
-        if (res.status < 200 || res.status >= 300) throw new Error(httpError(res.status, text));
-        return text;
+        const d = await apiJson<any>("GET", `/v1/environments/${env}/services/${seg(a.name)}/logs${qs({ tail: a.tail === undefined ? undefined : String(a.tail), since: a.since === undefined ? undefined : String(a.since), previous: a.previous === true || String(a.previous).trim().toLowerCase() === "true" ? "true" : undefined })}`);
+        return `${(d?.lines ?? []).join("\n")}${d?.truncated ? "\n[truncated]" : ""}`;
       }),
     }),
   );
