@@ -112,7 +112,7 @@ The tools act on one session. Most tools are one per resource: `action` picks th
 | Code | `read`, `write`, `edit`, `glob`, `grep` | none |
 | Run | `exec`, `process`, `watch` | `process`: `list`, `output`, `wait`, `write`, `close_stdin`, `kill`; `watch`: `start`, `poll`, `stop` |
 | Packages | `packages` | `packages`: `list`, `add`, `remove`, `update` |
-| Images | `container_build`, `container_push`, `builder_status` | none |
+| Images | `container_build`, `container_push` | none |
 | Environments | `env`, `service` | `env`: `list`, `get`, `create`, `start`, `stop`, `delete`, `wait`, `ttl`, `snapshot`, `restore`; `service`: `add`, `update`, `remove`, `logs` |
 | Intercepts | `intercept` | none |
 | Volumes | `volume`, `snapshot` | `volume`: `list`, `get`, `delete`; `snapshot`: `delete` |

@@ -110,7 +110,6 @@ Intercepts are not your work. The workspace that runs the service starts and end
 | `packages` | `list` reads the packages of a workspace. To change packages, use `workspace_ask`. Then the workspace also updates its `AGENTS.md`. |
 | `volume` | `list` and `get` read the lineage of a volume: its snapshots newest first, and the tip. `delete` (**card**) removes a detached volume. |
 | `snapshot` **card** | `delete` removes a snapshot. |
-| `builder_status` | See the image builder of the owner. |
 | `quota`, `regions` | See the resources that the owner can still use, and the regions (a team has one; everything it makes runs there). |
 | `request_create`, `requests_list`, `request_get` | Ask a superadmin for quota, access or a region. Read the decision. |
 

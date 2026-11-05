@@ -19,7 +19,7 @@ For a manual run on the dev region: give the prompt, check the tool sequence. `*
 | kloudlite-develop 13. Checkpoint and restore a workspace | checkpoint before the refactor, then go back to this morning | workspace(get), workspace(snapshot: volume), volume(get), workspace(restore), workspace(get)* |
 | kloudlite-develop 14. Reset environment data | reset the data to last night's snapshot | env(get), volume(get), (ask), env(restore), (409 lost: ask) env(restore: discard), env(wait) |
 | kloudlite-develop 15. Named volume for hand-off | save this dataset as v2 | workspace(snapshot: volume, message), volume(get) |
-| kloudlite-develop 16. Publish an image | build and push the api image | container_build, container_push, builder_status on wait |
+| kloudlite-develop 16. Publish an image | build and push the api image | container_build, container_push |
 | kloudlite-develop 17. Stop for the day | stop everything | session(current), intercept(stop), session(stop) |
 | kloudlite-develop 18. Reach the environment from the laptop | I want to run psql from my terminal | env(get), then give: kloudlite env + psql -h db -p 5432 |
 | kloudlite-verify 1. Quick check in the workspace | run the unit tests | workspace(list), exec(cwd, tail, quiet) |

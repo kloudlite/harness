@@ -30,7 +30,6 @@ One tool per resource. `action` picks the verb; the arguments below are the unio
 | `packages` | `action`, `workspace`, `packages?` | `list` (also `missing`: entries with no binary), `add`, `remove`, `update`: entries `attr` or `attr@version` |
 | `container_build` | `workspace`, `tags`, `soft_ms?` | Builds and pushes to the registry connector; past `soft_ms` it hands off like `exec`, kind `process`; fails with `no_registry` or `unknown_registry` and the connected `registries` |
 | `container_push` | `workspace`, `src`, `dst` | Copies an image to more names |
-| `builder_status` | `team?` | Why a build waits: `auto_start`, `idle_since`, `reason` |
 
 ## Environments
 

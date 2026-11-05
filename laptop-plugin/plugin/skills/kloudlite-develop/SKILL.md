@@ -218,7 +218,7 @@ Every scenario ends with its cleanup. To check a result, use `kloudlite-verify`.
 2. More names: `container_push` {"workspace": "ws-…", "src": "api:1.4.0", "dst": ["api:latest"]}.
 
 **Done when:** the answer names the pushed image.
-**If it fails:** `no registry is configured`: the user connects a registry in the web console. `builder_status` says why a build waits.
+**If it fails:** `no registry is configured`: the user connects a registry in the web console. The image is built inside the workspace by `container_build`: there is no builder to wait for.
 
 ### 17. Stop for the day
 
