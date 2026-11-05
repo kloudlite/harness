@@ -1582,7 +1582,8 @@ export function App({
                       .find((e) => e.kind === "tool" && e.status === "running") as
                       | (Entry & { kind: "tool" })
                       | undefined;
-                    if (tool) return `${tool.name} · ${tool.summary}`;
+                    // one line: codemode's summary is its whole script, which the block above already shows
+                    if (tool) return `${tool.name} · ${(tool.summary ?? "").split("\n")[0]!.slice(0, 80)}`;
                     const last = session.entries[session.entries.length - 1];
                     return last?.kind === "thinking" ? "thinking…" : "working…";
                   })()}
