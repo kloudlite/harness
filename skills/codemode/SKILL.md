@@ -49,7 +49,7 @@ Create, start and restore calls take `wait: true` and answer when the object has
 
 ```js
 // Create a workspace and wait until it is up
-const ws = JSON.parse(await tools.workspace({ action: "create", name: "api", quota_gb: 20, wait: true }));
+const ws = JSON.parse(await tools.workspace({ action: "create", name: "api", wait: true }));
 return ws.state;
 ```
 

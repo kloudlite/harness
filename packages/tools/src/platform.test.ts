@@ -319,11 +319,11 @@ test("in a session, workspace_create and workspace_delete go through the session
   routes["GET /v1/workspaces/w1"] = json({ id: "w1", state: "ready" });
   routes["POST /v1/sessions/ses-1/workspaces"] = json({ id: "ws-2" }, 201);
   routes["DELETE /v1/sessions/ses-1/workspaces/w1"] = () => new Response(null, { status: 204 });
-  await tool(t, "workspace_create").run({ name: "backend", quota_gb: 5, team: "acme" });
+  await tool(t, "workspace_create").run({ name: "backend", team: "acme" });
   await tool(t, "workspace_delete").run({ workspace: "w1" });
   process.env.KL_SESSION = "ses-1";
   try {
-    await tool(t, "workspace_create").run({ name: "backend", quota_gb: 5, team: "acme" });
+    await tool(t, "workspace_create").run({ name: "backend", team: "acme" });
     await tool(t, "workspace_delete").run({ workspace: "w1" });
   } finally {
     delete process.env.KL_SESSION;
@@ -337,7 +337,7 @@ test("in a session, workspace_create and workspace_delete go through the session
     "DELETE /v1/sessions/ses-1/workspaces/w1",
   ]);
   // The session already names the owner: a `team` would only contradict it.
-  expect(calls[3].body).toEqual({ name: "backend", quota_gb: 5 });
+  expect(calls[3].body).toEqual({ name: "backend" });
 });
 
 test("the push tools pass the volume name and the restore tool the team", async () => {
@@ -450,10 +450,10 @@ test("wait: true polls the created object to its settled state; a no-wait create
   let n = 0;
   routes["POST /v1/workspaces"] = json({ id: "w9", state: "creating" }, 202);
   routes["GET /v1/workspaces/w9"] = () => json({ id: "w9", state: ++n >= 3 ? "ready" : "creating" })();
-  expect(JSON.parse(await tool(t, "workspace_create").run({ name: "w", quota_gb: 5, wait: true })).state).toBe("ready");
+  expect(JSON.parse(await tool(t, "workspace_create").run({ name: "w", wait: true })).state).toBe("ready");
   expect(n).toBe(3);
   routes["GET /v1/workspaces/w9"] = json({ id: "w9", state: "creating" });
-  expect(JSON.parse(await tool(t, "workspace_create").run({ name: "w", quota_gb: 5 })).state).toBe("creating");
+  expect(JSON.parse(await tool(t, "workspace_create").run({ name: "w" })).state).toBe("creating");
 });
 
 test("a wait: true call still running at soft_ms answers the promoted hand-off, even when the read is slow", async () => {
@@ -464,7 +464,7 @@ test("a wait: true call still running at soft_ms answers the promoted hand-off, 
     return json({ id: "w9", state: "creating" })();
   };
   const t0 = Date.now();
-  const out = JSON.parse(await tool(t, "workspace_create").run({ name: "w", quota_gb: 5, wait: true, soft_ms: 50 }));
+  const out = JSON.parse(await tool(t, "workspace_create").run({ name: "w", wait: true, soft_ms: 50 }));
   expect(out).toEqual({ promoted: true, id: "w9", kind: "workspace", next: 0, next_err: 0 });
   expect(Date.now() - t0).toBeLessThan(300);
   // the other kinds name what resumes them
@@ -494,7 +494,6 @@ test("workspace create with source clones; env create with an environment source
   routes["POST /v1/workspaces/w1/clone"] = json({}, 202);
   await tool(t, "workspace_create").run({ name: "c", source: "w1", task: "try" });
   expect(calls.at(-1)).toMatchObject({ url: "/v1/workspaces/w1/clone", body: { name: "c", task: "try" } });
-  await expect(tool(t, "workspace_create").run({ name: "c" })).rejects.toThrow("`quota_gb` is required unless `source`");
   routes["GET /v1/environments/e1"] = json({ id: "e1" });
   routes["POST /v1/environments/e1/clone"] = json({}, 202);
   routes["POST /v1/environments"] = json({}, 202);
@@ -643,7 +642,7 @@ test("a refusal from /v1 answers JSON {error, hint}; an argument error carries t
   const e1 = await tool(t, "workspace_get").run({ workspace: "nope" }).catch((e) => JSON.parse(e.message));
   expect(e1).toEqual({ error: "404: no such workspace", hint: "check the list action" });
   routes["POST /v1/workspaces"] = () => new Response("workspaces: 5 of 5 in use, request more under Quota", { status: 409 });
-  const e2 = await tool(t, "workspace_create").run({ name: "w", quota_gb: 5 }).catch((e) => JSON.parse(e.message));
+  const e2 = await tool(t, "workspace_create").run({ name: "w" }).catch((e) => JSON.parse(e.message));
   expect(e2.hint).toContain("request_create");
   const e3 = await tool(t, "workspace_get").run({}).catch((e) => JSON.parse(e.message));
   expect(e3.error).toContain("`workspace` is required");
@@ -788,7 +787,7 @@ test("soft_ms 60000 on a poll that never finishes hands off before 56 s, inside 
     routes["POST /v1/workspaces"] = json({ id: "w9", state: "creating" }, 202);
     routes["GET /v1/workspaces/w9"] = json({ id: "w9", state: "creating" });
     const t0 = Date.now();
-    const p = tool(t, "workspace_create").run({ name: "w", quota_gb: 5, wait: true, soft_ms: 60_000 });
+    const p = tool(t, "workspace_create").run({ name: "w", wait: true, soft_ms: 60_000 });
     // bun has no async advance: step a second at a time and let the fetch/poll microtasks run between steps
     let done = false;
     p.then(() => (done = true));

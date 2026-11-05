@@ -12,7 +12,7 @@ The status comes first; the body is one sentence. Report it as it is, then take 
 | `409 a workspace named "x" already exists here` (also environment, session) | Reuse it, or pick another name. |
 | `409` `"x" is ambiguous; qualify it as owner/name` | Use the id or `team/name`. |
 | `409 workspace is interrupted: its storage is moving; it resumes in seconds` | Wait, then read the object again. |
-| `409 no storage disk has room for {n} GiB; retry later or ask an operator` | Smaller `quota_gb`, or tell the user. |
+| `409 no storage disk has room for {n} GiB; retry later or ask an operator` | Tell the user. |
 | `409 a snapshot is already being cut for this workspace` | Wait, read the volume history, do not repeat. |
 | `409 this snapshot is the base of a running worktree` | Keep it; tell the user. |
 | `409 the volume still has a workspace or environment` | Delete the owner first, if the user asked. |

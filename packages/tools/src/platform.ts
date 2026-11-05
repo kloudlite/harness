@@ -417,15 +417,14 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
             // In a session (KL_SESSION) a workspace is created and deleted THROUGH it, so it is managed: a
             // direct create would be standalone and then refused by this session's own tools, and a direct
             // delete of a managed one is a 409. The session already names the owner, so `team` is dropped.
-            create: act({ name: S, quota_gb: N, image: S, packages: SL, team: S, source: { type: "string", description: "A workspace (id or name) to clone instead of creating an empty one." }, task: { type: "string", description: "What the clone is for (at most 200 characters)." }, ...WAITING }, ["name"], async (a) => {
+            create: act({ name: S, image: S, packages: SL, team: S, source: { type: "string", description: "A workspace (id or name) to clone instead of creating an empty one." }, task: { type: "string", description: "What the clone is for (at most 200 characters)." }, ...WAITING }, ["name"], async (a) => {
               if (a.source) return thenWaitWs(await api("POST", `/v1/workspaces/${seg(a.source)}/clone`, strip({ name: a.name, task: a.task })), a);
-              if (a.quota_gb === undefined) return "error: `quota_gb` is required unless `source` clones a workspace";
-              const body = { name: a.name, quota_gb: a.quota_gb, image: a.image, packages: a.packages };
+              const body = { name: a.name, image: a.image, packages: a.packages };
               const ses = process.env.KL_SESSION;
               return thenWaitWs(ses ? await api("POST", `/v1/sessions/${seg(ses)}/workspaces`, strip(body)) : await api("POST", "/v1/workspaces", strip({ team: a.team, ...body })), a);
             }),
-            restore: act({ name: S, snapshot_id: { type: "string", description: "A volume name, `name@N` or a snapshot id." }, team: S, image: S, packages: SL, quota_gb: N, ...WAITING }, ["name", "snapshot_id"], async (a) =>
-              thenWaitWs(await api("POST", "/v1/workspaces/restore", strip({ name: a.name, snapshot_id: a.snapshot_id, team: a.team, image: a.image, packages: a.packages, quota_gb: a.quota_gb })), a)),
+            restore: act({ name: S, snapshot_id: { type: "string", description: "A volume name, `name@N` or a snapshot id." }, team: S, image: S, packages: SL, ...WAITING }, ["name", "snapshot_id"], async (a) =>
+              thenWaitWs(await api("POST", "/v1/workspaces/restore", strip({ name: a.name, snapshot_id: a.snapshot_id, team: a.team, image: a.image, packages: a.packages })), a)),
             start: mact(WAITING, [], async (a) => thenWaitWs(await api("POST", `/v1/workspaces/${seg(a.workspace)}/start`), a, { ws: a.workspace, reread: true })),
             stop: mact(WAITING, [], async (a) => thenWaitWs(await api("POST", `/v1/workspaces/${seg(a.workspace)}/stop`), a, { stopped: true, ws: a.workspace })),
             restart: mact({ soft_ms: WAITING.soft_ms }, [], async (a) => {
@@ -468,15 +467,15 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
         : {
             list: act({ team: S }, [], async (a) => api("GET", `/v1/environments${qs({ owner: a.team })}`)),
             get: eact({}, [], async (env) => (await wake(env), envView(env))),
-            create: act({ name: S, services: { type: "array", items: SERVICE }, team: S, quota_gb: N, region: S, source: { type: "string", description: "An environment (id or name) to clone live, or a snapshot id to restore into a new environment. Omit it for an empty one." }, ...WAITING }, ["name"], async (a) => {
+            create: act({ name: S, services: { type: "array", items: SERVICE }, team: S, region: S, source: { type: "string", description: "An environment (id or name) to clone live, or a snapshot id to restore into a new environment. Omit it for an empty one." }, ...WAITING }, ["name"], async (a) => {
               const services = a.services?.map(withServiceDefaults);
               if (a.source) {
                 const r = await raw("GET", `/v1/environments/${seg(a.source)}`);
                 if (r.unavailable) throw new Error(UNAVAILABLE);
-                if (r.status === 200) return thenWaitEnv(await api("POST", `/v1/environments/${seg(a.source)}/clone`, strip({ name: a.name, owner: a.team, services, region: a.region, quota_gb: a.quota_gb })), a);
+                if (r.status === 200) return thenWaitEnv(await api("POST", `/v1/environments/${seg(a.source)}/clone`, strip({ name: a.name, owner: a.team, services, region: a.region })), a);
                 if (r.status !== 404) throw new Error(httpError(r.status, r.text));
               }
-              return thenWaitEnv(await api("POST", "/v1/environments", strip({ name: a.name, snapshot_id: a.source, services, owner: a.team, quota_gb: a.quota_gb })), a);
+              return thenWaitEnv(await api("POST", "/v1/environments", strip({ name: a.name, snapshot_id: a.source, services, owner: a.team })), a);
             }),
             start: eact(WAITING, [], async (env, a) => thenWaitEnv(await api("POST", `/v1/environments/${env}/start`), a, env, true)),
             stop: eact(WAITING, [], async (env, a) => thenWaitEnv(await api("POST", `/v1/environments/${env}/stop`), a, env, false, stoppedDone)),

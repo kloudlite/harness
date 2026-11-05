@@ -17,7 +17,7 @@ Every scenario ends with its cleanup. To check a result, use `kloudlite-verify`.
 **Shape:** 1.
 **Steps:**
 1. Orient (`session` action `current`, `workspace` action `list`). Reuse a workspace that holds the repo.
-2. Read the repo's `package.json`, `go.mod` or `pyproject.toml` for packages. If there is no workspace yet, `workspace` {"action": "create", "name": "api", "quota_gb": 20, "packages": ["git", "nodejs@22"], "wait": true}. It answers when the workspace is `ready`.
+2. Read the repo's `package.json`, `go.mod` or `pyproject.toml` for packages. If there is no workspace yet, `workspace` {"action": "create", "name": "api", "packages": ["git", "nodejs@22"], "wait": true}. It answers when the workspace is `ready`.
 4. `exec` {"workspace": "ws-…", "cmd": "git clone https://github.com/acme/api .", "quiet": true}. The directory must be empty; else clone into a folder and give `cwd` later.
 5. `read` {"workspace": "ws-…", "paths": ["AGENTS.md"]}. Add packages it names with `packages` action `add`.
 
@@ -33,7 +33,7 @@ Every scenario ends with its cleanup. To check a result, use `kloudlite-verify`.
 1. `env` action `list`. Reuse an environment that already runs the app.
 2. Read `docker-compose.yml`, `.env.example` and the README. List each service, its image, ports and variables. Take mounts from `references/services.md` of the `kloudlite` skill; every service that writes data gets one.
 3. A password is a secret. `secret_set` {"owner": "acme", "name": "DB_PASSWORD", "value": "…"} with a value the user gives or approves, never printed, and `owner` the team: an environment reads only the team's secrets.
-4. `env` {"action": "create", "name": "shop-dev", "quota_gb": 10, "services": [{"name": "db", "image": "postgres:16", "ports": [5432], "env": {"POSTGRES_PASSWORD": "${{ secrets.DB_PASSWORD }}"}, "mounts": [{"folder": "pg-data", "path": "/var/lib/postgresql/data"}]}, {"name": "cache", "image": "redis:7", "ports": [6379]}]}.
+4. `env` {"action": "create", "name": "shop-dev", "services": [{"name": "db", "image": "postgres:16", "ports": [5432], "env": {"POSTGRES_PASSWORD": "${{ secrets.DB_PASSWORD }}"}, "mounts": [{"folder": "pg-data", "path": "/var/lib/postgresql/data"}]}, {"name": "cache", "image": "redis:7", "ports": [6379]}]}.
 5. `env` {"action": "wait", "env": "env-…"}.
 
 **Done when:** `env` action `wait` shows every service ready.
