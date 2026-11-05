@@ -6,11 +6,11 @@ import { anyPodTools, platformTools, webFetch, webSearch } from "../packages/too
 // served by the laptop door itself (mcp.rs), not by the runtime
 const DOOR: string[] = [];
 // bench-only tools: no skill teaches them
-const NOT_FOR_SKILLS = ["workspace_ask", "task", "scratch_bash"];
+const NOT_FOR_SKILLS = ["workspace_ask", "task"];
 test("references/tools.md lists exactly the served tools, and no other", async () => {
   // what the runtime serves (scripts/dump-schemas.ts), plus the tools it implements itself
   const tools = [webFetch, webSearch, ...(await anyPodTools()), ...platformTools("all")];
-  const served = new Set([...tools.map((t) => t.name), ...DOOR, "status", "task", "scratch_bash", "codemode"]);
+  const served = new Set([...tools.map((t) => t.name), ...DOOR, "status", "task", "codemode"]);
   const doc = readFileSync(join(import.meta.dir, "kloudlite/references/tools.md"), "utf8");
   const named = new Set<string>();
   for (const l of doc.split("\n")) if (l.startsWith("| `") && !l.startsWith("| ---")) for (const m of l.split("|")[1]!.matchAll(/`([a-z_]+)`/g)) named.add(m[1]!);
