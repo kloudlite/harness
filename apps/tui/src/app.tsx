@@ -988,7 +988,9 @@ export function App({
       patchSession(map, key, (s) => ({
         // notices that arrived before the session finished opening (the startup model notice) are
         // not in the daemon's messages; the first restore must not wipe them
-        entries: [...foldRetries(entries), ...(s.restored ? [] : s.entries)],
+        // Live events arrive before the history is read (session.open subscribes first), so a tool
+        // or message that streamed in the gap is in both; the history's copy wins, the notices stay.
+        entries: [...foldRetries(entries), ...(s.restored ? [] : s.entries.filter((e) => e.kind === "info" || e.kind === "error"))],
         history: s.history.length ? s.history : history,
         restored: true,
       })),

@@ -52,7 +52,7 @@ test("a click in the transcript does not make up/down scroll it", async () => {
 
 test("a long block collapses to its head and a click toggles it both ways", async () => {
   const long: Entry[] = [
-    { id: "a", kind: "agent", text: Array.from({ length: 25 }, (_, i) => `line ${i + 1}`).join("\n") },
+    { id: "a", kind: "agent", text: Array.from({ length: 24 }, (_, i) => `line ${i + 1}`).join("\n") + "\n\nline 25" },
   ];
   const t = await testRender(<Transcript entries={long} keys="page" />, {
     width: 70,
@@ -64,11 +64,13 @@ test("a long block collapses to its head and a click toggles it both ways", asyn
     await t.renderOnce();
     return t.captureCharFrame();
   };
-  // the head is kept, not the tail — Claude Code reads from the beginning
+  // the head is kept (Claude Code reads from the beginning) and so is the closing paragraph,
+  // where the question lives; the middle is what folds
   const first = await frame();
   expect(first).toContain("line 1");
-  expect(first).not.toContain("line 25");
-  expect(first).toContain("+15 lines");
+  expect(first).toContain("line 25");
+  expect(first).not.toContain("line 12");
+  expect(first).toContain("+16 lines");
   expect(first).toContain("to expand");
 
   // click only — opencode has no expand key, so neither do we
@@ -85,9 +87,10 @@ test("a long block collapses to its head and a click toggles it both ways", asyn
 
   await t.mockMouse.click(10, await moreRow("Click to collapse")); // and it really collapses again
   const shut = await frame();
-  expect(shut).not.toContain("line 25");
+  expect(shut).not.toContain("line 12");
+  expect(shut).toContain("line 25");
   await t.mockMouse.click(10, (await frame()).split("\n").findIndex((l) => l.includes("line 2")));
-  expect(await frame()).not.toContain("line 25");
+  expect(await frame()).not.toContain("line 12");
   t.renderer.destroy();
 });
 

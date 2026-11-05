@@ -45,6 +45,8 @@ const retryTag = (e: { retries?: number }) =>
 
 /** Rows kept when a block is collapsed (Claude Code shows a short head). */
 const COLLAPSE_MAX = 10;
+/** Rows of a collapsed agent message's closing paragraph kept under the expander. */
+const TAIL_MAX = 3;
 /** Columns a thinking block loses to its left rail: the border plus its padding. */
 const RAIL = 3;
 
@@ -105,21 +107,29 @@ function collapseMd(
   text: string | undefined,
   open: boolean,
   width: number,
-): { text: string; hidden: number } {
-  if (!text) return { text: "", hidden: 0 };
+): { text: string; hidden: number; tail: string } {
+  if (!text) return { text: "", hidden: 0, tail: "" };
   const lines = text.trim().split("\n");
-  if (open || rowCount(text, width) <= COLLAPSE_MAX) return { text: lines.join("\n"), hidden: 0 };
+  if (open || rowCount(text, width) <= COLLAPSE_MAX) return { text: lines.join("\n"), hidden: 0, tail: "" };
+  // The closing paragraph stays visible under the expander: an agent message ends with the
+  // question or the verdict, and a head-only cut hid exactly that (2026-11-05). It is the lines
+  // after the last blank one, at most TAIL_MAX rows, never a fenced block.
+  let start = lines.length;
+  while (start > 0 && lines[start - 1]!.trim() !== "") start--;
+  let tail = lines.slice(start);
+  if (tail.some((l) => l.trimStart().startsWith("```")) || rowCount(tail.join("\n"), width) > TAIL_MAX) tail = [];
+  const headLines = tail.length ? lines.slice(0, start) : lines;
   // take source lines until their wrapped height reaches the head budget
   const kept: string[] = [];
   let rows = 0;
-  for (const line of lines) {
+  for (const line of headLines) {
     const h = wrap(line, width).length;
-    if (rows + h > COLLAPSE_MAX && kept.length > 0) break;
+    if (rows + h > COLLAPSE_MAX - rowCount(tail.join("\n"), width) && kept.length > 0) break;
     kept.push(line);
     rows += h;
   }
   if (kept.filter((l) => l.trimStart().startsWith("```")).length % 2 === 1) kept.push("```");
-  return { text: kept.join("\n"), hidden: lines.length - kept.length };
+  return { text: kept.join("\n"), hidden: lines.length - kept.length - tail.length, tail: tail.join("\n") };
 }
 
 /**
@@ -336,6 +346,7 @@ function Row({
         >
           <Md text={body.text} streaming={streaming} />
           {long && <More hidden={body.hidden} open={open} onToggle={onOpen} />}
+          {long && body.tail !== "" && <Md text={body.tail} streaming={streaming} />}
         </box>
       );
     }
