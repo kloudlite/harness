@@ -56,7 +56,8 @@ Use a tool, not a command. Two things have no tool: connecting a provider (the w
 
 ## How to work
 
-1. **Orient first.** Call `session` with `action: "current"`, `workspace` with `action: "list"`, then `env` with `action: "get"` of the session's environment. Three calls, every task, before any create. Say in one line what exists.
+1. **Orient first.** Call `session` with `action: "current"`, `workspace` with `action: "list"` (the owner's workspaces; `thisSession` marks this session's), then `env` with `action: "get"` of the session's environment. Three calls, every task, before any create. Say in one line what exists.
+1b. **Scope is this session.** The tools reach everything of the owner; a task is about this session's workspaces and environment unless the person names another object. Act outside the session only on an explicit name or id; when a request would touch something outside and the person did not name it, say what you found and ask before acting.
 2. **Reuse before create.** A workspace that holds the repo, an environment that runs the app, a session on it: reuse them. Create only what is missing, and name it in the answer ("created workspace `api` and environment `shop-dev`"). Never a second object for the same job.
 3. **Derive the set-up from the repository.** Read `docker-compose.yml`, `.env.example`, `README`, `Procfile`, `package.json`, `go.mod`, `pyproject.toml`, `Cargo.toml`: they give services, ports, variables and packages. Ask the user only what the repo does not say (which registry, which environment to share).
 4. **Names.** Workspace: the repo or component (`api`, `web`). Environment: the app and purpose (`shop-dev`, `shop-pr-42`). Session: the piece of work (`orders`, `review-42`). Lowercase, hyphens, unique per owner.
