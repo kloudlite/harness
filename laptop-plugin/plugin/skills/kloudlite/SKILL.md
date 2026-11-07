@@ -1,6 +1,6 @@
 ---
 name: kloudlite
-description: Gives the Kloudlite definitions, the rules for picking and building workspaces, environments and sessions, the tool groups, the safety rules and the setup steps. Load first when the Kloudlite tools are present (`session`, `workspace`) and the task is to run, test, build or change code; when a request names a workspace, environment, session, intercept, capsule, volume, snapshot, pipeline, secret, variable or connector; for status, logs, stop, start, delete and quota questions ("what do I have", "logs of db", "delete the review workspace"); and when a tool answers "not logged in", "403 ... paused", or the server lists only the `session` tool. Not for steps of a task - use kloudlite-develop (set up, run against real services, intercept), kloudlite-verify (one-time checks in capsules) or kloudlite-automate (pipelines).
+description: Gives the Kloudlite definitions, the rules for picking and building workspaces, environments and sessions, the tool groups, the safety rules and the setup steps. Load first when the Kloudlite tools are present (`session`, `workspace`) and the task is to run, test, build or change code; when a request names a workspace (or a sandbox), environment, session, intercept, capsule, volume, snapshot, pipeline, secret, variable or connector; for status, logs, stop, start, delete and quota questions ("what do I have", "logs of db", "delete the review workspace"); and when a tool answers "not logged in", "403 ... paused", or the server lists only the `session` tool. Not for steps of a task - use kloudlite-develop (set up, run against real services, intercept), kloudlite-verify (one-time checks in capsules) or kloudlite-automate (pipelines).
 ---
 
 # Kloudlite
@@ -13,15 +13,17 @@ The words workspace, environment, session, service, intercept, capsule, volume, 
 
 All work runs in the context of one team: a person's own team or a shared team. A team is not a component. Nine components:
 
-1. **Workspace.** A development machine in the cloud: a home kept while stopped, source in `~/workspace`, packages from nixpkgs, a tool server for programs, SSH for terminals. Standalone, or managed by a session.
+1. **Workspace.** The sandbox an agent works in: an isolated machine in the cloud with its own kernel, a home kept while stopped, source in `~/workspace`, packages from nixpkgs, a tool server for programs, SSH for terminals. It lives until it is deleted. Standalone, or managed by a session.
 2. **Environment.** A set of services that run together, each from a container image, reachable by name and port (`db:5432`). One disk holds the data of mounted folders.
 3. **Session.** A network group that joins workspaces and capsules to one environment, or none. Private to its creator; teammates use their own sessions on the same environment.
 4. **Intercept.** Sends all traffic of one environment service to a workspace of the session; the service pauses; callers keep the same name and port. Environment-wide.
-5. **Capsule.** A disposable isolated container that runs one command or one shell and ends when it exits. In a session it reaches the environment. Files are gone at the end.
+5. **Capsule.** A disposable sandbox: an isolated container that runs one command or one shell and ends when it exits. In a session it reaches the environment. Files are gone at the end. It is never where an agent works; that is a workspace.
 6. **Volume.** The saved storage of one workspace or environment: its disk and the chain of snapshots. A named volume numbers its snapshots `name@N`. A reference is `name` (newest), `name@N`, or a snapshot id.
 7. **Pipeline.** A versioned JSON definition of jobs; each job runs its steps in its own capsule; a run starts one version by hand, on a schedule, from a webhook, or after another pipeline.
 8. **Secrets and variables.** A variable is `NAME=value` in the `env` of a workspace, service, capsule or job. A secret is a named value of an owner; a variable refers to it as the whole value `${{ secrets.NAME }}`. No one reads a value back.
 9. **Connector.** A link from an owner to a code host (GitHub, GitLab) or a container registry: read-only clone over HTTPS; image push and private pull. Connected in the web console.
+
+**"Sandbox" means a workspace.** Other platforms call the agent's machine a sandbox; in Kloudlite that machine is a workspace. When the user asks for a sandbox, give a workspace, unless they ask for one command or a throwaway run, which is a capsule.
 
 Three facts decide every topology choice:
 
