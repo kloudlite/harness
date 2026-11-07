@@ -1,13 +1,13 @@
 ---
 name: kloudlite
-description: Gives the Kloudlite definitions, the rules for picking and building workspaces, environments and sessions, the tool groups, the safety rules and the setup steps. Load first when the Kloudlite tools are present (`session`, `workspace`) and the task is to run, test, build or change code; when a request names a workspace, environment, session, intercept, sandbox, volume, snapshot, pipeline, secret, variable or connector; for status, logs, stop, start, delete and quota questions ("what do I have", "logs of db", "delete the review workspace"); and when a tool answers "not logged in", "403 ... paused", or the server lists only the `session` tool. Not for steps of a task - use kloudlite-develop (set up, run against real services, intercept), kloudlite-verify (one-time checks in sandboxes) or kloudlite-automate (pipelines).
+description: Gives the Kloudlite definitions, the rules for picking and building workspaces, environments and sessions, the tool groups, the safety rules and the setup steps. Load first when the Kloudlite tools are present (`session`, `workspace`) and the task is to run, test, build or change code; when a request names a workspace, environment, session, intercept, capsule, volume, snapshot, pipeline, secret, variable or connector; for status, logs, stop, start, delete and quota questions ("what do I have", "logs of db", "delete the review workspace"); and when a tool answers "not logged in", "403 ... paused", or the server lists only the `session` tool. Not for steps of a task - use kloudlite-develop (set up, run against real services, intercept), kloudlite-verify (one-time checks in capsules) or kloudlite-automate (pipelines).
 ---
 
 # Kloudlite
 
 This skill gives the definitions and the rules. The task skills give the steps: `kloudlite-develop`, `kloudlite-verify`, `kloudlite-automate`. They do not repeat the definitions. Read this skill first.
 
-The words workspace, environment, session, service, intercept, sandbox, volume, snapshot, pipeline, secret and connector mean Kloudlite objects. When the Kloudlite tools are present, code runs in a workspace, not on the user's computer, whatever the request says.
+The words workspace, environment, session, service, intercept, capsule, volume, snapshot, pipeline, secret and connector mean Kloudlite objects. When the Kloudlite tools are present, code runs in a workspace, not on the user's computer, whatever the request says.
 
 ## Components
 
@@ -15,27 +15,27 @@ All work runs in the context of one team: a person's own team or a shared team. 
 
 1. **Workspace.** A development machine in the cloud: a home kept while stopped, source in `~/workspace`, packages from nixpkgs, a tool server for programs, SSH for terminals. Standalone, or managed by a session.
 2. **Environment.** A set of services that run together, each from a container image, reachable by name and port (`db:5432`). One disk holds the data of mounted folders.
-3. **Session.** A network group that joins workspaces and sandboxes to one environment, or none. Private to its creator; teammates use their own sessions on the same environment.
+3. **Session.** A network group that joins workspaces and capsules to one environment, or none. Private to its creator; teammates use their own sessions on the same environment.
 4. **Intercept.** Sends all traffic of one environment service to a workspace of the session; the service pauses; callers keep the same name and port. Environment-wide.
-5. **Sandbox.** A short-lived isolated machine that runs one command and ends when it exits. In a session it reaches the environment. Files are gone at the end.
+5. **Capsule.** A disposable isolated container that runs one command or one shell and ends when it exits. In a session it reaches the environment. Files are gone at the end.
 6. **Volume.** The saved storage of one workspace or environment: its disk and the chain of snapshots. A named volume numbers its snapshots `name@N`. A reference is `name` (newest), `name@N`, or a snapshot id.
-7. **Pipeline.** A versioned JSON definition of jobs; each job runs its steps in its own sandbox; a run starts one version by hand, on a schedule, from a webhook, or after another pipeline.
-8. **Secrets and variables.** A variable is `NAME=value` in the `env` of a workspace, service, sandbox or job. A secret is a named value of an owner; a variable refers to it as the whole value `${{ secrets.NAME }}`. No one reads a value back.
+7. **Pipeline.** A versioned JSON definition of jobs; each job runs its steps in its own capsule; a run starts one version by hand, on a schedule, from a webhook, or after another pipeline.
+8. **Secrets and variables.** A variable is `NAME=value` in the `env` of a workspace, service, capsule or job. A secret is a named value of an owner; a variable refers to it as the whole value `${{ secrets.NAME }}`. No one reads a value back.
 9. **Connector.** A link from an owner to a code host (GitHub, GitLab) or a container registry: read-only clone over HTTPS; image push and private pull. Connected in the web console.
 
 Three facts decide every topology choice:
 
 1. **Managed vs standalone.** A workspace created in a session is managed: it reaches the environment, and the session starts, stops and deletes it. A standalone workspace never joins a session. `workspace` with `action: "create"` and a `source`, and `action: "restore"`, make standalone workspaces.
-2. **A sandbox ends.** It is for one command; nothing in it survives. A sandbox in a session is a managed member and reaches the environment.
+2. **A capsule ends.** It is for one command; nothing in it survives. A capsule in a session is a managed member and reaches the environment.
 3. **An intercept is environment-wide.** Every caller of the service, every teammate's session included, reaches the workspace. One workspace per service.
 
 ```
-team ─┬─ session ── joins ──> workspaces, sandboxes ──> environment (0 or 1)
+team ─┬─ session ── joins ──> workspaces, capsules ──> environment (0 or 1)
       │                         intercept: service ──> workspace of the session
       ├─ environment ── services (image, ports, env, mounts)
       ├─ volume ── snapshots, name@N <── workspace, environment, job (saveTo, fromSnapshot)
-      ├─ pipeline ── versions ── runs ── jobs (one sandbox each)
-      ├─ secrets ──> env of a workspace, service, sandbox or job
+      ├─ pipeline ── versions ── runs ── jobs (one capsule each)
+      ├─ secrets ──> env of a workspace, service, capsule or job
       └─ connectors ──> git clone; image push and pull
 ```
 
@@ -62,7 +62,7 @@ Use a tool, not a command. Two things have no tool: connecting a provider (the w
 3. **Derive the set-up from the repository.** Read `docker-compose.yml`, `.env.example`, `README`, `Procfile`, `package.json`, `go.mod`, `pyproject.toml`, `Cargo.toml`: they give services, ports, variables and packages. Ask the user only what the repo does not say (which registry, which environment to share).
 4. **Names.** Workspace: the repo or component (`api`, `web`). Environment: the app and purpose (`shop-dev`, `shop-pr-42`). Session: the piece of work (`orders`, `review-42`). Lowercase, hyphens, unique per owner.
 5. **Pick the shape** (below). Decide the topology before the first create, say it in one line, then build it.
-6. **Create what the task needs; tear down what you created.** Clones, environment copies, sandboxes, review workspaces and intercepts made for a task go at the end of the task. Objects the user had stay. The answer lists both.
+6. **Create what the task needs; tear down what you created.** Clones, environment copies, capsules, review workspaces and intercepts made for a task go at the end of the task. Objects the user had stay. The answer lists both.
 7. **Wait with `wait: true`.** Create, start, restore and `run` start take `wait: true` and answer when the object has settled, or at `soft_ms` (default 25000) with `{promoted: true, id, kind}`: call the `wait` action of the `kind` tool (`session`: `get`). `exec` and `container_build` promote with `kind: "process"`: loop `process` `wait` with `since`/`since_err` from `next`/`next_err`. A `wait` action takes `timeout_ms` and answers `timed_out: true` at the limit: call it again. A `failing` service needs its `message` and a fix, not more waiting.
 8. **Packages are tools; services belong in the environment.** No database, queue or broker in a workspace. `references/services.md` gives image, ports and mounts.
 9. **Service data.** A service that writes data gets a mount in the same call that creates it. A service without `mounts` loses its data on each restart, and data written before a mount is lost. Example: `{"name": "db", "image": "postgres:16", "ports": [5432], "mounts": [{"folder": "pg-data", "path": "/var/lib/postgresql/data"}]}`. A service that keeps all its data in another service needs none: say so.
@@ -84,7 +84,7 @@ The example app in every skill: a shop with `web`, `api`, `worker`, `db` (Postgr
 | 3. One managed workspace per component, one session | A change across `web`, `api` and `worker` | One environment with every service; one session; a workspace per component; each intercepts its own service |
 | 4. Copies | Risky data changes, experiments, PR review in a shared environment | `env` `create` with `source` for the environment; `workspace` `create` with `source` for a disposable standalone copy; `worktree` `add` for a second branch in one workspace |
 
-Ask in order. Does the work need a running service? No: shape 1. How many components change? One: shape 2; several: shape 3. Would it disturb a shared environment, or try several options? Yes: shape 4. Is it a one-time check? Use a sandbox, not a workspace (`kloudlite-verify`).
+Ask in order. Does the work need a running service? No: shape 1. How many components change? One: shape 2; several: shape 3. Would it disturb a shared environment, or try several options? Yes: shape 4. Is it a one-time check? Use a capsule, not a workspace (`kloudlite-verify`).
 
 Parallel work: only a managed workspace reaches the environment, and a clone is standalone. So "two features at once against the services" is two managed workspaces in the session (each clones the repo) or two worktrees in one managed workspace. A clone keeps or explores a machine's state without services.
 
@@ -95,7 +95,7 @@ Parallel work: only a managed workspace reaches the environment, and a clone is 
 | Workspace | `ws-` | `creating`, `ready`, `stopped`, `error`, `deleted` |
 | Environment | `env-` | `creating`, `running`, `stopped`, `error`, `deleted` |
 | Session | `ses-` | `running`, `starting`, `idle`, `stopped` |
-| Sandbox | `sbx-` | `phase`: `pending`, `starting`, `running`, `terminated`; with `reason` `Exited`, `exit_code` is the result |
+| Capsule | `cap-` | `phase`: `pending`, `starting`, `running`, `terminated`; with `reason` `Exited`, `exit_code` is the result |
 
 Get ids from the `list` actions of `workspace` and `env`, or from `session` `current`. Tools take the id or the name; write the name to the user. `volume` `get` and `delete` take the volume `id` from `volume` `list`. Restore takes a reference in `snapshot_id`; create takes one in `source`.
 
@@ -117,7 +117,7 @@ The tools act on one session. Most tools are one per resource: `action` picks th
 | Intercepts | `intercept` | none |
 | Volumes | `volume`, `snapshot` | `volume`: `list`, `get`, `delete`; `snapshot`: `delete` |
 | Account | `quota`, `regions`, `requests_list`, `request_get`, `request_create` | none |
-| Sandboxes | `sandbox` | `sandbox`: `create`, `get`, `list`, `wait`, `logs`, `delete` |
+| Capsules | `capsule` | `capsule`: `create`, `get`, `list`, `wait`, `logs`, `delete` |
 | Pipelines | `pipeline`, `run`, `webhook_rotate` | `pipeline`: `list`, `get`, `save`, `delete`; `run`: `start`, `list`, `get`, `wait`, `logs`, `cancel` |
 | Secrets and connectors | `secret_set`, `secret_list`, `secret_delete`, `connector_list` | none |
 | Web | `web_fetch`, `web_search` | none |
@@ -137,7 +137,7 @@ These need no scenario.
 
 ## Safety rules
 
-1. **Destructive actions.** The `delete` action of any tool, `service` `remove`, `worktree` `drop`, `env` `restore`, any delete of a sandbox, pipeline (or a version) or secret, `run` `cancel`, `session` `stop`, and a stop of something the user did not name need a request that names the targets. List them by name. If the user did not name them in this turn, ask in one line first. A host confirmation counts as the confirmation.
+1. **Destructive actions.** The `delete` action of any tool, `service` `remove`, `worktree` `drop`, `env` `restore`, any delete of a capsule, pipeline (or a version) or secret, `run` `cancel`, `session` `stop`, and a stop of something the user did not name need a request that names the targets. List them by name. If the user did not name them in this turn, ask in one line first. A host confirmation counts as the confirmation.
 2. **Snapshots only when asked.** The platform already keeps data safe after a crash.
 3. **No secret values in output.** Never print, echo, log or repeat one.
 4. **Refused calls.** If the user refuses a call, that is the answer. Do not retry or get the same result another way.
@@ -153,7 +153,7 @@ These need no scenario.
 | "run the tests", "check it works", "try it" | `kloudlite-verify` | Once, now, isolated, a result to read |
 | "run the tests every night / on every push / after the build" | `kloudlite-automate` | Repeats without a person |
 | "run my server", "hit it with real traffic", "fix the bug" | `kloudlite-develop` | Edits code or keeps a process running |
-| "why did it fail" | verify for a sandbox, automate for a pipeline run | Which record it is |
+| "why did it fail" | verify for a capsule, automate for a pipeline run | Which record it is |
 | "set up", "give me a workspace with Postgres" | `kloudlite-develop` | Creates the shape |
 | "what do I have", "status of X", "logs of db", "delete X", "stop my session" | this skill alone | Reads, lifecycle and deletes need no scenario |
 | A change, then "and check it" | develop, then verify | Every develop scenario ends with "to check the result, use `kloudlite-verify`" |

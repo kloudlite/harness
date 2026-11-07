@@ -23,12 +23,12 @@ For a manual run on the dev region: give the prompt, check the tool sequence. `*
 | kloudlite-develop 17. Stop for the day | stop everything | session(current), intercept(stop), session(stop) |
 | kloudlite-develop 18. Reach the environment from the laptop | I want to run psql from my terminal | env(get), then give: kloudlite env + psql -h db -p 5432 |
 | kloudlite-verify 1. Quick check in the workspace | run the unit tests | workspace(list), exec(cwd, tail, quiet) |
-| kloudlite-verify 2. Clean run in a sandbox against the environment | run the integration tests against staging | session(current), env(get), sandbox(create: git clone, variables), sandbox(wait), sandbox(logs), sandbox(get) |
-| kloudlite-verify 3. One-off script | run this migration once and show me the output | (ask yes if destructive), sandbox(create: packages, env), sandbox(wait), sandbox(logs), sandbox(get) |
-| kloudlite-verify 4. Read a sandbox's record | what did that sandbox print | sandbox(list), sandbox(get), sandbox(logs) |
-| kloudlite-verify 5. Review a pull request in a real environment | review PR 42 against a copy of staging | env(create), env(wait), session(create), workspace(create), exec(git fetch), sandbox(create) or intercept(start), intercept(stop), (ask) workspace(delete), env(delete) |
-| kloudlite-verify 6. Integration test across two changes | test my api change with Priya's web change | env(get: interceptedBy), exec(curl) or sandbox(create), process(output), intercept(stop) |
-| kloudlite-verify 7. Clean up | clean up my sandboxes | sandbox(list), (ask ids), sandbox(delete), sandbox(delete) |
+| kloudlite-verify 2. Clean run in a capsule against the environment | run the integration tests against staging | session(current), env(get), capsule(create: git clone, variables), capsule(wait), capsule(logs), capsule(get) |
+| kloudlite-verify 3. One-off script | run this migration once and show me the output | (ask yes if destructive), capsule(create: packages, env), capsule(wait), capsule(logs), capsule(get) |
+| kloudlite-verify 4. Read a capsule's record | what did that capsule print | capsule(list), capsule(get), capsule(logs) |
+| kloudlite-verify 5. Review a pull request in a real environment | review PR 42 against a copy of staging | env(create), env(wait), session(create), workspace(create), exec(git fetch), capsule(create) or intercept(start), intercept(stop), (ask) workspace(delete), env(delete) |
+| kloudlite-verify 6. Integration test across two changes | test my api change with Priya's web change | env(get: interceptedBy), exec(curl) or capsule(create), process(output), intercept(stop) |
+| kloudlite-verify 7. Clean up | clean up my capsules | capsule(list), (ask ids), capsule(delete), capsule(delete) |
 | kloudlite-automate 1. Write and save a pipeline | make a pipeline that runs the tests | connector_list, pipeline(list), pipeline(save), pipeline(get) |
 | kloudlite-automate 2. Change it as a new version; go back | add a lint job; roll back to v3 | pipeline(get), pipeline(save), pipeline(get) |
 | kloudlite-automate 3. Start by hand and follow | run it now | run(start), run(wait), run(logs) |

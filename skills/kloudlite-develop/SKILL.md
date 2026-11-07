@@ -205,7 +205,7 @@ Every scenario ends with its cleanup. To check a result, use `kloudlite-verify`.
 **Steps:**
 1. `workspace` {"action": "snapshot", "workspace": "ws-…", "volume": "dataset", "message": "v2"}. The first snapshot names the volume; later ones number `dataset@N`.
 2. `volume` {"action": "get", "volume": "<id>"}: the versions.
-3. Another workspace starts from `dataset@2` (`workspace` action `restore` with `snapshot_id`); a sandbox with `sandbox` {"action": "create", "from_snapshot": "dataset@2", …}.
+3. Another workspace starts from `dataset@2` (`workspace` action `restore` with `snapshot_id`); a capsule with `capsule` {"action": "create", "from_snapshot": "dataset@2", …}.
 
 **Done when:** `volume` action `get` lists the version.
 **If it fails:** `409 volume dataset already exists`: another volume has the name.

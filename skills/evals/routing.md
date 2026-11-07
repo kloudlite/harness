@@ -57,14 +57,14 @@ Tie-breaker for "stop": one lifecycle verb on a named object (stop, start, delet
 | run the unit tests | kloudlite-verify | Once, now, a result to read |
 | check it works | kloudlite-verify | Once, now |
 | try it | kloudlite-verify | Once, now |
-| run the integration tests against staging | kloudlite-verify | Clean run in a sandbox |
+| run the integration tests against staging | kloudlite-verify | Clean run in a capsule |
 | run this migration once and show me the output | kloudlite-verify | One-off script |
-| what did that sandbox print | kloudlite-verify | Record of a sandbox |
-| did it pass | kloudlite-verify | Record of a sandbox |
-| why did the sandbox fail | kloudlite-verify | Which record it is: sandbox |
+| what did that capsule print | kloudlite-verify | Record of a capsule |
+| did it pass | kloudlite-verify | Record of a capsule |
+| why did the capsule fail | kloudlite-verify | Which record it is: capsule |
 | review PR 42 against a copy of staging | kloudlite-verify | PR review in a real environment |
 | test my api change with Priya's web change | kloudlite-verify | Integration across two changes |
-| clean up my sandboxes | kloudlite-verify | Cleanup |
+| clean up my capsules | kloudlite-verify | Cleanup |
 | make a pipeline that runs the tests | kloudlite-automate | Writes a pipeline |
 | run the tests every night | kloudlite-automate | Repeats without a person |
 | run the tests on every push | kloudlite-automate | Repeats without a person |

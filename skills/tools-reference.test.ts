@@ -34,7 +34,7 @@ test("every tool a skill names in backticks with an underscore is in tools.md", 
   const doc = readFileSync(join(import.meta.dir, "kloudlite/references/tools.md"), "utf8");
   for (const s of ["kloudlite", "kloudlite-develop", "kloudlite-verify", "kloudlite-automate"]) {
     const t = readFileSync(join(import.meta.dir, s, "SKILL.md"), "utf8");
-    for (const m of t.matchAll(/`((?:workspace|env|service|sandbox|pipeline|run|secret|session|volume|snapshot|process|packages|container|worktree|connector|webhook|request)_[a-z_]+)`/g))
+    for (const m of t.matchAll(/`((?:workspace|env|service|capsule|pipeline|run|secret|session|volume|snapshot|process|packages|container|worktree|connector|webhook|request)_[a-z_]+)`/g))
       if (!/^(env_var|run_number)/.test(m[1]!)) expect(doc.includes(`\`${m[1]}\``) ? m[1] : `${s}: ${m[1]} not in tools.md`).toBe(m[1]!);
   }
 });

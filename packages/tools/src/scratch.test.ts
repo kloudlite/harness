@@ -47,17 +47,17 @@ test("read caps at 256 KiB", async () => {
   expect(out.length).toBeLessThan(257 * 1024);
 });
 
-const sandbox = process.platform === "linux" && spawnSync("unshare", ["-Ur", "true"]).status === 0;
+const capsule = process.platform === "linux" && spawnSync("unshare", ["-Ur", "true"]).status === 0;
 
-test.skipIf(sandbox)("bash without a sandbox says so and does not run the command", async () => {
+test.skipIf(capsule)("bash without a capsule says so and does not run the command", async () => {
   const { root, t } = setup();
   const r = JSON.parse((await t.bash!.run({ command: `touch ${join(root, "marker")}` })) as string);
   expect(r.exit_code).toBe(1);
-  expect(r.output).toStartWith("error: bash sandbox unavailable");
+  expect(r.output).toStartWith("error: bash capsule unavailable");
   expect(existsSync(join(root, "marker"))).toBe(false);
 });
 
-test.skipIf(!sandbox)("bash runs confined, env-clean, propagates exit and times out", async () => {
+test.skipIf(!capsule)("bash runs confined, env-clean, propagates exit and times out", async () => {
   const { root, t } = setup();
   process.env.KL_API_URL = "http://secret";
   const run = async (a: any) => JSON.parse((await t.bash!.run(a)) as string);

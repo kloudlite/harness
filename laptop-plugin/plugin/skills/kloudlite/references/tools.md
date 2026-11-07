@@ -46,11 +46,11 @@ One tool per resource. `action` picks the verb; the arguments below are the unio
 | `volume` | `action`, `volume?`, `kind?`, `owner?` | `list`, `get` (snapshots, `refs` with the newest push under `latest`, and `working`: where each current workspace or environment stands on the volume, with `working_copies` on each snapshot; takes the volume id or the name a snapshot gave it), `delete` (a detached volume) |
 | `snapshot` | `action`, `volume`, `snapshot` | `delete` one snapshot |
 
-## Sandboxes
+## Capsules
 
 | Tool | Arguments | Answers |
 |---|---|---|
-| `sandbox` | `action`, `sandbox?`, `command?`, `image?`, `packages?`, `variables?`, `lifetime_s?`, `team?`, `from_workspace?`, `from_snapshot?`, `state?`, `q?`, `limit?`, `tail?`, `head?`, `wait?`, `soft_ms?`, `timeout_ms?` | `create` (`command` string or argv; `lifetime_s` 10..86400, default 300; id `sbx-`; starts empty: clone code in the command), `get` (`phase`, `reason`, `exit_code`, `message`), `list`, `wait` (for `terminated`), `logs` (`tail` default 200, max 2000; an ended sandbox keeps its last 256 KiB), `delete` (ends a running sandbox, then removes the record) |
+| `capsule` | `action`, `capsule?`, `command?`, `image?`, `packages?`, `variables?`, `lifetime_s?`, `team?`, `from_workspace?`, `from_snapshot?`, `state?`, `q?`, `limit?`, `tail?`, `head?`, `wait?`, `soft_ms?`, `timeout_ms?` | `create` (`command` string or argv; `lifetime_s` 10..86400, default 300; id `cap-`; starts empty: clone code in the command), `get` (`phase`, `reason`, `exit_code`, `message`), `list`, `wait` (for `terminated`), `logs` (`tail` default 200, max 2000; an ended capsule keeps its last 256 KiB), `delete` (ends a running capsule, then removes the record) |
 
 ## Pipelines and runs
 

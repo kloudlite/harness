@@ -40,7 +40,7 @@ export async function mapBuild(j: any): Promise<void> {
 }
 
 /** What the tool server says stands between exec and the world (`fence` in `GET /tools`). */
-export type PodFence = { sandbox?: string; network?: string };
+export type PodFence = { capsule?: string; network?: string };
 const fences = new Map<string, PodFence>();
 /** The fence `podTools(ws)` last read; undefined when the server is older or was unreachable. */
 export const podFence = (ws: string): PodFence | undefined => fences.get(ws);

@@ -360,14 +360,14 @@ test("the push tools pass the volume name and the restore tool the team", async 
 // ---- component tools: one test per tool (route, args, error mapping)
 const ok = () => json({ ok: 1 });
 const CASES: [string, any, string, string, any?][] = [
-  ["sandbox_create", { command: "make test", image: "i:1", packages: ["go"], variables: { A: "1" }, lifetime_s: 60, team: "acme" }, "POST", "/v1/sandboxes", { team: "acme", cmd: ["sh", "-c", "make test"], image: "i:1", packages: ["go"], env: { A: "1" }, timeout_secs: 60 }],
-  ["sandbox_create", { command: "x", from_workspace: "w1", from_snapshot: "ds@2" }, "POST", "/v1/sandboxes", { cmd: ["sh", "-c", "x"], from_workspace: "w1", from_snapshot: "ds@2" }],
+  ["capsule_create", { command: "make test", image: "i:1", packages: ["go"], variables: { A: "1" }, lifetime_s: 60, team: "acme" }, "POST", "/v1/capsules", { team: "acme", cmd: ["sh", "-c", "make test"], image: "i:1", packages: ["go"], env: { A: "1" }, timeout_secs: 60 }],
+  ["capsule_create", { command: "x", from_workspace: "w1", from_snapshot: "ds@2" }, "POST", "/v1/capsules", { cmd: ["sh", "-c", "x"], from_workspace: "w1", from_snapshot: "ds@2" }],
   ["pipeline_version_delete", { owner: "acme", pipeline: "ci", version: 3 }, "DELETE", "/v1/pipelines/acme/ci/versions/3"],
   ["workspace_env_get", { workspace: "w1" }, "GET", "/v1/workspaces/w1/env"],
-  ["sandbox_get", { sandbox: "sbx-1" }, "GET", "/v1/sandboxes/sbx-1"],
-  ["sandbox_logs", { sandbox: "sbx-1" }, "GET", "/v1/sandboxes/sbx-1/logs"],
-  ["sandbox_list", { team: "acme", state: "running", limit: 5 }, "GET", "/v1/sandboxes?team=acme&state=running&limit=5"],
-  ["sandbox_delete", { sandbox: "sbx-1" }, "DELETE", "/v1/sandboxes/sbx-1"],
+  ["capsule_get", { capsule: "cap-1" }, "GET", "/v1/capsules/cap-1"],
+  ["capsule_logs", { capsule: "cap-1" }, "GET", "/v1/capsules/cap-1/logs"],
+  ["capsule_list", { team: "acme", state: "running", limit: 5 }, "GET", "/v1/capsules?team=acme&state=running&limit=5"],
+  ["capsule_delete", { capsule: "cap-1" }, "DELETE", "/v1/capsules/cap-1"],
   ["pipeline_list", { owner: "acme" }, "GET", "/v1/pipelines/acme"],
   ["pipeline_get", { owner: "acme", pipeline: "ci", version: 2 }, "GET", "/v1/pipelines/acme/ci?version=2"],
   ["pipeline_delete", { owner: "acme", pipeline: "ci" }, "DELETE", "/v1/pipelines/acme/ci"],
@@ -394,7 +394,7 @@ for (const [name, args, method, url, body] of CASES) {
     const t = tool(platformTools("main"), name);
     expect(t).toBeDefined();
     // a verb answers the object it changed, so it reads it back (and `delete` reads it first)
-    for (const o of ["/v1/workspaces/w1", "/v1/sessions/s1", "/v1/environments/e1", "/v1/sandboxes/sbx-1", "/v1/pipelines/acme/ci", "/v1/pipelines/acme/ci/runs/r1"]) routes[`GET ${o}`] = ok();
+    for (const o of ["/v1/workspaces/w1", "/v1/sessions/s1", "/v1/environments/e1", "/v1/capsules/cap-1", "/v1/pipelines/acme/ci", "/v1/pipelines/acme/ci/runs/r1"]) routes[`GET ${o}`] = ok();
     routes[`${method} ${url}`] = ok();
     await t.run(args);
     const sent = calls.filter((c) => c.method === method && c.url === url).at(-1)!;
@@ -406,22 +406,22 @@ for (const [name, args, method, url, body] of CASES) {
 }
 
 test("the component tools are in main and all, never in a workspace session", () => {
-  const names = ["sandbox", "volume", "snapshot", "pipeline", "run", "worktree", "workspace_vars", "webhook_rotate", "secret_set", "secret_list", "secret_delete", "connector_list"];
+  const names = ["capsule", "volume", "snapshot", "pipeline", "run", "worktree", "workspace_vars", "webhook_rotate", "secret_set", "secret_list", "secret_delete", "connector_list"];
   for (const k of ["main", "all"] as const) for (const n of names) expect(platformTools(k, "w1").map((t) => t.name)).toContain(n);
   for (const n of names) expect(platformTools("workspace", "w1").map((t) => t.name)).not.toContain(n);
 });
 
-test("sandbox delete ends the sandbox first and ignores a refusal; pipeline get without a version adds the versions", async () => {
+test("capsule delete ends the capsule first and ignores a refusal; pipeline get without a version adds the versions", async () => {
   const t = platformTools("main");
-  routes["POST /v1/sandboxes/sbx-1/terminate"] = () => new Response("over", { status: 409 });
-  routes["DELETE /v1/sandboxes/sbx-1"] = () => new Response(null, { status: 204 });
-  routes["GET /v1/sandboxes/sbx-1"] = json({ id: "sbx-1", phase: "terminated" });
-  routes["GET /v1/sandboxes/sbx-2"] = json({ id: "sbx-2" });
+  routes["POST /v1/capsules/cap-1/terminate"] = () => new Response("over", { status: 409 });
+  routes["DELETE /v1/capsules/cap-1"] = () => new Response(null, { status: 204 });
+  routes["GET /v1/capsules/cap-1"] = json({ id: "cap-1", phase: "terminated" });
+  routes["GET /v1/capsules/cap-2"] = json({ id: "cap-2" });
   // the answer is the object as last read, deleted
-  expect(JSON.parse(await tool(t, "sandbox_delete").run({ sandbox: "sbx-1" }))).toEqual({ id: "sbx-1", phase: "terminated", state: "deleted" });
-  expect(calls.map((c) => `${c.method} ${c.url}`)).toEqual(["GET /v1/sandboxes/sbx-1", "POST /v1/sandboxes/sbx-1/terminate", "DELETE /v1/sandboxes/sbx-1"]);
-  routes["POST /v1/sandboxes/sbx-2/terminate"] = () => new Response("down", { status: 500 });
-  await expect(tool(t, "sandbox_delete").run({ sandbox: "sbx-2" })).rejects.toThrow("500: down");
+  expect(JSON.parse(await tool(t, "capsule_delete").run({ capsule: "cap-1" }))).toEqual({ id: "cap-1", phase: "terminated", state: "deleted" });
+  expect(calls.map((c) => `${c.method} ${c.url}`)).toEqual(["GET /v1/capsules/cap-1", "POST /v1/capsules/cap-1/terminate", "DELETE /v1/capsules/cap-1"]);
+  routes["POST /v1/capsules/cap-2/terminate"] = () => new Response("down", { status: 500 });
+  await expect(tool(t, "capsule_delete").run({ capsule: "cap-2" })).rejects.toThrow("500: down");
   routes["GET /v1/pipelines/acme/ci"] = json({ name: "ci" });
   routes["GET /v1/pipelines/acme/ci/versions"] = json([{ version: 1 }]);
   expect(JSON.parse(await tool(t, "pipeline_get").run({ owner: "acme", pipeline: "ci" }))).toEqual({ name: "ci", versions: [{ version: 1 }] });
@@ -471,9 +471,9 @@ test("a wait: true call still running at soft_ms answers the promoted hand-off, 
   routes["POST /v1/environments"] = json({ id: "e9", state: "creating", services: [] }, 202);
   routes["GET /v1/environments/e9"] = json({ id: "e9", state: "creating", services: [] });
   expect(JSON.parse(await tool(t, "env_create").run({ name: "e", wait: true, soft_ms: 30 }))).toMatchObject({ promoted: true, id: "e9", kind: "env" });
-  routes["POST /v1/sandboxes"] = json({ id: "sbx-9" }, 202);
-  routes["POST /v1/sandboxes/sbx-9/wait"] = json({ id: "sbx-9", phase: "running" });
-  expect(JSON.parse(await tool(t, "sandbox_create").run({ command: "x", wait: true, soft_ms: 30 }))).toMatchObject({ promoted: true, id: "sbx-9", kind: "sandbox" });
+  routes["POST /v1/capsules"] = json({ id: "cap-9" }, 202);
+  routes["POST /v1/capsules/cap-9/wait"] = json({ id: "cap-9", phase: "running" });
+  expect(JSON.parse(await tool(t, "capsule_create").run({ command: "x", wait: true, soft_ms: 30 }))).toMatchObject({ promoted: true, id: "cap-9", kind: "capsule" });
   routes["POST /v1/pipelines/acme/ci/runs"] = json({ id: "r9" }, 202);
   routes["GET /v1/pipelines/acme/ci/runs/r9"] = json({ id: "r9", state: "running" });
   expect(JSON.parse(await tool(t, "run_start").run({ owner: "acme", pipeline: "ci", wait: true, soft_ms: 30 }))).toEqual({ promoted: true, id: "r9", kind: "run", next: 0, next_err: 0 });
@@ -503,31 +503,31 @@ test("workspace create with source clones; env create with an environment source
   expect(calls.at(-1)).toMatchObject({ url: "/v1/environments", body: { name: "e3", snapshot_id: "pg@2" } });
 });
 
-test("sandbox_create goes through the session when there is one, with its argv array as given", async () => {
+test("capsule_create goes through the session when there is one, with its argv array as given", async () => {
   process.env.KL_SESSION = "ses-1";
-  routes["POST /v1/sessions/ses-1/sandboxes"] = json({ id: "sbx-1" }, 202);
-  await tool(platformTools("main"), "sandbox_create").run({ command: ["echo", "hi"], team: "acme" });
+  routes["POST /v1/sessions/ses-1/capsules"] = json({ id: "cap-1" }, 202);
+  await tool(platformTools("main"), "capsule_create").run({ command: ["echo", "hi"], team: "acme" });
   expect(calls.at(-1)!.body).toEqual({ cmd: ["echo", "hi"] });
 });
 
-test("sandbox_logs returns the body as text, empty included", async () => {
-  routes["GET /v1/sandboxes/sbx-1/logs"] = () => new Response('{"a":1}\nline', { status: 200 });
-  expect(await tool(platformTools("main"), "sandbox_logs").run({ sandbox: "sbx-1" })).toBe('{"a":1}\nline');
-  routes["GET /v1/sandboxes/sbx-1/logs"] = () => new Response("", { status: 200 });
-  expect(await tool(platformTools("main"), "sandbox_logs").run({ sandbox: "sbx-1" })).toBe("");
+test("capsule_logs returns the body as text, empty included", async () => {
+  routes["GET /v1/capsules/cap-1/logs"] = () => new Response('{"a":1}\nline', { status: 200 });
+  expect(await tool(platformTools("main"), "capsule_logs").run({ capsule: "cap-1" })).toBe('{"a":1}\nline');
+  routes["GET /v1/capsules/cap-1/logs"] = () => new Response("", { status: 200 });
+  expect(await tool(platformTools("main"), "capsule_logs").run({ capsule: "cap-1" })).toBe("");
 });
 
-test("sandbox_wait uses the server wait route until the sandbox ends, then times out with timedOut", async () => {
-  const t = tool(platformTools("main"), "sandbox_wait");
+test("capsule_wait uses the server wait route until the capsule ends, then times out with timedOut", async () => {
+  const t = tool(platformTools("main"), "capsule_wait");
   let n = 0;
-  routes["POST /v1/sandboxes/sbx-1/wait"] = () => json(++n < 3 ? { id: "sbx-1", phase: "running" } : { id: "sbx-1", phase: "terminated", exit_code: 0 })();
-  expect(JSON.parse(await t.run({ sandbox: "sbx-1" })).exit_code).toBe(0);
+  routes["POST /v1/capsules/cap-1/wait"] = () => json(++n < 3 ? { id: "cap-1", phase: "running" } : { id: "cap-1", phase: "terminated", exit_code: 0 })();
+  expect(JSON.parse(await t.run({ capsule: "cap-1" })).exit_code).toBe(0);
   expect(n).toBe(3);
   expect(calls[0].body.timeout_ms).toBeLessThanOrEqual(20000);
-  routes["POST /v1/sandboxes/sbx-1/wait"] = json({ id: "sbx-1", phase: "running" });
-  expect(JSON.parse(await t.run({ sandbox: "sbx-1", timeout_ms: 10 })).timed_out).toBe(true);
-  routes["POST /v1/sandboxes/sbx-1/wait"] = () => new Response("not found", { status: 404 });
-  await expect(t.run({ sandbox: "sbx-1" })).rejects.toThrow("404");
+  routes["POST /v1/capsules/cap-1/wait"] = json({ id: "cap-1", phase: "running" });
+  expect(JSON.parse(await t.run({ capsule: "cap-1", timeout_ms: 10 })).timed_out).toBe(true);
+  routes["POST /v1/capsules/cap-1/wait"] = () => new Response("not found", { status: 404 });
+  await expect(t.run({ capsule: "cap-1" })).rejects.toThrow("404");
 });
 
 test("run_wait polls the run to a final state and drops the definition; at the limit it says timedOut", async () => {
@@ -579,7 +579,7 @@ test("secret_set sends the value and answers {name, updatedAt}, never the value,
 
 test("ttl tools clear with null when ttl_secs is omitted, and the wait tools take a timeout", () => {
   const t = platformTools("main");
-  for (const n of ["sandbox_wait", "run_wait"]) expect((tool(t, n).inputSchema as any).properties.timeout_ms.description).toContain("maximum 900000");
+  for (const n of ["capsule_wait", "run_wait"]) expect((tool(t, n).inputSchema as any).properties.timeout_ms.description).toContain("maximum 900000");
 });
 
 test("a ttl tool needs ttl_secs or clear", async () => {
@@ -610,16 +610,16 @@ test("workspace_env_set merges into the stored env unless replace is set", async
   expect(JSON.parse(await t.run({ workspace: "w1", variables: { C: "5" }, restart_on_change: true })).note).toBeUndefined();
 });
 
-test("sandbox_logs and run_logs keep the last 200 lines by default, tail and head choose", async () => {
+test("capsule_logs and run_logs keep the last 200 lines by default, tail and head choose", async () => {
   const text = Array.from({ length: 500 }, (_, i) => `l${i}`).join("\n") + "\n";
-  routes["GET /v1/sandboxes/sbx-1/logs"] = () => new Response(text);
-  const t = tool(platformTools("main"), "sandbox_logs");
-  const out = await t.run({ sandbox: "sbx-1" });
+  routes["GET /v1/capsules/cap-1/logs"] = () => new Response(text);
+  const t = tool(platformTools("main"), "capsule_logs");
+  const out = await t.run({ capsule: "cap-1" });
   expect(out).toContain("300 of 500 lines left out");
   expect(out).toContain("l499");
   expect(out).not.toContain("l299\n");
-  expect(await t.run({ sandbox: "sbx-1", tail: 2000 })).toBe(text);
-  expect(await t.run({ sandbox: "sbx-1", head: 2, tail: 2000 })).toContain("l1\n");
+  expect(await t.run({ capsule: "cap-1", tail: 2000 })).toBe(text);
+  expect(await t.run({ capsule: "cap-1", head: 2, tail: 2000 })).toContain("l1\n");
   routes["GET /v1/pipelines/a/ci/runs/r1/jobs/0/logs"] = json({ data: text, next: 9, complete: true, state: "success" });
   const d = JSON.parse(await tool(platformTools("main"), "run_logs").run({ owner: "a", pipeline: "ci", run: "r1" }));
   expect(d.data).toContain("l499");

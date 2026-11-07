@@ -190,7 +190,7 @@ async function load(path: string): Promise<{ doc: any } | { err: string }> {
 
 const OWNER = { type: "string", description: "The owner: your handle, or a team slug." };
 const OWNER_DEFAULT = { type: "string", description: "The owner: your handle, or a team slug. Default: this session's team." };
-const SBX = { type: "string", description: "The sandbox id or name." };
+const SBX = { type: "string", description: "The capsule id or name." };
 const SES = { type: "string", description: "The session id, name or `team/name`." };
 const PIPE = { type: "string", description: "The pipeline name." };
 const RUN = { type: "string", description: "The run id (the `id` of a run from `run list` or `run start`)." };
@@ -285,8 +285,8 @@ const wsDone = (stopped: boolean) => (d: any) => d?.state === "error" || d?.stat
 const wsAny = (d: any) => wsDone(true)(d) || d?.state === "ready";
 const RUN_ENDED = ["success", "failure", "cancelled"];
 
-/** The sandbox's own server-side wait, looped to the bound; at it `limit()` (a hand-off) or the last view with `timed_out`. */
-async function sandboxWait(path: string, limitMs: number, limit?: () => string): Promise<string> {
+/** The capsule's own server-side wait, looped to the bound; at it `limit()` (a hand-off) or the last view with `timed_out`. */
+async function capsuleWait(path: string, limitMs: number, limit?: () => string): Promise<string> {
   const end = Date.now() + limitMs;
   for (;;) {
     const d = JSON.parse(await api("POST", `${path}/wait`, { timeout_ms: Math.max(1, Math.min(20000, Math.round(end - Date.now()))) }));
@@ -612,9 +612,9 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
   return [...tools, ...mainOnly(tickMs)];
 }
 
-/** Everything a workspace token does not reach: sandboxes, pipelines and runs, volumes, requests, secrets. */
+/** Everything a workspace token does not reach: capsules, pipelines and runs, volumes, requests, secrets. */
 function mainOnly(tickMs: number): ToolDef[] {
-  const sbx = (a: any) => `/v1/sandboxes/${seg(a.sandbox)}`;
+  const sbx = (a: any) => `/v1/capsules/${seg(a.capsule)}`;
   const pipe = (a: any) => `/v1/pipelines/${seg(a.owner)}/${seg(a.pipeline)}`;
   const run = (a: any) => `${pipe(a)}/runs/${seg(a.run)}`;
   const secret = (a: any) => `/v1/secrets/${seg(a.owner ?? process.env.KL_TEAM)}${a.mine ? "/mine" : ""}`;
@@ -630,24 +630,24 @@ function mainOnly(tickMs: number): ToolDef[] {
     return JSON.stringify({ ...JSON.parse(view), output }, null, 2);
   };
   return [
-    resource("sandbox", "Sandboxes: an isolated container that runs one command and ends when it exits. Actions: create, get, list, wait, logs, delete (ends a running one first).", {
-      create: act({ command: { oneOf: [S, SL], description: "A shell string (run with `sh -c`), or an argv array." }, image: S, packages: SL, variables: { type: "object", additionalProperties: S, description: "Environment variables for the command. A value of exactly `${{ secrets.NAME }}` reads a secret." }, lifetime_s: { ...I, description: "The sandbox's hard lifetime in seconds, 10 to 86400 (default 300). It ends when the command exits or this runs out." }, team: TEAMSLUG, from_workspace: { type: "string", description: "A workspace of yours (id, name or `team/name`) whose current files the sandbox starts as, uncommitted work included." }, from_snapshot: { type: "string", description: "A snapshot id or `name@N` reference whose files the sandbox starts as." }, ...WAITING }, ["command"], async (a) => {
+    resource("capsule", "Capsules: an isolated container that runs one command and ends when it exits. Actions: create, get, list, wait, logs, delete (ends a running one first).", {
+      create: act({ command: { oneOf: [S, SL], description: "A shell string (run with `sh -c`), or an argv array." }, image: S, packages: SL, variables: { type: "object", additionalProperties: S, description: "Environment variables for the command. A value of exactly `${{ secrets.NAME }}` reads a secret." }, lifetime_s: { ...I, description: "The capsule's hard lifetime in seconds, 10 to 86400 (default 300). It ends when the command exits or this runs out." }, team: TEAMSLUG, from_workspace: { type: "string", description: "A workspace of yours (id, name or `team/name`) whose current files the capsule starts as, uncommitted work included." }, from_snapshot: { type: "string", description: "A snapshot id or `name@N` reference whose files the capsule starts as." }, ...WAITING }, ["command"], async (a) => {
         const cmd = Array.isArray(a.command) ? a.command : ["sh", "-c", String(a.command)];
         const body = { cmd, image: a.image, packages: a.packages, env: a.variables, timeout_secs: a.lifetime_s ?? a.timeout_s, from_workspace: a.from_workspace, from_snapshot: a.from_snapshot };
         const ses = process.env.KL_SESSION;
-        const out = ses ? await api("POST", `/v1/sessions/${seg(ses)}/sandboxes`, strip(body)) : await api("POST", "/v1/sandboxes", strip({ team: a.team, ...body }));
+        const out = ses ? await api("POST", `/v1/sessions/${seg(ses)}/capsules`, strip(body)) : await api("POST", "/v1/capsules", strip({ team: a.team, ...body }));
         if (!a.wait) return out;
         const id = JSON.parse(out).id;
-        return sandboxWait(`/v1/sandboxes/${seg(id)}`, softMs(a), () => promoted(id, "sandbox"));
+        return capsuleWait(`/v1/capsules/${seg(id)}`, softMs(a), () => promoted(id, "capsule"));
       }),
-      get: act({ sandbox: SBX }, ["sandbox"], async (a) => api("GET", sbx(a))),
-      list: act({ team: TEAMSLUG, state: { type: "string", enum: ["waiting", "running", "ended", "stopped", "timed-out", "failed"] }, q: { type: "string", description: "Keep sandboxes whose id, image, packages or command contain this text." }, limit: I }, [], async (a) =>
-        api("GET", `/v1/sandboxes${qs({ team: a.team, state: a.state, q: a.q, limit: a.limit === undefined ? undefined : String(a.limit) })}`)),
-      wait: act({ sandbox: SBX, timeout_ms: TIMEOUT }, ["sandbox"], async (a) => sandboxWait(sbx(a), timeoutMs(a))),
-      logs: act({ sandbox: SBX, tail: TAIL, head: HEAD }, ["sandbox"], async (a) => cutLines(await getText(`${sbx(a)}/logs`), a)),
-      delete: act({ sandbox: SBX }, ["sandbox"], async (a) => {
+      get: act({ capsule: SBX }, ["capsule"], async (a) => api("GET", sbx(a))),
+      list: act({ team: TEAMSLUG, state: { type: "string", enum: ["waiting", "running", "ended", "stopped", "timed-out", "failed"] }, q: { type: "string", description: "Keep capsules whose id, image, packages or command contain this text." }, limit: I }, [], async (a) =>
+        api("GET", `/v1/capsules${qs({ team: a.team, state: a.state, q: a.q, limit: a.limit === undefined ? undefined : String(a.limit) })}`)),
+      wait: act({ capsule: SBX, timeout_ms: TIMEOUT }, ["capsule"], async (a) => capsuleWait(sbx(a), timeoutMs(a))),
+      logs: act({ capsule: SBX, tail: TAIL, head: HEAD }, ["capsule"], async (a) => cutLines(await getText(`${sbx(a)}/logs`), a)),
+      delete: act({ capsule: SBX }, ["capsule"], async (a) => {
         const doc = JSON.parse(await api("GET", sbx(a)));
-        // a running sandbox is ended first; a sandbox already over (409) or gone (404) has nothing to end
+        // a running capsule is ended first; a capsule already over (409) or gone (404) has nothing to end
         await api("POST", `${sbx(a)}/terminate`).catch((e) => { if (!/^(409|404)\b/.test(String(e?.message))) throw e; });
         await api("DELETE", sbx(a));
         return JSON.stringify({ ...doc, state: "deleted" }, null, 2);
@@ -754,7 +754,7 @@ function mainOnly(tickMs: number): ToolDef[] {
       return JSON.stringify({ name: a.name, updatedAt: row?.updated_at ?? new Date().toISOString() }, null, 2);
     }),
     def("secret_list", "List the names of an owner's secrets with when and by whom each was last set. Never a value.", { owner: OWNER_DEFAULT, mine: MINE }, [], async (a) => api("GET", secret(a))),
-    def("secret_delete", "Delete one secret. 409 while a workspace, sandbox, service or pipeline references it; the answer names the referrers.", { owner: OWNER_DEFAULT, name: S, mine: MINE }, ["name"], async (a) => api("DELETE", `${secret(a)}/${seg(a.name)}`)),
+    def("secret_delete", "Delete one secret. 409 while a workspace, capsule, service or pipeline references it; the answer names the referrers.", { owner: OWNER_DEFAULT, name: S, mine: MINE }, ["name"], async (a) => api("DELETE", `${secret(a)}/${seg(a.name)}`)),
     def("connector_list", "List the git, registry and model-hub connectors of an owner: name, provider, kind, account and state. Read only: connecting happens in the web console.", { owner: { ...OWNER, description: "Your handle or a team slug. Default: your own." } }, [], async (a) => api("GET", `/v1/connectors${qs({ owner: a.owner })}`)),
     def("quota", "Show the limits and the current use of an owner (workspaces, environments, snapshots, diskGb, cpu, memoryGb). To ask for more, use request_create with kind `quota`.", { owner: S }, [], async (a) => api("GET", `/v1/quota${qs({ owner: a.owner ?? process.env.KL_TEAM })}`)),
     def("requests_list", "List the requests of the person and of their teams (quota, access, region, other) with their state and decision note.", { owner: S }, [], async (a) => api("GET", `/v1/requests${qs({ owner: a.owner })}`)),

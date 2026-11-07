@@ -58,7 +58,7 @@ cd "$R"
 exec unshare -Um --map-user=1000 --map-group=1000 sh -c "$1"`;
 
 type Bash = { output: string; exit_code: number };
-const unavailable = (why: string): Bash => ({ output: `error: bash sandbox unavailable: ${why}`, exit_code: 1 });
+const unavailable = (why: string): Bash => ({ output: `error: bash capsule unavailable: ${why}`, exit_code: 1 });
 
 function runBash(root: string, command: string, seconds: number): Promise<Bash> {
   return new Promise((done) => {

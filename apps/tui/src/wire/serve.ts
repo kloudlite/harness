@@ -14,7 +14,7 @@ const METHODS = new Set([
 /** pi's `message_update` carries the WHOLE partial message per token, twice (`message` and
  * `assistantMessageEvent.partial`, pi-agent-core agent-loop.js): forwarded as is, a long answer or
  * tool call is quadratic on the wire (2026-10-11: 322 MB to one laptop in three minutes, queued in
- * the daemon's socket buffer until the bench sandbox was OOM-killed mid-turn, twice). So the wire
+ * the daemon's socket buffer until the bench pod was OOM-killed mid-turn, twice). So the wire
  * carries only the token: text and thinking deltas (a block's start is an empty one), and a tool
  * call's header so content indexes stay true. Tool-call arguments are not streamed: nothing renders
  * them before `tool_execution_start`, and `message_end` carries the finished message. A connection
