@@ -20,7 +20,7 @@ A check in a workspace uses the workspace's files and changes nothing. A capsule
 3. If the tests need a service (`db`), the workspace must be managed in a desk with the environment (`kloudlite-develop`, scenario 3), or use scenario 2.
 
 **Done when:** the exit code is 0, or you told the user which tests failed with the lines that show it.
-**If it fails:** a command still running after 25 s answers `promoted: true` with a process `id`: call `process` action `wait` with that `id` (and `since`/`since_err` = `next`/`next_err`) until `state` is `exited`; `exit_code` is the result. A name that does not resolve: the workspace is not in the desk. The loop applies when a `promoted` answer arrives; a client that waits on MCP tasks waits on its own and never sees one.
+**If it fails:** a command still running past `soft_ms` answers `promoted: true` with a process `id` and `poll_after_ms`: after that many ms call `process` action `wait` with that `id` (and `since`/`since_err` = `next`/`next_err`) until `state` is `exited`; `exit_code` is the result. A name that does not resolve: the workspace is not in the desk. The loop applies when a `promoted` answer arrives; a client that waits on MCP tasks waits on its own and never sees one.
 **Then:** scenario 2 for a clean run.
 
 ### 2. Clean run in a capsule against the environment

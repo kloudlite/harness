@@ -465,7 +465,7 @@ test("a wait: true call still running at soft_ms answers the promoted hand-off, 
   };
   const t0 = Date.now();
   const out = JSON.parse(await tool(t, "workspace_create").run({ name: "w", wait: true, soft_ms: 50 }));
-  expect(out).toEqual({ promoted: true, id: "w9", kind: "workspace", next: 0, next_err: 0 });
+  expect(out).toEqual({ promoted: true, id: "w9", kind: "workspace", next: 0, next_err: 0, poll_after_ms: 2000 });
   expect(Date.now() - t0).toBeLessThan(300);
   // the other kinds name what resumes them
   routes["POST /v1/environments"] = json({ id: "e9", state: "creating", services: [] }, 202);
@@ -476,7 +476,7 @@ test("a wait: true call still running at soft_ms answers the promoted hand-off, 
   expect(JSON.parse(await tool(t, "capsule_create").run({ command: "x", wait: true, soft_ms: 30 }))).toMatchObject({ promoted: true, id: "cap-9", kind: "capsule" });
   routes["POST /v1/pipelines/acme/ci/runs"] = json({ id: "r9" }, 202);
   routes["GET /v1/pipelines/acme/ci/runs/r9"] = json({ id: "r9", state: "running" });
-  expect(JSON.parse(await tool(t, "run_start").run({ owner: "acme", pipeline: "ci", wait: true, soft_ms: 30 }))).toEqual({ promoted: true, id: "r9", kind: "run", next: 0, next_err: 0 });
+  expect(JSON.parse(await tool(t, "run_start").run({ owner: "acme", pipeline: "ci", wait: true, soft_ms: 30 }))).toEqual({ promoted: true, id: "r9", kind: "run", next: 0, next_err: 0, poll_after_ms: 2000 });
 });
 
 test("a wait action answers the object with timed_out at timeout_ms; the old spellings are read but never listed", async () => {

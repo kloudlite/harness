@@ -29,6 +29,7 @@ The status comes first; the body is one sentence. Report it as it is, then take 
 | `422 pipeline {name} is invalid:` + lines | Fix every line, save again. |
 | `422 pipeline {name} cannot run:` + lines | A missing input or secret. Fix the cause, start again. |
 | `409 pipeline {name} changed; retry` | Read the newest version, apply the change, save. |
+| `409 … not ready yet` (restore or create from a snapshot) | The snapshot is not restorable yet: retry after a few seconds. |
 | `409 this run has already finished` | Nothing to cancel. |
 | `403 only a team admin can change team pipelines` | Tell the user. |
 | `429 this token has {n} runs in flight` | Wait for a run to end. |

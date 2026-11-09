@@ -17,9 +17,9 @@ Every scenario ends with its cleanup. To check a result, use `kloudlite-verify`.
 **Shape:** 1.
 **Steps:**
 1. Orient (`desk` action `current`, `workspace` action `list`). Reuse a workspace that holds the repo.
-2. Read the repo's `package.json`, `go.mod` or `pyproject.toml` for packages. If there is no workspace yet, `workspace` {"action": "create", "name": "api", "packages": ["git", "nodejs@22"], "wait": true}. It answers when the workspace is `ready`.
+2. Read the repo's `package.json`, `go.mod` or `pyproject.toml` for packages. If there is no workspace yet, `workspace` {"action": "create", "name": "api", "packages": ["git", "nodejs@22"], "wait": true} (`packages` are top-level nixpkgs names; Python libraries go in with pip). It answers when the workspace is `ready`.
 4. `exec` {"workspace": "ws-…", "cmd": "git clone https://github.com/acme/api .", "quiet": true}. The directory must be empty; else clone into a folder and give `cwd` later.
-5. `read` {"workspace": "ws-…", "paths": ["AGENTS.md"]}. Add packages it names with `packages` action `add`.
+5. `read` {"workspace": "ws-…", "paths": ["AGENTS.md"]}. Add packages it names with `packages` action `add`: top-level nixpkgs names (`python3`, `nodejs_22`, optional `@version`), never `python3Packages.x`; install Python libraries with pip.
 
 **Done when:** the workspace is `ready` and the code is in `~/workspace`.
 **If it fails:** `no git connector of OWNER covers HOST/REPO`: the user connects the host in the web console; only `github.com` and the configured GitLab answer. `422` for a package: pick a listed version. `409` with a limit: the `kloudlite` skill, rule 13.

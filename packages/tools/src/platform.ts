@@ -194,10 +194,10 @@ const SBX = { type: "string", description: "The capsule id or name." };
 const SES = { type: "string", description: "The desk id, name or `team/name`." };
 const PIPE = { type: "string", description: "The pipeline name." };
 const RUN = { type: "string", description: "The run id (the `id` of a run from `run list` or `run start`)." };
-const TIMEOUT = { type: "number", description: "Milliseconds this call waits before it answers (default 25000, maximum 900000). At the limit the answer has `timed_out: true`: call again." };
+const TIMEOUT = { type: "number", description: "Milliseconds this call waits before it answers (default 25000, maximum 900000; a remote connector gets default 5000, maximum 20000). At the limit the answer has `timed_out: true`: call again." };
 const WAITING = {
   wait: { type: "boolean", description: "Wait for the object to settle instead of answering at once." },
-  soft_ms: { type: "number", description: "With `wait`: the call answers within this many milliseconds, handing off with `promoted: true` if the work is not done (default 25000, maximum 600000). Resume with the `wait` action named by `kind`." },
+  soft_ms: { type: "number", description: "With `wait`: the call answers within this many milliseconds, handing off with `promoted: true` if the work is not done (default 25000, maximum 600000; a remote connector gets default 5000, maximum 20000). Resume with the `wait` action named by `kind`." },
 };
 const MINE = { type: "boolean", description: "Your own secret in the team `owner` (any active member), not the team's shared one." };
 const TTL = { type: "integer", description: "Seconds of unused time before it is deleted, 600 to 2592000." };
@@ -239,7 +239,7 @@ const softMs = (a: any): number => {
   return s <= 5_000 ? s : Math.max(5_000, s - 5_000);
 };
 /** The answer of a call that handed off: nothing keeps running in the bench, the platform does the work, so there is no output offset. */
-const promoted = (id: unknown, kind: string) => JSON.stringify({ promoted: true, id, kind, next: 0, next_err: 0 }, null, 2);
+const promoted = (id: unknown, kind: string) => JSON.stringify({ promoted: true, id, kind, next: 0, next_err: 0, poll_after_ms: 2000 }, null, 2);
 
 /** GET a plain-text body (logs): `api` would pretty-print JSON-looking text and turn an empty body into "ok". */
 async function getText(path: string): Promise<string> {
