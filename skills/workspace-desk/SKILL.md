@@ -74,7 +74,7 @@ A tool with the mark **card** shows a permission card to the person before it ru
 
 | Tool | Use it to |
 |---|---|
-| `exec` | Run a job that ends, for example a build, a test or `git`. `git push` works with the key of the owner. The tool waits `soft_ms` (25 s by default), then answers `promoted: true` and a process id: loop `process` `wait`. |
+| `exec` | Run a job that ends, for example a build, a test or `git`. `git push` works with the key of the owner. The tool waits `soft_ms` (25 s by default), then answers `promoted: true` and a process id: loop `process` `wait`. The loop applies when a `promoted` answer arrives; a client that waits on MCP tasks waits on its own and never sees one. |
 | `exec` with `detach: true` | Start a process that continues to run, for example the service, a dev server or a watcher. The tool returns a process id. |
 | `process` actions `list`, `output`, `write`, `kill` | List the processes that run, read their output (the last 4 MiB), write to their stdin, or stop them. |
 | `watch` actions `start`, `poll`, `stop` | Wait for a change to files or events. Use these tools, not a poll loop with `exec`. |
