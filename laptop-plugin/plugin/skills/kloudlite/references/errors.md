@@ -9,15 +9,15 @@ The status comes first; the body is one sentence. Report it as it is, then take 
 | `403 you are no longer a member of {team}` | Stop. The user cannot act there. |
 | `404 not found` | The object does not exist or is not the user's. Check the id with the list tool. |
 | `422` name rule (`name must be 1-40 lowercase letters, digits or '-'…`) | Rename: lowercase, hyphens, starts with a letter, no `--`, not `ws`, `env`, `api`, `admin`, `system`, `kl`. |
-| `409 a workspace named "x" already exists here` (also environment, session) | Reuse it, or pick another name. |
+| `409 a workspace named "x" already exists here` (also environment, desk) | Reuse it, or pick another name. |
 | `409` `"x" is ambiguous; qualify it as owner/name` | Use the id or `team/name`. |
 | `409 workspace is interrupted: its storage is moving; it resumes in seconds` | Wait, then read the object again. |
 | `409 no storage disk has room for {n} GiB; retry later or ask an operator` | Tell the user. |
 | `409 a snapshot is already being cut for this workspace` | Wait, read the volume history, do not repeat. |
 | `409 this snapshot is the base of a running worktree` | Keep it; tell the user. |
 | `409 the volume still has a workspace or environment` | Delete the owner first, if the user asked. |
-| `409 this session has no environment; connect one…` | `session` action `use`. |
-| `409 conflict, retry` / `the session changed; retry` | Read again, repeat once. |
+| `409 this desk has no environment; connect one…` | `desk` action `use`. |
+| `409 conflict, retry` / `the desk changed; retry` | Read again, repeat once. |
 | `env` action `restore` `409` with `lost` | Name the services; call again with `discard` only after a yes. |
 | `422` for a package; the answer lists versions | Pick a listed version. |
 | `422 volume: this volume has no name yet; name it on its first push` | Ask for a name; give `volume`. |

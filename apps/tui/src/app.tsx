@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { RGBA } from "@opentui/core";
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/react";
 import type { ToolDef } from "@kloudlite-tui/tools";
-import { SessionTitle } from "./components/SessionTitle.tsx";
+import { DeskTitle } from "./components/DeskTitle.tsx";
 import { Queue } from "./components/Queue.tsx";
 import { Btw, type BtwState } from "./components/Btw.tsx";
 import { Transcript, type Entry } from "./components/Transcript.tsx";
@@ -26,10 +26,10 @@ import type {
   BenchEvent,
   ModelRef,
   PermMode,
-  SessionEvent,
-  SessionHandle,
-  SessionMeta,
-  LiveSessionMeta,
+  DeskEvent,
+  DeskHandle,
+  DeskMeta,
+  LiveDeskMeta,
   ThinkingLevel,
 } from "./wire/index.ts";
 import type { TeamView } from "./wire/index.ts";
@@ -60,16 +60,16 @@ import { Login, type LoginType } from "./components/Login.tsx";
 import { AskPanel, type Ask } from "./components/Ask.tsx";
 import { copySelection, readClipboardImage, type ClipImage } from "./clipboard.ts";
 import {
-  getSession,
-  patchSession,
-    sessionIdOf,
-  sessionKey,
-  pickAgentSession,
+  getDesk,
+  patchDesk,
+    deskIdOf,
+  deskKey,
+  pickAgentDesk,
   askFor,
   baseOf,
   type QueuedMessage,
-  type SessionMap,
-} from "./sessions.ts";
+  type DeskMap,
+} from "./desks.ts";
 
 // opencode's responsive rule (routes/session/index.tsx): one breakpoint at
 // 120 columns. The sidebar defaults to 42 either way — wide terminals
@@ -83,7 +83,7 @@ const SIDEBAR_MAX = 64;
 const SIDEBAR_STEP = 4;
 const clampSidebar = (n: number) => Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, Math.round(n)));
 
-/** "3m ago" / "2h ago" / "5d ago" — session list hint. */
+/** "3m ago" / "2h ago" / "5d ago" — desk list hint. */
 function ago(at: number): string {
   const mins = Math.max(0, Math.round((Date.now() - at) / 60000));
   if (mins < 1) return "just now";
@@ -93,17 +93,17 @@ function ago(at: number): string {
 }
 
 /**
- * What the session column shows. The title bar names the current context on
+ * What the desk column shows. The title bar names the current context on
  * the left and lists these on the right — click one (or press f) to open it.
  */
 type ViewId = "agent" | "files" | "processes" | "plan" | "done";
 const WIDE_COLUMNS = 120;
 
 /**
- * Sessions are hierarchical: each environment has a main session, and each
- * workspace has its own session running pi's full agent harness (streaming,
+ * Desks are hierarchical: each environment has a main desk, and each
+ * workspace has its own desk running pi's full agent harness (streaming,
  * thinking, coding tools, steering queues, compaction, retries). A running
- * turn belongs to its session and keeps streaming while you look elsewhere.
+ * turn belongs to its desk and keeps streaming while you look elsewhere.
  */
 const MIN_COLUMNS = 80;
 const MIN_ROWS = 24;
@@ -139,10 +139,10 @@ export function App({
     };
   }, [renderer]);
   const { width: columns, height: rows } = useTerminalDimensions();
-  const [sessions, setSessions] = useState<SessionMap>({});
+  const [desks, setDesks] = useState<DeskMap>({});
   // agent-event handlers outlive the render that made them: they read the latest state through this
-  const sessionsRef = useRef(sessions);
-  sessionsRef.current = sessions;
+  const desksRef = useRef(desks);
+  desksRef.current = desks;
   const [input, setInput] = useState("");
   // images pasted with ctrl+v, sent with the next prompt
   const [images, setImages] = useState<ClipImage[]>([]);
@@ -158,7 +158,7 @@ export function App({
     if (!img) return null;
     // a text-only model drops attachments without a word — say so here, while
     // the user can still switch models instead of after the answer comes back
-    const model = findModel(getSession(sessions, activeKey).model);
+    const model = findModel(getDesk(desks, activeKey).model);
     if (model && !model.input.includes("image")) {
       append(activeKey, {
         kind: "error",
@@ -181,8 +181,8 @@ export function App({
   const [hint, setHint] = useState(0);
   // 0 = main context (orchestrator); 1..N = inside workspaces[focus - 1]
   const [focus, setFocus] = useState(0);
-  // The team view: the session's real workspaces and environments, polled from the backend (see `refreshTeam`).
-  // Workspaces belong to the working session, not to an environment.
+  // The team view: the desk's real workspaces and environments, polled from the backend (see `refreshTeam`).
+  // Workspaces belong to the working desk, not to an environment.
   const [teamView, setTeamView] = useState<TeamView>();
   const mapped = useMemo(() => (teamView ? fromTeam(teamView) : { workspaces: [], environments: [], envIndex: -1 }), [teamView]);
   const user = teamView?.user ?? "";
@@ -193,8 +193,8 @@ export function App({
   // the workspace it was on (by id), or clamp when that one is gone.
   const live = useRef({ focus, workspaces });
   live.current = { focus, workspaces };
-  // the newest view of state that a long-lived session listener needs (it closes over the render it was made in)
-  const latest = useRef({ sessions: {} as SessionMap, activeKey: "" });
+  // the newest view of state that a long-lived desk listener needs (it closes over the render it was made in)
+  const latest = useRef({ desks: {} as DeskMap, activeKey: "" });
   const [palette, setPalette] = useState(false);
   const [view, setView] = useState<ViewId>("agent");
   const [filesRefresh, setFilesRefresh] = useState(0);
@@ -213,15 +213,15 @@ export function App({
   // seeded from pi's bundled catalog so the picker paints at once, then
   // replaced by the providers' live lists — never block the TUI on the network
   const [models, setModels] = useState(catalog);
-  // Every context — the environment's main sessions and each workspace's —
-  // can hold several named sessions: base key → id of the one in use, plus a
+  // Every context — the environment's main desks and each workspace's —
+  // can hold several named desks: base key → id of the one in use, plus a
   // name cache so the UI can label them.
-  const [sessionId, setSessionId] = useState<Record<string, string>>({});
+  const [deskId, setDeskId] = useState<Record<string, string>>({});
 
-  // index into the active session's queue while editing it, else null
+  // index into the active desk's queue while editing it, else null
   const [queuePick, setQueuePick] = useState<number | null>(null);
   // messages whose steer-or-queue fork has not answered yet (shown as `deciding`), and the fork's reason
-  // for each queued one; TUI memory only, per session key
+  // for each queued one; TUI memory only, per desk key
   const [routing, setRouting] = useState<Record<string, string[]>>({});
   const reasons = useRef<Record<string, Map<string, string>>>({});
   // the /btw panel: never in a transcript, closed by esc. `n` numbers requests so a late answer for a
@@ -245,9 +245,9 @@ export function App({
       sidebarWidth: clampSidebar(s.sidebarWidth ?? SIDEBAR_WIDTH),
     };
   });
-  // Live agent sessions, one per session key (created lazily on first prompt).
-  const agents = useRef(new Map<string, Promise<SessionHandle>>());
-  /** The model last picked per session key, so a session that finishes opening later cannot undo it. */
+  // Live agent desks, one per desk key (created lazily on first prompt).
+  const agents = useRef(new Map<string, Promise<DeskHandle>>());
+  /** The model last picked per desk key, so a desk that finishes opening later cannot undo it. */
   const picked = useRef(new Map<string, ModelRef>());
   /** The last automatic model switch, shown for a while with the way back (`/model undo`). */
   const [toast, setToast] = useState<{ text: string; undo: { key: string; ref: ModelRef } } | null>(null);
@@ -256,34 +256,34 @@ export function App({
     const t = setTimeout(() => setToast(null), 20000);
     return () => clearTimeout(t);
   }, [toast]);
-  // ↑/↓ recall position in the active session's history; null = live input
+  // ↑/↓ recall position in the active desk's history; null = live input
   const [histIdx, setHistIdx] = useState<number | null>(null);
   // interactive prompts (permissions, model questions), oldest first
   // a daemon card carries its backend id; the help popup and other local panels have none
   const [asks, setAsks] = useState<Ask[]>(() => hello().asks.map(cardFor));
   const [defaultModel, setDefaultModel] = useState<ModelRef>(() => hello().defaultModel);
-  // tools granted "always allow" per session key
+  // tools granted "always allow" per desk key
   const alwaysAllow = useRef(new Map<string, Set<string>>());
   // Permission mode is per-process and resets on restart: a forgotten "bypass"
   // persisted across launches is the one failure worth not having.
   const [permMode, setPermMode] = useState<PermMode>(() => hello().mode);
 
-  const environment = envs[env]; // undefined until the session has an environment
+  const environment = envs[env]; // undefined until the desk has an environment
   const mainBase = "main";
-  const mainSession = sessionId[mainBase] ?? "main";
-  const mainKey = sessionKey(undefined, mainSession);
-  // sessions belong to the context you are in: the environment's, or this
+  const mainDesk = deskId[mainBase] ?? "main";
+  const mainKey = deskKey(undefined, mainDesk);
+  // desks belong to the context you are in: the environment's, or this
   // workspace's own
   const activeBase = focus === 0 ? "main" : workspaces[focus - 1]!.id;
-  // Pushed by the bench when it can (`sessions.watch`): every view's list and busy marks move the
-  // moment any view opens, names or runs a session. `undefined` = not answered yet, `null` = an
+  // Pushed by the bench when it can (`desks.watch`): every view's list and busy marks move the
+  // moment any view opens, names or runs a desk. `undefined` = not answered yet, `null` = an
   // old bench, which keeps today's fetch.
-  const [watched, setWatched] = useState<LiveSessionMeta[] | null | undefined>(undefined);
+  const [watched, setWatched] = useState<LiveDeskMeta[] | null | undefined>(undefined);
   useEffect(() => {
     let off: (() => void) | undefined;
     let gone = false;
     backend()
-      .sessions.watch((l) => !gone && setWatched(l))
+      .desks.watch((l) => !gone && setWatched(l))
       .then((f) => (gone ? f() : (off = f)))
       .catch(() => !gone && setWatched(null));
     return () => {
@@ -291,7 +291,7 @@ export function App({
       off?.();
     };
   }, []);
-  // Everything the daemon says outside a session: cards, mode, settings, logins, files, the team view.
+  // Everything the daemon says outside a desk: cards, mode, settings, logins, files, the team view.
   useEffect(() => {
     let off: (() => void) | undefined;
     let gone = false;
@@ -360,32 +360,32 @@ export function App({
       }
     }
   }
-  const [fetched, setFetched] = useState<SessionMeta[]>([]);
+  const [fetched, setFetched] = useState<DeskMeta[]>([]);
   useEffect(() => {
     if (watched !== null) return;
-    backend().sessions.list(activeBase).then(setFetched).catch(() => {});
+    backend().desks.list(activeBase).then(setFetched).catch(() => {});
   }, [watched, activeBase]);
-  // same filter as the bench's listSessions(prefix)
-  const baseSessions = watched ? watched.filter((m) => m.key.startsWith(activeBase)) : fetched;
-  // a clone has no session of its own, only its subagent's: open that one
+  // same filter as the bench's listDesks(prefix)
+  const baseDesks = watched ? watched.filter((m) => m.key.startsWith(activeBase)) : fetched;
+  // a clone has no desk of its own, only its subagent's: open that one
   useEffect(() => {
-    if (activeBase === "main" || sessionId[activeBase]) return;
-    const id = pickAgentSession(activeBase, baseSessions);
-    if (id) setSessionId((m) => (m[activeBase] ? m : { ...m, [activeBase]: id }));
-  }, [activeBase, baseSessions, sessionId]);
-  const activeKey = sessionKey(
+    if (activeBase === "main" || deskId[activeBase]) return;
+    const id = pickAgentDesk(activeBase, baseDesks);
+    if (id) setDeskId((m) => (m[activeBase] ? m : { ...m, [activeBase]: id }));
+  }, [activeBase, baseDesks, deskId]);
+  const activeKey = deskKey(
     focus === 0 ? undefined : workspaces[focus - 1]!.id,
-    sessionId[activeBase] ?? "main",
+    deskId[activeBase] ?? "main",
   );
-  const session = getSession(sessions, activeKey);
-  latest.current = { sessions, activeKey };
+  const desk = getDesk(desks, activeKey);
+  latest.current = { desks, activeKey };
   // the card on screen: only an ask from this view's workspace, so another
   // workspace's permission never blocks typing here
   const shownAsk = askFor(asks, activeKey);
-  const busy = session.busy;
+  const busy = desk.busy;
 
   function exit(): void {
-    if (onExit) return onExit(); // server session: close the connection only
+    if (onExit) return onExit(); // server desk: close the connection only
     renderer.destroy();
     process.exit(0);
   }
@@ -396,7 +396,7 @@ export function App({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focus]);
 
-  // Switching sessions leaves history recall; also wake the session so a
+  // Switching desks leaves history recall; also wake the desk so a
   // persisted transcript is restored without needing a first prompt.
   useEffect(() => {
     setHistIdx(null);
@@ -422,7 +422,7 @@ export function App({
         else {
           // Some provider works, but the model a prompt would go to may not be one of them: the
           // first prompt would be accepted and then fail with "No API key found".
-          const m = getSession(sessions, activeKey).model;
+          const m = getDesk(desks, activeKey).model;
           if (lacksCredentials(a, m.provider)) {
             const pick = pickConnectedModel(catalog, a);
             const why = isUnusable(m.provider)
@@ -441,7 +441,7 @@ export function App({
       })
       .catch(() => {});
     refreshCatalog().then(setModels).catch(() => {});
-    // mount only: the notice belongs on the session the user arrived in
+    // mount only: the notice belongs on the desk the user arrived in
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -461,15 +461,15 @@ export function App({
     if (palette || cmdMode) return false;
     // inside queue editing the arrows walk the queue
     if (queuePick !== null) {
-      setQueuePick(Math.max(0, Math.min(session.queued.length - 1, queuePick + dir)));
+      setQueuePick(Math.max(0, Math.min(desk.queued.length - 1, queuePick + dir)));
       return true;
     }
     // ↑ on an empty prompt with something queued edits the queue; history recall otherwise
-    if (dir === -1 && input === "" && histIdx === null && session.queued.length > 0) {
-      setQueuePick(session.queued.length - 1);
+    if (dir === -1 && input === "" && histIdx === null && desk.queued.length > 0) {
+      setQueuePick(desk.queued.length - 1);
       return true;
     }
-    const h = session.history;
+    const h = desk.history;
     if (h.length === 0) return false;
     if (dir === -1) {
       const idx = histIdx === null ? h.length - 1 : Math.max(0, histIdx - 1);
@@ -508,7 +508,7 @@ export function App({
     }
     const n = workspaces.length;
     // only your own workspaces can be entered; others are visible but attached
-    // to their owner's session
+    // to their owner's desk
     const own = workspaces
       .map((w, i) => (w.owner === user ? i + 1 : -1))
       .filter((i) => i > 0);
@@ -529,7 +529,7 @@ export function App({
     const command = (name: string, seq?: string): boolean => {
       // queue editing: target the queue, then pick/edit/drop within it
       if (queuePick !== null) {
-        const q = session.queued;
+        const q = desk.queued;
         if (name === "j") {
           setQueuePick(Math.min(q.length - 1, queuePick + 1));
           return true;
@@ -590,7 +590,7 @@ export function App({
     // same thing, but only terminals speaking the kitty protocol report the
     // modifier on return — with it off ctrl+enter is an indistinguishable \r,
     // so this is the binding that works everywhere.
-    if (key.ctrl && key.name === "s" && !menuOpen && session.busy && input.trim()) {
+    if (key.ctrl && key.name === "s" && !menuOpen && desk.busy && input.trim()) {
       submit(input, true);
       return;
     }
@@ -614,9 +614,9 @@ export function App({
     if (key.name === "tab" && !menuOpen && keyMode === "normal") return cycle(1);
     // enter in the queue pulls the picked message back into the prompt
     if (key.name === "return" && queuePick !== null && !menuOpen) {
-      const picked = session.queued[queuePick];
+      const picked = desk.queued[queuePick];
       if (!picked) return setQueuePick(null);
-      rewriteQueue(activeKey, session.queued.filter((_, i) => i !== queuePick));
+      rewriteQueue(activeKey, desk.queued.filter((_, i) => i !== queuePick));
       setQueuePick(null);
       setInput(picked.text);
       return setKeyMode("insert");
@@ -659,7 +659,7 @@ export function App({
   });
 
   /**
-   * Replace a session's queue. pi exposes no per-item removal, so the only way
+   * Replace a desk's queue. pi exposes no per-item removal, so the only way
    * to drop or change one is to clear the queue and re-queue what we keep, in
    * order — each onto the queue its kind names.
    * ponytail: a full rewrite per edit; fine for a handful of queued prompts.
@@ -676,7 +676,7 @@ export function App({
       })
       .catch(() => {});
     // reflect it immediately; a queue_update event will confirm
-    setSessions((map) => patchSession(map, key, { queued: next }));
+    setDesks((map) => patchDesk(map, key, { queued: next }));
   }
 
   /** Human summary of a tool call, opencode-style: the salient arg, not JSON. */
@@ -706,14 +706,14 @@ export function App({
       .trim();
 
   const append = (key: string, entry: Entry) =>
-    setSessions((map) =>
-      patchSession(map, key, (s) => ({ entries: [...s.entries, entry] })),
+    setDesks((map) =>
+      patchDesk(map, key, (s) => ({ entries: [...s.entries, entry] })),
     );
 
   /** Insert-or-update an entry by id (streaming text, tool status). */
   const upsert = (key: string, id: string, make: (prev?: Entry) => Entry) =>
-    setSessions((map) =>
-      patchSession(map, key, (s) => {
+    setDesks((map) =>
+      patchDesk(map, key, (s) => {
         const i = s.entries.findIndex((e) => "id" in e && e.id === id);
         if (i === -1) return { entries: [...s.entries, make()] };
         const entries = [...s.entries];
@@ -722,26 +722,26 @@ export function App({
       }),
     );
 
-  function handleAgentEvent(key: string, event: SessionEvent) {
+  function handleAgentEvent(key: string, event: DeskEvent) {
     switch (event.type) {
       case "agent_start":
-        setSessions((map) => patchSession(map, key, { busy: true }));
+        setDesks((map) => patchDesk(map, key, { busy: true }));
         break;
-      case "session_closed":
+      case "desk_closed":
         // the daemon disposed this agent: the handle is dead (ensureAgent's own listener already
         // dropped the entry). `reopen` means it was rebuilt or cleared and every view must reload
         // the snapshot; one nobody is looking at stays closed until its next prompt.
-        setSessions((map) => patchSession(map, key, { busy: false }));
-        if (event.reopen && (key === latest.current.activeKey || latest.current.sessions[key]?.entries.length))
+        setDesks((map) => patchDesk(map, key, { busy: false }));
+        if (event.reopen && (key === latest.current.activeKey || latest.current.desks[key]?.entries.length))
           ensureAgent(key).catch(() => {});
         break;
       case "agent_end":
-        setSessions((map) => patchSession(map, key, { busy: false }));
+        setDesks((map) => patchDesk(map, key, { busy: false }));
         break;
       case "message_start": {
         // the person's prompt arrives from the daemon, so every view shows it
         const row = userRow(event);
-        if (row) setSessions((map) => patchSession(map, key, (s) => ({ entries: upsertById(s.entries, row) })));
+        if (row) setDesks((map) => patchDesk(map, key, (s) => ({ entries: upsertById(s.entries, row) })));
         break;
       }
       case "message_update":
@@ -772,14 +772,14 @@ export function App({
         const m = msg;
         if (m.role === "assistant" && m.stopReason === "error" && isAuthRefusal(m.errorMessage ?? "")) {
           // Connected on paper, refused in practice: stop offering it and move to one that runs.
-          const bad = (m as any).provider ?? getSession(sessionsRef.current, key).model.provider;
+          const bad = (m as any).provider ?? getDesk(desksRef.current, key).model.provider;
           markUnusable(bad, `refused (${/\b(401|403)\b/.exec(m.errorMessage ?? "")?.[1] ?? "auth"})`, cleanError(m.errorMessage ?? "").slice(0, 300));
           void loadProviderAuth().then((a) => {
             setAuth(a);
             const pick = pickConnectedModel(catalog, a);
-            // judged against the model the session is on NOW, not the one this handler was made with,
+            // judged against the model the desk is on NOW, not the one this handler was made with,
             // and "now using" is only said once the switch has been applied
-            const from = getSession(sessionsRef.current, key).model;
+            const from = getDesk(desksRef.current, key).model;
             const switched = !!pick && from.provider === bad;
             const text = `${bad} is connected but cannot run inference; ${switched ? `now using ${modelLabel(pick!)} (${pick!.provider}). Change it with /model` : "pick another with /model or reconnect with /login"}.`;
             if (switched) switchModel(key, from, pick!, text);
@@ -795,8 +795,8 @@ export function App({
         break;
       }
       case "tool_execution_start":
-        setSessions((map) =>
-          patchSession(map, key, (s) => {
+        setDesks((map) =>
+          patchDesk(map, key, (s) => {
             const made: Entry = {
               kind: "tool",
               id: event.toolCallId,
@@ -845,10 +845,10 @@ export function App({
         }));
         break;
       }
-      case "session_state":
-        setSessions((map) => patchSession(map, key, applyState(event)));
+      case "desk_state":
+        setDesks((map) => patchDesk(map, key, applyState(event)));
         break;
-      case "session_notice":
+      case "desk_notice":
         append(key, { kind: "info", text: event.text });
         break;
       case "compaction_start":
@@ -884,17 +884,17 @@ export function App({
     }
   }
 
-  /** Get or lazily open the backend session behind a session key. */
+  /** Get or lazily open the backend desk behind a desk key. */
   function ensureAgent(
     key: string,
     opts?: { fresh?: boolean },
-  ): Promise<SessionHandle> {
+  ): Promise<DeskHandle> {
     const existing = agents.current.get(key);
     if (existing) return existing;
     const created = backend()
-      .session(key, {
+      .desk(key, {
         initial: {
-          model: getSession(sessions, key).model ?? defaultModel,
+          model: getDesk(desks, key).model ?? defaultModel,
           thinkingLevel: prefs.thinkingLevel,
           autoCompact: prefs.autoCompact === "on",
           codemode: prefs.codemode === "on",
@@ -904,15 +904,15 @@ export function App({
       })
       .then((agent) => {
         agent.subscribe((event) => {
-          if (event.type === "session_closed" && agents.current.get(key) === created) agents.current.delete(key);
+          if (event.type === "desk_closed" && agents.current.get(key) === created) agents.current.delete(key);
           handleAgentEvent(key, event);
         });
         // a turn that outlived the previous client is still going: show it as such
-        setSessions((map) =>
-          patchSession(map, key, {
+        setDesks((map) =>
+          patchDesk(map, key, {
             ...applyState(agent.state),
             busy: agent.busy,
-            // a model picked while the session was still opening (the startup repair) outranks the
+            // a model picked while the desk was still opening (the startup repair) outranks the
             // one the daemon opened it with; selectModel's setModel reaches the daemon right after
             ...(picked.current.get(key) && { model: picked.current.get(key)! }),
           }),
@@ -923,7 +923,7 @@ export function App({
     agents.current.set(key, created);
     created.catch(() => {
       agents.current.delete(key);
-      setSessions((map) => patchSession(map, key, { restored: true }));
+      setDesks((map) => patchDesk(map, key, { restored: true }));
     });
     return created;
   }
@@ -961,7 +961,7 @@ export function App({
       body: [
         "Navigation (NORMAL mode)",
         "  i           type a prompt        /    commands",
-        "  j k         workspace ring       p    jump: env · session · ws",
+        "  j k         workspace ring       p    jump: env · desk · ws",
         "  f · ^j      files · jobs screen   r    (in files) rescan",
         "  ^g · ^q     the plan · finished tasks",
         "  1-9 · 0     workspace N · main   p    jump anywhere",
@@ -982,13 +982,13 @@ export function App({
   const PERM_MODES: PermMode[] = ["default", "acceptEdits", "plan", "bypass"];
 
   /** Rebuild the transcript + prompt history from the daemon's messages; always replaces the entries. */
-  function restoreTranscript(key: string, agent: SessionHandle) {
+  function restoreTranscript(key: string, agent: DeskHandle) {
     const { entries, history } = transcript(agent.messages, agent.busy, toolSummary);
-    setSessions((map) =>
-      patchSession(map, key, (s) => ({
-        // notices that arrived before the session finished opening (the startup model notice) are
+    setDesks((map) =>
+      patchDesk(map, key, (s) => ({
+        // notices that arrived before the desk finished opening (the startup model notice) are
         // not in the daemon's messages; the first restore must not wipe them
-        // Live events arrive before the history is read (session.open subscribes first), so a tool
+        // Live events arrive before the history is read (desk.open subscribes first), so a tool
         // or message that streamed in the gap is in both; the history's copy wins, the notices stay.
         entries: [...foldRetries(entries), ...(s.restored ? [] : s.entries.filter((e) => e.kind === "info" || e.kind === "error"))],
         history: s.history.length ? s.history : history,
@@ -1001,7 +1001,7 @@ export function App({
     agents.current.get(key)?.then((a) => a.abort());
   }
 
-  // Dispose sessions when the app unmounts.
+  // Dispose desks when the app unmounts.
   useEffect(() => () => {
     for (const agent of agents.current.values()) agent.then((a) => a.dispose()).catch(() => {});
   }, []);
@@ -1029,7 +1029,7 @@ export function App({
   }
 
   /** `steer` interrupts the running turn; otherwise a mid-turn prompt queues. */
-  /** Make `ref` this session's model and the saved default. */
+  /** Make `ref` this desk's model and the saved default. */
   /** An automatic switch: applied, said in the transcript, and kept on screen with the way back. */
   function switchModel(key: string, from: ModelRef, to: ModelRef, text: string) {
     selectModel(to, key);
@@ -1039,7 +1039,7 @@ export function App({
 
   function selectModel(ref: { provider: string; id: string }, key = activeKey) {
     picked.current.set(key, ref);
-    setSessions((map) => patchSession(map, key, { model: ref }));
+    setDesks((map) => patchDesk(map, key, { model: ref }));
     backend().settings.write({ defaultModel: ref }).catch(() => {}); // persists across restarts
     setDefaultModel(ref);
     agents.current.get(key)?.then((a) => a.setModel(ref)).catch(() => {});
@@ -1079,27 +1079,27 @@ export function App({
     }
     if (trimmed === "/clear") {
       // the daemon archives the transcript and tells every view (this one included) to reopen empty
-      void backend().sessions.clear(activeKey).catch((e) => append(activeKey, { kind: "error", text: String(e.message ?? e) }));
+      void backend().desks.clear(activeKey).catch((e) => append(activeKey, { kind: "error", text: String(e.message ?? e) }));
       return;
     }
-    if (trimmed.startsWith("/session")) {
-      const rest = trimmed.slice("/session".length).trim();
+    if (trimmed.startsWith("/desk")) {
+      const rest = trimmed.slice("/desk".length).trim();
       const [verb, ...words] = rest.split(/\s+/);
       const arg = words.join(" ").trim();
       if (verb === "name" && arg) {
-        // name the session in use, so it can be found in the list later
-        backend().sessions.name(activeKey, arg).catch((e) => append(activeKey, { kind: "error", text: String(e.message ?? e) }));
-        return append(activeKey, { kind: "info", text: `session named "${arg}"` });
+        // name the desk in use, so it can be found in the list later
+        backend().desks.name(activeKey, arg).catch((e) => append(activeKey, { kind: "error", text: String(e.message ?? e) }));
+        return append(activeKey, { kind: "info", text: `desk named "${arg}"` });
       }
       if ((verb === "desc" || verb === "describe") && arg) {
-        backend().sessions.describe(activeKey, arg).catch((e) => append(activeKey, { kind: "error", text: String(e.message ?? e) }));
-        return append(activeKey, { kind: "info", text: `session described "${arg}"` });
+        backend().desks.describe(activeKey, arg).catch((e) => append(activeKey, { kind: "error", text: String(e.message ?? e) }));
+        return append(activeKey, { kind: "info", text: `desk described "${arg}"` });
       }
       if (verb === "use" && arg) {
-        setSessionId((m) => ({ ...m, [activeBase]: arg }));
+        setDeskId((m) => ({ ...m, [activeBase]: arg }));
         return;
       }
-      openCmd("session ");
+      openCmd("desk ");
       return;
     }
     if (trimmed === "/tools") {
@@ -1149,7 +1149,7 @@ export function App({
           kind: "info",
           text: connected.length ? parts.join(" ") : "No AI provider connected yet — run /login to connect one.",
         });
-        const cur = getSession(sessionsRef.current, activeKey).model;
+        const cur = getDesk(desksRef.current, activeKey).model;
         const pick = lacksCredentials(a, cur.provider) ? pickConnectedModel(catalog, a) : undefined;
         if (pick) switchModel(activeKey, cur, pick, `${cur.provider} cannot run inference; now using ${modelLabel(pick)} (${pick.provider}).`);
       });
@@ -1188,7 +1188,7 @@ export function App({
         const level = value as ThinkingLevel;
         setPrefs((p) => ({ ...p, thinkingLevel: level }));
         backend().settings.write({ thinkingLevel: level }).catch(() => {});
-        // every live session, not just the visible one — a turn may be streaming elsewhere
+        // every live desk, not just the visible one — a turn may be streaming elsewhere
         for (const agent of agents.current.values())
           agent.then((a) => a.setThinkingLevel(level)).catch(() => {});
       }
@@ -1202,7 +1202,7 @@ export function App({
       if (key === "codemode" && (value === "on" || value === "off")) {
         setPrefs((p) => ({ ...p, codemode: value }));
         backend().settings.write({ codemode: value }).catch(() => {});
-        append(activeKey, { kind: "info", text: `codemode ${value} — every open session now runs with it` });
+        append(activeKey, { kind: "info", text: `codemode ${value} — every open desk now runs with it` });
       }
       if (key === "vim" && (value === "on" || value === "off")) {
         setPrefs((p) => ({ ...p, vim: value }));
@@ -1218,14 +1218,14 @@ export function App({
       return;
     }
 
-    // The turn belongs to the session it started in. pi's prompt() *refuses*
+    // The turn belongs to the desk it started in. pi's prompt() *refuses*
     // while a turn streams ("Agent is already processing") rather than
     // queueing — steer() is the explicit verb for that, so pick it here from
-    // the target session's own busy flag, not the visible one's: the user may
-    // be looking at a different session than the one they are prompting.
+    // the target desk's own busy flag, not the visible one's: the user may
+    // be looking at a different desk than the one they are prompting.
     // A model whose provider has no credentials fails the turn only after it is sent; say so now and
     // keep the draft. An unloaded auth map (size 0) decides nothing.
-    const cur = getSession(sessions, activeKey).model;
+    const cur = getDesk(desks, activeKey).model;
     if (lacksCredentials(auth, cur.provider)) {
       setInput(text);
       append(activeKey, {
@@ -1237,15 +1237,15 @@ export function App({
       return;
     }
     const key = activeKey;
-    const streaming = getSession(sessions, key).busy;
+    const streaming = getDesk(desks, key).busy;
     const sent = images;
     setImages([]);
     pasted.current = 0;
     // the tokens go to the model too: they are how it tells one attachment
     // from another, and a message that is only an image would otherwise be
     // empty text with the images silently dropped alongside it
-    setSessions((map) =>
-      patchSession(map, key, (s) => ({ history: [...s.history, trimmed] })),
+    setDesks((map) =>
+      patchDesk(map, key, (s) => ({ history: [...s.history, trimmed] })),
     );
     setHistIdx(null);
     const pending = (on: boolean) =>
@@ -1260,7 +1260,7 @@ export function App({
       .then((agent) =>
         streaming
           ? // mid-turn: ctrl+enter (or ^s) cuts in with no fork; plain enter lets a throwaway fork of the
-            // session decide steer or queue. Both carry the images; dropping them loses the paste.
+            // desk decide steer or queue. Both carry the images; dropping them loses the paste.
             steer
               ? void agent.steer(trimmed, sent.length ? sent : undefined)
               : agent.route(trimmed, sent.length ? sent : undefined).then((r) => {
@@ -1311,16 +1311,16 @@ export function App({
         .map((m) => ({ provider: m.provider, id: m.id, hint: m.name })),
       themes: themeNames,
       logins: hello().logins,
-      // this environment's main sessions, newest first
-      // sessions of the context you are in (environment main, or this workspace)
-      sessions: baseSessions
+      // this environment's main desks, newest first
+      // desks of the context you are in (environment main, or this workspace)
+      desks: baseDesks
         .filter((m) => m.key === activeBase || m.key.startsWith(`${activeBase}:`))
         .map((m) => {
-          const id = sessionIdOf(activeBase, m.key);
+          const id = deskIdOf(activeBase, m.key);
           return {
             id,
             label: m.name ?? (id === "main" ? "main" : "untitled"),
-            hint: [id === (sessionId[activeBase] ?? "main") ? "current" : "", ago(m.updated)]
+            hint: [id === (deskId[activeBase] ?? "main") ? "current" : "", ago(m.updated)]
               .filter(Boolean)
               .join(" · "),
           };
@@ -1367,7 +1367,7 @@ export function App({
         })),
       ],
     }),
-    [auth, models, prefs, envs, env, focus, environment, activeBase, sessionId, baseSessions, toast],
+    [auth, models, prefs, envs, env, focus, environment, activeBase, deskId, baseDesks, toast],
   );
   const jumpMatches = useMemo(
     () =>
@@ -1391,13 +1391,13 @@ export function App({
   const processesView = view === "processes";
   const planView = view === "plan";
   const doneView = view === "done";
-  // the plan: boards per session, in this session's words (main sees all, a workspace only itself)
+  // the plan: boards per desk, in this desk's words (main sees all, a workspace only itself)
   const nameOf = (key: string) => workspaces.find((w) => w.id === key)?.name ?? key;
   const stateOf = (key: string) => {
     const i = workspaces.findIndex((w) => w.id === key);
     if (i < 0) return "";
     const w = workspaces[i]!;
-    return asks.some((a) => baseOf(a.key) === key) ? "needs you" : getSession(sessions, key).busy || watched?.some((m) => baseOf(m.key) === key && m.busy) ? "working" : w.status === "stopped" ? "" : "idle";
+    return asks.some((a) => baseOf(a.key) === key) ? "needs you" : getDesk(desks, key).busy || watched?.some((m) => baseOf(m.key) === key && m.busy) ? "working" : w.status === "stopped" ? "" : "idle";
   };
   const planAll = (max: number) => planRows(teamView?.boards ?? [], nameOf, activeBase, stateOf, max);
   // main's Jobs screen: every workspace's processes, ids prefixed so two workspaces' "p1" stay apart
@@ -1414,10 +1414,10 @@ export function App({
   const inputLive = !modalOpen && (prefs.vim === "off" || keyMode === "insert" || palette || cmdMode);
 
   // just where you are: the workspace (with its parent, if it is an ephemeral
-  // one), or the working session at the main context — the same inherited names
+  // one), or the working desk at the main context — the same inherited names
   // the title bar shows, never derived from a prompt.
   const contextPath = (
-    focus === 0 ? ["Working Session"] : wsPath(workspaces, workspaces[focus - 1]!)
+    focus === 0 ? ["Working Desk"] : wsPath(workspaces, workspaces[focus - 1]!)
   ).join(" › ");
 
   const sidebarEl = (
@@ -1431,7 +1431,7 @@ export function App({
       unavailable={teamView && !teamView.available ? teamView.error ?? "unknown error" : undefined}
       focus={focus}
       width={prefs.sidebarWidth}
-      running={workspaces.map((w) => getSession(sessions, w.id).busy || !!watched?.some((m) => baseOf(m.key) === w.id && m.busy))}
+      running={workspaces.map((w) => getDesk(desks, w.id).busy || !!watched?.some((m) => baseOf(m.key) === w.id && m.busy))}
       waiting={workspaces.map((w) => asks.some((a) => baseOf(a.key) === w.id))}
       onFocus={(f) => {
         setFocus(f);
@@ -1453,7 +1453,7 @@ export function App({
     // and pushes the strip/hint bar (and tabs) off screen
     <box flexDirection="column" width={columns} height={rows} backgroundColor={theme.bg}>
       <box flexDirection="row" flexGrow={1} minHeight={0} flexBasis={0} flexShrink={1} overflow="hidden">
-        {/* session column: paddingX 2, paddingBottom 1, gap 1 — no top
+        {/* desk column: paddingX 2, paddingBottom 1, gap 1 — no top
             padding, the title bar is the column's top edge */}
         <box
           flexDirection="column"
@@ -1487,7 +1487,7 @@ export function App({
                         setModels(m);
                         // The login is how someone leaves an unconnected model: move to one the new
                         // provider can run, instead of leaving the old selection to fail on the next prompt.
-                        const cur = getSession(sessionsRef.current, activeKey).model;
+                        const cur = getDesk(desksRef.current, activeKey).model;
                         if (isUnusable(connected ?? ""))
                           append(activeKey, {
                             kind: "info",
@@ -1522,15 +1522,15 @@ export function App({
             />
           ) : (
             <>
-            <SessionTitle
+            <DeskTitle
               // the title is inherited, never derived from the first prompt:
-              // the main session is the working session, a workspace session is
+              // the main desk is the working desk, a workspace desk is
               // the workspace, an ephemeral one is its own agent name
-              title={focus === 0 ? "Working Session" : workspaces[focus - 1]!.name}
+              title={focus === 0 ? "Working Desk" : workspaces[focus - 1]!.name}
               description={watched?.find((m) => m.key === activeKey)?.description}
               busy={busy}
               width={contentWidth}
-              onOpen={() => openCmd("session ")}
+              onOpen={() => openCmd("desk ")}
             />
             <Transcript
               width={contentWidth}
@@ -1545,10 +1545,10 @@ export function App({
               }
               entries={
                 prefs.thinking === "hide"
-                  ? session.entries.filter((e) => e.kind !== "thinking")
-                  : session.entries
+                  ? desk.entries.filter((e) => e.kind !== "thinking")
+                  : desk.entries
               }
-              ready={session.restored === true}
+              ready={desk.restored === true}
             />
             </>
           )}
@@ -1563,7 +1563,7 @@ export function App({
           )}
           <Plan rows={planAll(Math.max(6, Math.floor(rows * 0.4)))} width={contentWidth} />
           <Queue
-            messages={session.queued}
+            messages={desk.queued}
             pending={routing[activeKey] ?? []}
             reasons={reasons.current[activeKey]}
             selected={queuePick}
@@ -1577,14 +1577,14 @@ export function App({
                 <Spinner fg={theme.accent} />{" "}
                 <span fg={theme.muted}>
                   {(() => {
-                    const tool = [...session.entries]
+                    const tool = [...desk.entries]
                       .reverse()
                       .find((e) => e.kind === "tool" && e.status === "running") as
                       | (Entry & { kind: "tool" })
                       | undefined;
                     // one line: codemode's summary is its whole script, which the block above already shows
                     if (tool) return `${tool.name} · ${(tool.summary ?? "").split("\n")[0]!.slice(0, 80)}`;
-                    const last = session.entries[session.entries.length - 1];
+                    const last = desk.entries[desk.entries.length - 1];
                     return last?.kind === "thinking" ? "thinking…" : "working…";
                   })()}
                 </span>
@@ -1638,10 +1638,10 @@ export function App({
                       }
                     : undefined
               }
-              placeholder={palette ? "Jump to…" : cmdMode ? "Type a command…" : session.entries.length === 0 ? placeholders[hint]! : ""}
-              model={modelLabel(session.model)}
-              provider={session.model.provider}
-              session={contextPath}
+              placeholder={palette ? "Jump to…" : cmdMode ? "Type a command…" : desk.entries.length === 0 ? placeholders[hint]! : ""}
+              model={modelLabel(desk.model)}
+              provider={desk.model.provider}
+              desk={contextPath}
               inputActive={inputLive}
               menu={menu}
             />
@@ -1650,8 +1650,8 @@ export function App({
             normal={prefs.vim === "on" && keyMode === "normal" && !palette && !cmdMode}
             vim={prefs.vim === "on"}
             busy={busy}
-            context={session.context}
-            queued={session.queued.length}
+            context={desk.context}
+            queued={desk.queued.length}
             active={environment?.name ?? ""}
             inWorkspace={focus > 0}
             compact={!wide}
@@ -1669,7 +1669,7 @@ export function App({
               if (id === "help") return openHelp();
               if (id === "queue") {
                 setKeyMode("normal");
-                return setQueuePick(session.queued.length > 0 ? 0 : null);
+                return setQueuePick(desk.queued.length > 0 ? 0 : null);
               }
             }}
           />

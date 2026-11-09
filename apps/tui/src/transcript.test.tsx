@@ -280,7 +280,7 @@ test("a long bash command counts toward the block's rows", async () => {
   t.renderer.destroy();
 }, 15000);
 
-// A reloaded session's transcript arrives from disk after the first paint, so
+// A reloaded desk's transcript arrives from disk after the first paint, so
 // an empty `entries` has two meanings — the welcome screen is only one of them.
 test("the welcome screen waits for the transcript to be read", async () => {
   const t = await testRender(<Transcript entries={[]} ready={false} />, {
@@ -293,7 +293,7 @@ test("the welcome screen waits for the transcript to be read", async () => {
   t.renderer.destroy();
 }, 15000);
 
-test("an empty session that has been read shows the welcome screen", async () => {
+test("an empty desk that has been read shows the welcome screen", async () => {
   const t = await testRender(<Transcript entries={[]} ready />, {
     width: 80,
     height: 20,
@@ -326,7 +326,7 @@ test("a thinking block that finishes streaming remounts with its header on its o
   t.renderer.destroy();
 });
 
-test("a message from another session renders as a card with names, kind and no board line", async () => {
+test("a message from another desk renders as a card with names, kind and no board line", async () => {
   const names = (k: string) => (k === "w1" ? "todo-demo" : k);
   const t = await testRender(
     <Transcript entries={[{ kind: "user", text: "[from w1] done: **Todo app** built\nboard: T1 done" }]} names={names} to="main" />,

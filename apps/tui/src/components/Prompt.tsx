@@ -16,7 +16,7 @@ export function Prompt({
   placeholder,
   model,
   provider,
-  session,
+  desk,
   inputActive = true,
   onPasteImage,
   onHistory,
@@ -30,8 +30,8 @@ export function Prompt({
   placeholder: string;
   model: string;
   provider: string;
-  /** the session being typed into — its inherited title, never an agent name */
-  session: string;
+  /** the desk being typed into — its inherited title, never an agent name */
+  desk: string;
   inputActive?: boolean;
   /** ctrl+v: the placeholder token to insert at the caret, or null. */
   onPasteImage?: () => string | null;
@@ -127,10 +127,10 @@ export function Prompt({
           <text> </text>
           <text>
             <span fg={normal ? theme.muted : bar}>
-              {/* every session is an agent, so naming the agent said nothing
-                  twice — this is the session you are typing into, and it stays
+              {/* every desk is an agent, so naming the agent said nothing
+                  twice — this is the desk you are typing into, and it stays
                   put in NORMAL too; the mode goes in the hint that follows */}
-              <b>{overlay === "command" ? "Commands" : overlay === "jump" ? "Jump" : session}</b>
+              <b>{overlay === "command" ? "Commands" : overlay === "jump" ? "Jump" : desk}</b>
             </span>
             {normal ? (
               <span fg={theme.muted}> · NORMAL · i to type · ? for help</span>

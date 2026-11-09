@@ -34,7 +34,7 @@ function Shimmer({ text, from, to }: { text: string; from: string; to: string })
   );
 }
 
-/** One plan line: guides and text left, state right. A session header is its name, a rule, its state. */
+/** One plan line: guides and text left, state right. A desk header is its name, a rule, its state. */
 export function PlanLine({ row, width, on }: { row: PlanRow; width: number; on?: boolean }) {
   const right = row.right ?? "";
   if (row.head) {
@@ -65,7 +65,7 @@ export function PlanLine({ row, width, on }: { row: PlanRow; width: number; on?:
 }
 
 /** The open tasks of the view (rows are already folded by planRows), above the queue; nothing when empty.
- *  One heading; group labels only when more than one session has open work. */
+ *  One heading; group labels only when more than one desk has open work. */
 export function Plan({ rows, width }: { rows: PlanRow[]; width: number }) {
   if (rows.length === 0) return null;
   const shown = rows.filter((r) => r.head).length > 1 ? rows : rows.filter((r) => !r.head);

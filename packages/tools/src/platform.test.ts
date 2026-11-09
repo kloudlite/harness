@@ -17,7 +17,7 @@ beforeEach(() => {
   writeFileSync(tokenFile, "tok1\n");
   process.env.KL_API_URL = "http://api.test";
   process.env.KL_TOOL_KEY_FILE = tokenFile;
-  delete process.env.KL_SESSION;
+  delete process.env.KL_DESK;
   globalThis.fetch = (async (url: string, init: any = {}) => {
     const u = String(url).replace("http://api.test", "");
     calls.push({ method: init.method ?? "GET", url: u, auth: init.headers?.authorization ?? null, body: init.body ? JSON.parse(init.body) : undefined });
@@ -29,7 +29,7 @@ afterEach(() => {
   globalThis.fetch = realFetch;
   delete process.env.KL_API_URL;
   delete process.env.KL_TOOL_KEY_FILE;
-  delete process.env.KL_SESSION;
+  delete process.env.KL_DESK;
 });
 
 const json = (v: unknown, status = 200) => () => new Response(JSON.stringify(v), { status });
@@ -51,8 +51,8 @@ const tool = (tools: ReturnType<typeof platformTools>, n: string) => {
   if (!r) throw new Error(`no tool ${n}`);
   const action = n.slice(r.name.length + 1);
   const tweak: Record<string, (i: any) => any> = {
-    session_connect: (i) => ({ action: "use", environment: i.environment }),
-    session_disconnect: () => ({ action: "use", environment: null }),
+    desk_connect: (i) => ({ action: "use", environment: i.environment }),
+    desk_disconnect: () => ({ action: "use", environment: null }),
     workspace_clone: ({ workspace, ...i }) => ({ action: "create", source: workspace, ...i }),
   };
   return { ...r, name: n, run: (i: any) => r.run(tweak[n] ? tweak[n]!(i ?? {}) : { action, ...(i ?? {}) }) };
@@ -85,13 +85,13 @@ test("packages_add merges by attr, packages_remove errors on unknown", async () 
   expect(calls.length).toBe(n + 1); // the GET only, no PATCH
 });
 
-test("a workspace session has the slice its token reaches, folded; main keeps today's subset and all adds the workspace-only tools", async () => {
+test("a workspace desk has the slice its token reaches, folded; main keeps today's subset and all adds the workspace-only tools", async () => {
   const slice = platformTools("workspace", "w1");
-  expect(slice.map((x) => x.name)).toEqual(["workspace", "env", "session", "service", "packages", "intercept"]);
+  expect(slice.map((x) => x.name)).toEqual(["workspace", "env", "desk", "service", "packages", "intercept"]);
   const actions = (t: ReturnType<typeof platformTools>, n: string) => (tool(t, n).inputSchema as any).properties.action.enum;
   expect(actions(slice, "workspace")).toEqual(["stop", "snapshot"]);
   expect(actions(slice, "env")).toEqual(["get", "wait"]);
-  expect(actions(slice, "session")).toEqual(["current"]);
+  expect(actions(slice, "desk")).toEqual(["current"]);
   expect(actions(platformTools("workspace", "w1", 5000, true), "workspace")).toEqual(["snapshot"]);
   const main = platformTools("main");
   expect(actions(main, "packages")).toEqual(["list"]);
@@ -131,9 +131,9 @@ test("service add/update/remove PATCH the whole list; duplicates and strangers e
   await expect(tool(t, "service_remove").run({ env: "e1", name: "q" })).rejects.toThrow("no such service");
 });
 
-test("workspace sessions default env through the workspace's session", async () => {
+test("workspace desks default env through the workspace's desk", async () => {
   const t = platformTools("workspace", "w1");
-  routes["GET /v1/workspaces/w1"] = json({ team: "acme", session: "ses-1", environment: "e9", packages: [] });
+  routes["GET /v1/workspaces/w1"] = json({ team: "acme", desk: "desk-1", environment: "e9", packages: [] });
   routes["GET /v1/environments/e9"] = json({ services: [] });
   routes["POST /v1/environments/e9/intercepts"] = json({}, 202);
   await tool(t, "env_get").run({});
@@ -145,49 +145,49 @@ test("workspace sessions default env through the workspace's session", async () 
   expect((tool(t, "intercept_start").inputSchema as any).properties.workspace).toBeUndefined();
   await tool(t, "intercept_start").run({ service: "web", workspace: "w2" });
   expect(posted("POST")).toEqual({ service: "web", workspace: "w1" });
-  // in a session whose environment is not resolved, or in none
-  routes["GET /v1/workspaces/w1"] = json({ session: "ses-1", packages: [] });
-  await expect(tool(t, "env_get").run({})).rejects.toThrow("this workspace's session has no environment");
+  // in a desk whose environment is not resolved, or in none
+  routes["GET /v1/workspaces/w1"] = json({ desk: "desk-1", packages: [] });
+  await expect(tool(t, "env_get").run({})).rejects.toThrow("this workspace's desk has no environment");
   routes["GET /v1/workspaces/w1"] = json({ packages: [] });
-  await expect(tool(t, "env_get").run({})).rejects.toThrow("this workspace is in no session");
+  await expect(tool(t, "env_get").run({})).rejects.toThrow("this workspace is in no desk");
   expect(t.some((x) => x.name === "workspace_create")).toBe(false);
 });
 
-test("the bench offers session current and use: a bench belongs to its session and never joins another", () => {
-  for (const kind of ["main", "all"] as const) expect((tool(platformTools(kind, "w1"), "session").inputSchema as any).properties.action.enum).toEqual(expect.arrayContaining(["current", "use", "create"]));
-  expect((tool(platformTools("workspace", "w1"), "session").inputSchema as any).properties.action.enum).toEqual(["current"]);
+test("the bench offers desk current and use: a bench belongs to its desk and never joins another", () => {
+  for (const kind of ["main", "all"] as const) expect((tool(platformTools(kind, "w1"), "desk").inputSchema as any).properties.action.enum).toEqual(expect.arrayContaining(["current", "use", "create"]));
+  expect((tool(platformTools("workspace", "w1"), "desk").inputSchema as any).properties.action.enum).toEqual(["current"]);
 });
 
-test("session_current shows the workspace's own session; the bench's is its KL_SESSION", async () => {
-  routes["GET /v1/workspaces/w1"] = json({ session: "ses-1", environment: "e9" });
-  expect(JSON.parse(await tool(platformTools("workspace", "w1"), "session_current").run({}))).toEqual({ session: "ses-1", environment: "e9" });
+test("desk_current shows the workspace's own desk; the bench's is its KL_DESK", async () => {
+  routes["GET /v1/workspaces/w1"] = json({ desk: "desk-1", environment: "e9" });
+  expect(JSON.parse(await tool(platformTools("workspace", "w1"), "desk_current").run({}))).toEqual({ desk: "desk-1", environment: "e9" });
   const t = platformTools("main");
-  expect(await tool(t, "session_current").run({})).toContain("no session");
-  process.env.KL_SESSION = "ses-1";
-  routes["GET /v1/sessions/ses-1"] = json({ id: "ses-1", name: "main", environment: "e9" });
-  expect(JSON.parse(await tool(t, "session_current").run({}))).toEqual({ id: "ses-1", name: "main", environment: "e9" });
-  routes["GET /v1/sessions/ses-1"] = json({ error: "no such session" }, 404);
-  expect(await tool(t, "session_current").run({})).toContain("ended");
+  expect(await tool(t, "desk_current").run({})).toContain("no desk");
+  process.env.KL_DESK = "desk-1";
+  routes["GET /v1/desks/desk-1"] = json({ id: "desk-1", name: "main", environment: "e9" });
+  expect(JSON.parse(await tool(t, "desk_current").run({}))).toEqual({ id: "desk-1", name: "main", environment: "e9" });
+  routes["GET /v1/desks/desk-1"] = json({ error: "no such desk" }, 404);
+  expect(await tool(t, "desk_current").run({})).toContain("ended");
 });
 
-test("session use sets or clears the bench's environment (null disconnects) and refuses another session", async () => {
+test("desk use sets or clears the bench's environment (null disconnects) and refuses another desk", async () => {
   const t = platformTools("main");
-  delete process.env.KL_SESSION;
-  expect(await tool(t, "session_connect").run({ environment: "e2" })).toContain("no session");
-  process.env.KL_SESSION = "ses-1";
-  routes["GET /v1/sessions/ses-1"] = json({ id: "ses-1", name: "main", environment: "e2" });
-  routes["PUT /v1/sessions/ses-1/environment"] = json({ id: "ses-1", name: "main", environment: "e2" });
-  expect(JSON.parse(await tool(t, "session_connect").run({ environment: "e2" }))).toEqual({ id: "ses-1", name: "main", environment: "e2" });
+  delete process.env.KL_DESK;
+  expect(await tool(t, "desk_connect").run({ environment: "e2" })).toContain("no desk");
+  process.env.KL_DESK = "desk-1";
+  routes["GET /v1/desks/desk-1"] = json({ id: "desk-1", name: "main", environment: "e2" });
+  routes["PUT /v1/desks/desk-1/environment"] = json({ id: "desk-1", name: "main", environment: "e2" });
+  expect(JSON.parse(await tool(t, "desk_connect").run({ environment: "e2" }))).toEqual({ id: "desk-1", name: "main", environment: "e2" });
   expect(calls.filter((c) => c.method === "PUT").at(-1)!.body).toEqual({ environment: "e2" });
-  routes["PUT /v1/sessions/ses-1/environment"] = json({ id: "ses-1", name: "main", environment: null });
-  routes["GET /v1/sessions/ses-1"] = json({ id: "ses-1", name: "main", environment: null });
-  expect(JSON.parse(await tool(t, "session_disconnect").run({}))).toEqual({ id: "ses-1", name: "main", environment: null });
+  routes["PUT /v1/desks/desk-1/environment"] = json({ id: "desk-1", name: "main", environment: null });
+  routes["GET /v1/desks/desk-1"] = json({ id: "desk-1", name: "main", environment: null });
+  expect(JSON.parse(await tool(t, "desk_disconnect").run({}))).toEqual({ id: "desk-1", name: "main", environment: null });
   expect(calls.filter((c) => c.method === "PUT").at(-1)!.body).toEqual({ environment: null });
-  // absent keeps; another session's name is refused
+  // absent keeps; another desk's name is refused
   const n = calls.length;
-  await tool(t, "session").run({ action: "use" });
+  await tool(t, "desk").run({ action: "use" });
   expect(calls.slice(n).map((c) => c.method)).toEqual(["GET"]);
-  await expect(tool(t, "session").run({ action: "use", name: "other", environment: "e3" })).rejects.toThrow("belongs to session main");
+  await expect(tool(t, "desk").run({ action: "use", name: "other", environment: "e3" })).rejects.toThrow("belongs to desk main");
 });
 
 test("env_get folds service_status readiness into services[]; workspace_clone sends task only when given", async () => {
@@ -227,7 +227,7 @@ test("request_create sends only the kind's own payload; requests_list filters by
   expect(calls.at(-1)!.url).toBe("/v1/requests?owner=acme");
 });
 
-test("service_logs reads the api route, defaulting env in a workspace session", async () => {
+test("service_logs reads the api route, defaulting env in a workspace desk", async () => {
   const lines = (...l: string[]) => json({ lines: l, pod: "web-0", truncated: false });
   routes["GET /v1/environments/e1"] = json({ id: "env-e1" });
   routes["GET /v1/environments/e1/services/web/logs?tail=50&previous=true"] = lines("a", "b");
@@ -240,9 +240,9 @@ test("service_logs reads the api route, defaulting env in a workspace session", 
   expect(await tool(m, "service_logs").run({ env: "e1", name: "web", previous: "false" })).toBe("c\n[truncated]");
   expect(await tool(m, "service_logs").run({ env: "e1", name: "web", previous: "true" })).toBe("d");
   await expect(tool(m, "service_logs").run({ name: "web" })).rejects.toThrow("`env` is required");
-  // workspace: env defaults through the workspace's session
+  // workspace: env defaults through the workspace's desk
   const t = platformTools("workspace", "w1");
-  routes["GET /v1/workspaces/w1"] = json({ team: "acme", session: "ses-1", environment: "e9", packages: [] });
+  routes["GET /v1/workspaces/w1"] = json({ team: "acme", desk: "desk-1", environment: "e9", packages: [] });
   routes["GET /v1/environments/e9/services/web/logs"] = lines("z");
   expect(await tool(t, "service_logs").run({ name: "web" })).toBe("z");
 });
@@ -293,50 +293,50 @@ test("env_wait returns once every service is ready, at once on failing, and mark
   }
 });
 
-test("workspace_list keeps only the bench's session when KL_SESSION is set", async () => {
+test("workspace_list keeps only the bench's desk when KL_DESK is set", async () => {
   const t = platformTools("main");
   routes["GET /v1/workspaces"] = json([
-    { id: "a", session: "ses-1" },
-    { id: "b", session: "ses-2" },
+    { id: "a", desk: "desk-1" },
+    { id: "b", desk: "desk-2" },
     { id: "c" },
-    { id: "bench-x", session: "ses-1" },
+    { id: "bench-x", desk: "desk-1" },
   ]);
   expect(JSON.parse(await tool(t, "workspace_list").run({}))).toHaveLength(4);
-  process.env.KL_SESSION = "ses-1";
+  process.env.KL_DESK = "desk-1";
   process.env.KL_BENCH = "bench-x";
   try {
     expect(JSON.parse(await tool(t, "workspace_list").run({})).map((w: any) => w.id)).toEqual(["a"]);
   } finally {
-    delete process.env.KL_SESSION;
+    delete process.env.KL_DESK;
     delete process.env.KL_BENCH;
   }
 });
 
-test("in a session, workspace_create and workspace_delete go through the session; without one, direct", async () => {
+test("in a desk, workspace_create and workspace_delete go through the desk; without one, direct", async () => {
   const t = platformTools("main");
   routes["POST /v1/workspaces"] = json({ id: "ws-1" }, 201);
   routes["DELETE /v1/workspaces/w1"] = () => new Response(null, { status: 204 });
   routes["GET /v1/workspaces/w1"] = json({ id: "w1", state: "ready" });
-  routes["POST /v1/sessions/ses-1/workspaces"] = json({ id: "ws-2" }, 201);
-  routes["DELETE /v1/sessions/ses-1/workspaces/w1"] = () => new Response(null, { status: 204 });
+  routes["POST /v1/desks/desk-1/workspaces"] = json({ id: "ws-2" }, 201);
+  routes["DELETE /v1/desks/desk-1/workspaces/w1"] = () => new Response(null, { status: 204 });
   await tool(t, "workspace_create").run({ name: "backend", team: "acme" });
   await tool(t, "workspace_delete").run({ workspace: "w1" });
-  process.env.KL_SESSION = "ses-1";
+  process.env.KL_DESK = "desk-1";
   try {
     await tool(t, "workspace_create").run({ name: "backend", team: "acme" });
     await tool(t, "workspace_delete").run({ workspace: "w1" });
   } finally {
-    delete process.env.KL_SESSION;
+    delete process.env.KL_DESK;
   }
   expect(calls.map((c) => `${c.method} ${c.url}`)).toEqual([
     "POST /v1/workspaces",
     "GET /v1/workspaces/w1",
     "DELETE /v1/workspaces/w1",
-    "POST /v1/sessions/ses-1/workspaces",
+    "POST /v1/desks/desk-1/workspaces",
     "GET /v1/workspaces/w1",
-    "DELETE /v1/sessions/ses-1/workspaces/w1",
+    "DELETE /v1/desks/desk-1/workspaces/w1",
   ]);
-  // The session already names the owner: a `team` would only contradict it.
+  // The desk already names the owner: a `team` would only contradict it.
   expect(calls[3].body).toEqual({ name: "backend" });
 });
 
@@ -381,11 +381,11 @@ const CASES: [string, any, string, string, any?][] = [
   ["secret_delete", { owner: "acme", name: "DB_URL", mine: true }, "DELETE", "/v1/secrets/acme/mine/DB_URL"],
   ["workspace_env_set", { workspace: "w1", variables: { A: "${{ secrets.A }}" }, replace: true, restart_on_change: true }, "PUT", "/v1/workspaces/w1/env", { env: { A: "${{ secrets.A }}" }, restartOnEnvChange: true }],
   ["connector_list", { owner: "acme" }, "GET", "/v1/connectors?owner=acme"],
-  ["session_create", { name: "fix", team: "acme", environment: "dev" }, "POST", "/v1/sessions", { name: "fix", team: "acme", environment: "dev" }],
-  ["session_stop", { session: "s1" }, "POST", "/v1/sessions/s1/stop"],
-  ["session_start", { session: "s1" }, "POST", "/v1/sessions/s1/start"],
-  ["session_delete", { session: "s1" }, "DELETE", "/v1/sessions/s1"],
-  ["session_ttl", { session: "s1", ttl_secs: 600 }, "PUT", "/v1/sessions/s1/ttl", { ttl_secs: 600 }],
+  ["desk_create", { name: "fix", team: "acme", environment: "dev" }, "POST", "/v1/desks", { name: "fix", team: "acme", environment: "dev" }],
+  ["desk_stop", { desk: "s1" }, "POST", "/v1/desks/s1/stop"],
+  ["desk_start", { desk: "s1" }, "POST", "/v1/desks/s1/start"],
+  ["desk_delete", { desk: "s1" }, "DELETE", "/v1/desks/s1"],
+  ["desk_ttl", { desk: "s1", ttl_secs: 600 }, "PUT", "/v1/desks/s1/ttl", { ttl_secs: 600 }],
   ["workspace_ttl", { workspace: "w1", clear: true }, "PUT", "/v1/workspaces/w1/ttl", { ttl_secs: null }],
   ["env_ttl", { env: "e1", ttl_secs: 86400 }, "PUT", "/v1/environments/e1/ttl", { ttl_secs: 86400 }],
 ];
@@ -394,7 +394,7 @@ for (const [name, args, method, url, body] of CASES) {
     const t = tool(platformTools("main"), name);
     expect(t).toBeDefined();
     // a verb answers the object it changed, so it reads it back (and `delete` reads it first)
-    for (const o of ["/v1/workspaces/w1", "/v1/sessions/s1", "/v1/environments/e1", "/v1/capsules/cap-1", "/v1/pipelines/acme/ci", "/v1/pipelines/acme/ci/runs/r1"]) routes[`GET ${o}`] = ok();
+    for (const o of ["/v1/workspaces/w1", "/v1/desks/s1", "/v1/environments/e1", "/v1/capsules/cap-1", "/v1/pipelines/acme/ci", "/v1/pipelines/acme/ci/runs/r1"]) routes[`GET ${o}`] = ok();
     routes[`${method} ${url}`] = ok();
     await t.run(args);
     const sent = calls.filter((c) => c.method === method && c.url === url).at(-1)!;
@@ -405,7 +405,7 @@ for (const [name, args, method, url, body] of CASES) {
   });
 }
 
-test("the component tools are in main and all, never in a workspace session", () => {
+test("the component tools are in main and all, never in a workspace desk", () => {
   const names = ["capsule", "volume", "snapshot", "pipeline", "run", "worktree", "workspace_vars", "webhook_rotate", "secret_set", "secret_list", "secret_delete", "connector_list"];
   for (const k of ["main", "all"] as const) for (const n of names) expect(platformTools(k, "w1").map((t) => t.name)).toContain(n);
   for (const n of names) expect(platformTools("workspace", "w1").map((t) => t.name)).not.toContain(n);
@@ -503,9 +503,9 @@ test("workspace create with source clones; env create with an environment source
   expect(calls.at(-1)).toMatchObject({ url: "/v1/environments", body: { name: "e3", snapshot_id: "pg@2" } });
 });
 
-test("capsule_create goes through the session when there is one, with its argv array as given", async () => {
-  process.env.KL_SESSION = "ses-1";
-  routes["POST /v1/sessions/ses-1/capsules"] = json({ id: "cap-1" }, 202);
+test("capsule_create goes through the desk when there is one, with its argv array as given", async () => {
+  process.env.KL_DESK = "desk-1";
+  routes["POST /v1/desks/desk-1/capsules"] = json({ id: "cap-1" }, 202);
   await tool(platformTools("main"), "capsule_create").run({ command: ["echo", "hi"], team: "acme" });
   expect(calls.at(-1)!.body).toEqual({ cmd: ["echo", "hi"] });
 });
@@ -583,7 +583,7 @@ test("ttl tools clear with null when ttl_secs is omitted, and the wait tools tak
 });
 
 test("a ttl tool needs ttl_secs or clear", async () => {
-  for (const [n, a, url] of [["session_ttl", { session: "s1" }, "/v1/sessions/s1/ttl"], ["workspace_ttl", { workspace: "w1" }, "/v1/workspaces/w1/ttl"], ["env_ttl", { env: "e1" }, "/v1/environments/e1/ttl"]] as const) {
+  for (const [n, a, url] of [["desk_ttl", { desk: "s1" }, "/v1/desks/s1/ttl"], ["workspace_ttl", { workspace: "w1" }, "/v1/workspaces/w1/ttl"], ["env_ttl", { env: "e1" }, "/v1/environments/e1/ttl"]] as const) {
     routes[`PUT ${url}`] = json({});
     routes[`GET ${url.replace("/ttl", "")}`] = json({});
     calls = [];
@@ -667,13 +667,13 @@ test("intercept is one tool with start and stop; stop answers the environment", 
   expect(JSON.parse(await tool(t, "intercept_stop").run({ env: "e1", service: "web" })).id).toBe("e1");
 });
 
-test("env create with wait answers the created object and a hint when the session is not connected to it", async () => {
+test("env create with wait answers the created object and a hint when the desk is not connected to it", async () => {
   const t = platformTools("main", undefined, 1);
   routes["POST /v1/environments"] = json({ id: "env-new", name: "shop", state: "creating", services: [] }, 202);
-  routes["GET /v1/environments/env-new"] = () => new Response("that environment is not connected to this session", { status: 403 });
+  routes["GET /v1/environments/env-new"] = () => new Response("that environment is not connected to this desk", { status: 403 });
   const out = JSON.parse(await tool(t, "env_create").run({ name: "shop", services: [{ name: "db", image: "postgres:16", ports: [5432] }], wait: true, soft_ms: 50 }));
   expect(out.id).toBe("env-new");
-  expect(out.hint).toContain("session");
+  expect(out.hint).toContain("desk");
 });
 
 test("env restore takes source; snapshot_id is an unlisted alias", async () => {
@@ -725,9 +725,9 @@ test("stop answers the POST body; wait polls until stopped", async () => {
   expect(JSON.parse(await tool(platformTools("main", undefined, 1), "env_stop").run({ env: "e2", wait: true })).state).toBe("stopped");
 });
 
-test("session stop answers without a second read", async () => {
-  routes["POST /v1/sessions/s1/stop"] = json({}, 202);
-  expect(JSON.parse(await tool(platformTools("main"), "session_stop").run({ session: "s1" }))).toEqual({ id: "s1", state: "stopping" });
+test("desk stop answers without a second read", async () => {
+  routes["POST /v1/desks/s1/stop"] = json({}, 202);
+  expect(JSON.parse(await tool(platformTools("main"), "desk_stop").run({ desk: "s1" }))).toEqual({ id: "s1", state: "stopping" });
   expect(calls.filter((c) => c.method === "GET")).toHaveLength(0);
 });
 

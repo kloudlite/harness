@@ -65,7 +65,7 @@ test("each user-facing skill has name, a description under 1024 chars with a Not
 });
 
 test("only the base skill defines a component", () => {
-  for (const s of TASK) expect(read(s, "SKILL.md")).not.toMatch(/^\d\. \*\*(Workspace|Environment|Session|Intercept|Capsule|Volume|Pipeline|Connector)\.\*\*/m);
+  for (const s of TASK) expect(read(s, "SKILL.md")).not.toMatch(/^\d\. \*\*(Workspace|Environment|Desk|Intercept|Capsule|Volume|Pipeline|Connector)\.\*\*/m);
 });
 
 test("the plugin copies every shipped skill folder, references included, equal to its source", () => {

@@ -1,6 +1,6 @@
 ---
 name: codemode
-description: How to write codemode scripts. Read this skill before your first codemode call in a session. Also read it when a task needs many tool calls, a loop over many items, or a filter on a large output.
+description: How to write codemode scripts. Read this skill before your first codemode call in a desk. Also read it when a task needs many tool calls, a loop over many items, or a filter on a large output.
 ---
 
 # Codemode
@@ -29,7 +29,7 @@ If you need only one simple command and all of its output, make one plain call. 
 | `tools.read({ path })` | The text of the file. | |
 | Any call | | A call that is blocked or has bad arguments rejects with an `Error`. |
 
-The main session has `bash`. A workspace session does not have `bash`. It has `exec`. Use the shell that is in your tool list. Do not guess.
+The main desk has `bash`. A workspace desk does not have `bash`. It has `exec`. Use the shell that is in your tool list. Do not guess.
 
 ## Rules
 

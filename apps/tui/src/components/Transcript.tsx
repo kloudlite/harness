@@ -286,7 +286,7 @@ function Row({
   width: number;
   /** the last entry, so markdown may still be mid-token */
   streaming?: boolean;
-  /** names of the sessions a message card is between */
+  /** names of the desks a message card is between */
   names?: (key: string) => string;
   to?: string;
 }) {
@@ -549,10 +549,10 @@ export function Transcript({
   to,
 }: {
   entries: Entry[];
-  /** session key -> name, and the name of the session this transcript belongs to: for message cards */
+  /** desk key -> name, and the name of the desk this transcript belongs to: for message cards */
   names?: (key: string) => string;
   to?: string;
-  /** false until the persisted transcript has been read — see `Session.restored` */
+  /** false until the persisted transcript has been read — see `Desk.restored` */
   ready?: boolean;
   /** content columns available — long blocks wrap, so row counts need it */
   width?: number;
@@ -604,9 +604,9 @@ export function Transcript({
 
   const visible = foldRepeats(entries).slice(-SCROLLBACK);
 
-  // An unrestored session has nothing to say yet: the welcome screen means
-  // "this session is empty", and showing it before the transcript is read
-  // flashed it over every reloaded session.
+  // An unrestored desk has nothing to say yet: the welcome screen means
+  // "this desk is empty", and showing it before the transcript is read
+  // flashed it over every reloaded desk.
   if (visible.length === 0 && !ready) return <box flexGrow={1} />;
 
   if (visible.length === 0) {

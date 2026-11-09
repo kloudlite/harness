@@ -10,8 +10,8 @@ export const commands: SlashCommand[] = [
   { name: "/tools", description: "List registered tools" },
   { name: "/clear", description: "Clear the transcript" },
   { name: "/compact", description: "Compact the context now; text after it says what to keep" },
-  { name: "/session", description: "Name or continue a main session", hasOptions: true },
-  { name: "/model", description: "Set this session's model", hasOptions: true },
+  { name: "/desk", description: "Name or continue a main desk", hasOptions: true },
+  { name: "/model", description: "Set this desk's model", hasOptions: true },
   { name: "/theme", description: "Switch theme", hasOptions: true },
   { name: "/login", description: "Log in to a provider", hasOptions: true },
   { name: "/btw", description: "Ask a side question; the answer is not saved" },
@@ -29,8 +29,8 @@ type MenuContext = {
   logins: { provider: string; type: string; label: string }[];
   /** flat option rows for /settings, hint marks the current value */
   settings: { key: string; value: string; hint: string }[];
-  /** this environment's main sessions, newest first */
-  sessions: { id: string; label: string; hint: string }[];
+  /** this environment's main desks, newest first */
+  desks: { id: string; label: string; hint: string }[];
   /** Connected providers that cannot run inference: one row each, Enter reconnects. Their models are not in `models`. */
   blocked?: { provider: string; reason: string; ago: string }[];
   /** `/model test` always; `/model undo` only while an automatic switch can be reverted. */
@@ -122,14 +122,14 @@ export function menuItems(input: string, ctx: MenuContext): MenuItem[] {
         label: `${l.provider} · ${l.label}`,
         hint: loginHint(l.type, "", l.label),
       }));
-  if (cmd === "/session") {
+  if (cmd === "/desk") {
     const rest = input.slice(blank + 1);
-    // "/session name <text>" is free text — no options to pick from
+    // "/desk name <text>" is free text — no options to pick from
     if (/^name\s/.test(rest)) return [];
     return [
-      { insert: "/session name ", label: "name", hint: "name the session you're in" },
-      ...ctx.sessions.map((sn) => ({
-        insert: `/session use ${sn.id}`,
+      { insert: "/desk name ", label: "name", hint: "name the desk you're in" },
+      ...ctx.desks.map((sn) => ({
+        insert: `/desk use ${sn.id}`,
         label: sn.label,
         hint: sn.hint,
       })),

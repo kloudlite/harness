@@ -9,7 +9,7 @@ const ctx = {
     { provider: "deepseek", type: "api_key", label: "DeepSeek API key" },
   ],
   settings: [],
-  sessions: [],
+  desks: [],
 };
 
 // The models list is filtered to connected providers, so a first run has

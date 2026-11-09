@@ -1,9 +1,9 @@
 {
   "name": "kloudlite",
   "version": "0.4.0",
-  "description": "Kloudlite workspaces, environments and sessions from Claude Code: the remote kl MCP server and the skills; sign in in the browser on the first tool call.",
+  "description": "Kloudlite workspaces, environments and desks from Claude Code: the remote kl MCP server and the skills; sign in in the browser on the first tool call.",
   "author": { "name": "Kloudlite" },
   "homepage": "https://github.com/kloudlite/harness",
   "repository": "https://github.com/kloudlite/harness",
-  "keywords": ["kloudlite", "workspaces", "mcp", "sessions"]
+  "keywords": ["kloudlite", "workspaces", "mcp", "desks"]
 }

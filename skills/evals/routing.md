@@ -2,26 +2,26 @@
 
 One row per prompt: the skill that must load (`base` is the `kloudlite` skill alone; it loads first for every row) and the tie-breaker or situation that decides it. Manual eval: give each prompt to an agent that has the installed skills and record which skill loaded. `evals.test.ts` checks the skill column.
 
-Tie-breaker for "stop": one lifecycle verb on a named object (stop, start, delete) goes to `base`; "stop everything" or "stop for the day" is a sequence (stop intercepts, stop workspaces, the session last) and goes to `kloudlite-develop`.
+Tie-breaker for "stop": one lifecycle verb on a named object (stop, start, delete) goes to `base`; "stop everything" or "stop for the day" is a sequence (stop intercepts, stop workspaces, the desk last) and goes to `kloudlite-develop`.
 
 | Prompt | Skill | Rule |
 |---|---|---|
 | what do I have | base | Reads need no scenario |
-| which session am I in | base | Reads need no scenario |
+| which desk am I in | base | Reads need no scenario |
 | is api up | base | Status of one object |
 | status of shop-dev | base | Status of one object |
 | logs of db | base | Service logs |
 | why is worker crashing | base | Service logs, then develop if code must change |
 | who intercepts api | base | Intercepts in force: env(get) |
-| stop my session | base | Lifecycle verb on one named object goes to base, even though develop 17 also stops things |
+| stop my desk | base | Lifecycle verb on one named object goes to base, even though develop 17 also stops things |
 | start the environment | base | Lifecycle |
-| set the session TTL to a day | base | Lifecycle |
+| set the desk TTL to a day | base | Lifecycle |
 | delete the review workspace | base | Delete: name the target, rule 1 |
 | delete all stopped workspaces | base | Delete: list by name first |
 | why can't I create a workspace | base | Quota |
 | ask for more quota | base | Quota: request_create when asked |
 | tools say not logged in | base | Setup and recovery symptom |
-| the server lists only session(pick) | base | Setup and recovery symptom |
+| the server lists only desk(pick) | base | Setup and recovery symptom |
 | 403 your access to acme is paused | base | Setup and recovery symptom |
 | connect Kloudlite to my agent (no Kloudlite tool present) | base | Setup steps, if the skill is installed at all |
 | set up this repo | kloudlite-develop | Creates the shape |
@@ -29,7 +29,7 @@ Tie-breaker for "stop": one lifecycle verb on a named object (stop, start, delet
 | give me a workspace for acme/api | kloudlite-develop | Creates the shape |
 | I need Postgres and Redis | kloudlite-develop | Creates the shape (environment) |
 | stand up the app's dependencies | kloudlite-develop | Creates the shape (environment) |
-| connect my workspace to staging | kloudlite-develop | Session joins workspace and environment |
+| connect my workspace to staging | kloudlite-develop | Desk joins workspace and environment |
 | run my API against the real database | kloudlite-develop | Keeps a process running |
 | run my server | kloudlite-develop | Keeps a process running |
 | hit it with real traffic | kloudlite-develop | Edits code or keeps a process running |
@@ -51,7 +51,7 @@ Tie-breaker for "stop": one lifecycle verb on a named object (stop, start, delet
 | reset the data to last night's snapshot | kloudlite-develop | Environment restore |
 | save this dataset as v2 | kloudlite-develop | Named volume |
 | build and push the api image | kloudlite-develop | Publish an image |
-| stop everything for today | kloudlite-develop | "Everything" or "for the day" means stop intercepts, stop the workspaces, then the session last; a lifecycle verb on one named object is base |
+| stop everything for today | kloudlite-develop | "Everything" or "for the day" means stop intercepts, stop the workspaces, then the desk last; a lifecycle verb on one named object is base |
 | I want to run psql from my terminal | kloudlite-develop | Reach the environment from the laptop |
 | add a field to the order model, and check it | kloudlite-develop | A change, then verify: develop first |
 | run the unit tests | kloudlite-verify | Once, now, a result to read |

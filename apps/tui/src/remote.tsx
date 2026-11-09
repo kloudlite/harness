@@ -30,10 +30,10 @@ const done = () => {
   const tail = c.stderr();
   if (tail) writeSync(2, tail);
   // the pipe says nothing when the bench goes away, so a bare exit 1 would explain nothing
-  else if (lost) writeSync(2, "kl-tui: lost the session connection\n");
+  else if (lost) writeSync(2, "kl-tui: lost the desk connection\n");
 };
 process.on("exit", done);
-// The bench went away under us: leave rather than render a dead session.
+// The bench went away under us: leave rather than render a dead desk.
 c.exited.then((code) => {
   lost = code !== 0;
   process.exit(lost ? 1 : 0);

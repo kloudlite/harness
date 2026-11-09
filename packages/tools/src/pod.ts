@@ -259,14 +259,14 @@ export async function podHold(ws: string): Promise<void> {
   } catch {}
 }
 
-/** Somebody is using this bench's session (a turn runs, a client is connected): hold it. The API
- * stamps `held-at` on the Session and wakes it if it idled; an awake session keeps its environment
- * up and its members running (owner ruling 2026-10-16: a bench never idles, its session does).
- * Best effort, errors dropped; no `KL_SESSION` means not a bench, nothing to hold. */
-export async function sessionHold(id = process.env.KL_SESSION): Promise<void> {
+/** Somebody is using this bench's desk (a turn runs, a client is connected): hold it. The API
+ * stamps `held-at` on the Desk and wakes it if it idled; an awake desk keeps its environment
+ * up and its members running (owner ruling 2026-10-16: a bench never idles, its desk does).
+ * Best effort, errors dropped; no `KL_DESK` means not a bench, nothing to hold. */
+export async function deskHold(id = process.env.KL_DESK): Promise<void> {
   if (!id) return;
   try {
-    await apiJson("POST", `/v1/sessions/${seg(id)}/hold`);
+    await apiJson("POST", `/v1/desks/${seg(id)}/hold`);
   } catch {}
 }
 

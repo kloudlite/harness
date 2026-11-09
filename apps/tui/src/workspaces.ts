@@ -13,7 +13,7 @@ export type Workspace = {
   status: WorkspaceStatus;
   /**
    * Parent workspace id — set only on ephemeral workspaces. The hierarchy is
-   * exactly three levels: main session › workspaces › ephemeral workspaces
+   * exactly three levels: main desk › workspaces › ephemeral workspaces
    * (spun off a workspace to test something, like a git worktree). The flat
    * list stays in tree order, so a workspace's ephemerals follow it directly.
    */
@@ -58,10 +58,10 @@ export type Service = {
 };
 
 /**
- * An environment is somewhere a working session can plug in: its services, and
+ * An environment is somewhere a working desk can plug in: its services, and
  * nothing else. **Workspaces do not belong to an environment** — they belong to
- * the working session, which carries them whole when it connects elsewhere, so
- * another environment's workspaces can never appear in this session's list.
+ * the working desk, which carries them whole when it connects elsewhere, so
+ * another environment's workspaces can never appear in this desk's list.
  */
 export type Environment = {
   id: string;

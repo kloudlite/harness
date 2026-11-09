@@ -45,9 +45,9 @@ test("events reach listeners", async () => {
   const { a, b } = pair();
   const got: unknown[] = [];
   a.onEvent((ev, key, e) => got.push([ev, key, e]));
-  b.emit("session", "k", { type: "x" });
+  b.emit("desk", "k", { type: "x" });
   await Bun.sleep(5);
-  expect(got).toEqual([["session", "k", { type: "x" }]]);
+  expect(got).toEqual([["desk", "k", { type: "x" }]]);
 });
 
 test("serialises Error", () => {
@@ -58,7 +58,7 @@ test("reassembles a line split inside a multi-byte character", () => {
   const got: unknown[] = [];
   const p = new Peer(() => {});
   p.onEvent((_ev, _k, e) => got.push(e));
-  const bytes = enc.encode(encode({ ev: "session", key: "k", event: "héllo ✓" }));
+  const bytes = enc.encode(encode({ ev: "desk", key: "k", event: "héllo ✓" }));
   const cut = bytes.indexOf(0xc3) + 1; // inside "é"
   p.feed(bytes.slice(0, cut));
   p.feed(bytes.slice(cut));
@@ -70,7 +70,7 @@ test("carries a 4 MB line", () => {
   const p = new Peer(() => {});
   p.onEvent((_ev, _k, e) => got.push(e as string));
   const big = "x".repeat(4 << 20);
-  const bytes = enc.encode(encode({ ev: "session", key: "k", event: big }));
+  const bytes = enc.encode(encode({ ev: "desk", key: "k", event: big }));
   for (let i = 0; i < bytes.length; i += 65536) p.feed(bytes.slice(i, i + 65536));
   expect(got[0]!.length).toBe(4 << 20);
 });
@@ -79,7 +79,7 @@ test("skips a non-JSON line", () => {
   const got: unknown[] = [];
   const p = new Peer(() => {});
   p.onEvent((_ev, _k, e) => got.push(e));
-  p.feed(enc.encode("Debugger attached.\n" + encode({ ev: "session", key: "k", event: 1 })));
+  p.feed(enc.encode("Debugger attached.\n" + encode({ ev: "desk", key: "k", event: 1 })));
   expect(got).toEqual([1]);
 });
 

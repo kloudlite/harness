@@ -2,8 +2,8 @@
 //! speaking ./wire over that connection's socket. The agents live in the daemon's one backend, so
 //! the connection closing disposes this client's VIEWS (`dispose` below), never the agents: a
 //! running turn survives a quit or a dropped connection and a reconnecting client finds it still going
-//! (`session.open` reports `busy`).
-import type { Backend, SessionHandle, ToolSpec } from "./index.ts";
+//! (`desk.open` reports `busy`).
+import type { Backend, DeskHandle, ToolSpec } from "./index.ts";
 import { Peer } from "./wire.ts";
 
 const METHODS = new Set([
@@ -32,18 +32,18 @@ function delta(e: any): unknown {
 }
 
 export function serve(backend: Backend, peer: Peer) {
-  const open = new Map<string, SessionHandle>();
+  const open = new Map<string, DeskHandle>();
 
   peer.handle("hello", () => backend.hello());
 
-  peer.handle("session.open", async ({ key, tools, ...o }: { key: string; tools: ToolSpec[] } & any) => {
+  peer.handle("desk.open", async ({ key, tools, ...o }: { key: string; tools: ToolSpec[] } & any) => {
     // a tool without an object schema would be declared to the model with no usable parameters
     // (a drill client sent `parameters` and lost all 53)
     const bad = tools.find((t: ToolSpec) => (t?.inputSchema as any)?.type !== "object");
     if (bad) throw new Error(`tool ${bad?.name} needs an inputSchema of type "object"`);
     await open.get(key)?.dispose();
     open.delete(key);
-    const h = await backend.session(key, {
+    const h = await backend.desk(key, {
       ...o,
       tools: tools.map((t: ToolSpec) => ({ ...t, run: (input: unknown) => peer.request<string>("tool", { key, name: t.name, input }) })),
       client: true,
@@ -53,17 +53,17 @@ export function serve(backend: Backend, peer: Peer) {
     h.subscribe((event: any) => {
       if (event.type === "message_start") streaming = event.message?.role === "assistant";
       else if (event.type === "message_end") streaming = false;
-      if (event.type !== "message_update") return peer.emit("session", key, event);
-      if (!streaming) return (streaming = true), peer.emit("session", key, { type: "message_update", message: event.message });
+      if (event.type !== "message_update") return peer.emit("desk", key, event);
+      if (!streaming) return (streaming = true), peer.emit("desk", key, { type: "message_update", message: event.message });
       const d = delta(event);
-      if (d) peer.emit("session", key, d);
+      if (d) peer.emit("desk", key, d);
     });
     return { messages: h.messages, busy: h.busy, state: h.state };
   });
 
-  peer.handle("session.call", async ({ key, method, args }: { key: string; method: string; args: unknown[] }) => {
+  peer.handle("desk.call", async ({ key, method, args }: { key: string; method: string; args: unknown[] }) => {
     const h = open.get(key);
-    if (!h) throw new Error(`no session ${key}`);
+    if (!h) throw new Error(`no desk ${key}`);
     if (method === "dispose") {
       open.delete(key);
       return h.dispose();
@@ -73,24 +73,24 @@ export function serve(backend: Backend, peer: Peer) {
   });
 
   for (const [group, ops] of [
-    ["sessions", backend.sessions],
+    ["desks", backend.desks],
     ["fs", backend.fs],
     ["podfs", backend.podfs],
   ] as const)
     for (const [name, fn] of Object.entries(ops)) {
-      if (group === "sessions" && name === "watch") continue; // a stream, not a call: below
+      if (group === "desks" && name === "watch") continue; // a stream, not a call: below
       peer.handle(`${group}.${name}`, (args: unknown[]) => (fn as any)(...args));
     }
 
   // One watch per connection, however often the client asks; the list goes out as an event.
   let unwatch: (() => void) | undefined;
-  peer.handle("sessions.watch", async () => {
+  peer.handle("desks.watch", async () => {
     unwatch?.();
-    unwatch = await backend.sessions.watch((list) => peer.emit("sessions", "*", list));
+    unwatch = await backend.desks.watch((list) => peer.emit("desks", "*", list));
     return true;
   });
 
-  // The bench stream: cards and permission mode, one per connection like sessions.watch.
+  // The bench stream: cards and permission mode, one per connection like desks.watch.
   let unbench: (() => void) | undefined;
   peer.handle("watch", async () => {
     unbench?.();
@@ -103,7 +103,7 @@ export function serve(backend: Backend, peer: Peer) {
   peer.handle("settings.write", (patch) => backend.settings.write(patch));
   peer.handle("team", () => backend.teamView());
   peer.handle("mcp", (msg) => {
-    if (!backend.mcp) throw new Error("this session serves no MCP");
+    if (!backend.mcp) throw new Error("this desk serves no MCP");
     return backend.mcp(msg);
   });
   peer.handle("models.refresh", () => backend.models.refresh());

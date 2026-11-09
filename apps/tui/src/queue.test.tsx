@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { testRender } from "@opentui/react/test-utils";
 import { Queue } from "./components/Queue.tsx";
-import type { QueuedMessage } from "./sessions.ts";
+import type { QueuedMessage } from "./desks.ts";
 
 const msgs: QueuedMessage[] = [
   { text: "also check the redis timeouts", kind: "steer" },

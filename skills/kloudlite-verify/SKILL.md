@@ -1,6 +1,6 @@
 ---
 name: kloudlite-verify
-description: Gives the steps to check code once on Kloudlite: quick checks in a workspace, clean runs in a capsule against the session's environment, one-off scripts, reading what a capsule printed, reviewing a pull request in a real environment, testing two changes together, and cleaning up capsules. Use when the user says "run the unit tests", "check it works", "try it", "run the integration tests against staging", "run this once in a throwaway sandbox", "run this migration once and show me the output", "what did that capsule print", "did it pass", "review PR 42 against a copy of staging", "test my api change with Priya's web change", "clean up my capsules", or "why did the capsule fail". Not for editing code or keeping a server running (use kloudlite-develop), not for tests that repeat nightly, on a push or after a build (use kloudlite-automate), not for why a pipeline run failed (use kloudlite-automate). Read the kloudlite skill first.
+description: Gives the steps to check code once on Kloudlite: quick checks in a workspace, clean runs in a capsule against the desk's environment, one-off scripts, reading what a capsule printed, reviewing a pull request in a real environment, testing two changes together, and cleaning up capsules. Use when the user says "run the unit tests", "check it works", "try it", "run the integration tests against staging", "run this once in a throwaway sandbox", "run this migration once and show me the output", "what did that capsule print", "did it pass", "review PR 42 against a copy of staging", "test my api change with Priya's web change", "clean up my capsules", or "why did the capsule fail". Not for editing code or keeping a server running (use kloudlite-develop), not for tests that repeat nightly, on a push or after a build (use kloudlite-automate), not for why a pipeline run failed (use kloudlite-automate). Read the kloudlite skill first.
 ---
 
 # Verify on Kloudlite
@@ -17,19 +17,19 @@ A check in a workspace uses the workspace's files and changes nothing. A capsule
 **Steps:**
 1. Orient. Find the workspace that holds the code (`workspace` action `list`); it must be `ready`.
 2. `exec` {"workspace": "ws-…", "cmd": "npm test", "cwd": "api", "tail": 60, "quiet": true}. The call waits and answers the exit code.
-3. If the tests need a service (`db`), the workspace must be managed in a session with the environment (`kloudlite-develop`, scenario 3), or use scenario 2.
+3. If the tests need a service (`db`), the workspace must be managed in a desk with the environment (`kloudlite-develop`, scenario 3), or use scenario 2.
 
 **Done when:** the exit code is 0, or you told the user which tests failed with the lines that show it.
-**If it fails:** a command still running after 25 s answers `promoted: true` with a process `id`: call `process` action `wait` with that `id` (and `since`/`since_err` = `next`/`next_err`) until `state` is `exited`; `exit_code` is the result. A name that does not resolve: the workspace is not in the session.
+**If it fails:** a command still running after 25 s answers `promoted: true` with a process `id`: call `process` action `wait` with that `id` (and `since`/`since_err` = `next`/`next_err`) until `state` is `exited`; `exit_code` is the result. A name that does not resolve: the workspace is not in the desk.
 **Then:** scenario 2 for a clean run.
 
 ### 2. Clean run in a capsule against the environment
 
 **Trigger:** "run the integration tests against staging".
 **Steps:**
-1. `session` action `current`: the session needs an environment. `env` action `get`: service names and ports.
+1. `desk` action `current`: the desk needs an environment. `env` action `get`: service names and ports.
 2. A capsule starts empty, so it gets the code with `git clone` through the connector (`connector_list` must show a code host). It tests what is pushed: the branch must be on the remote. For uncommitted work, add `"from_workspace": "ws-…"` to `capsule` action `create` (the capsule starts as that workspace's current files, so no clone is needed), or use scenario 1.
-3. `capsule` {"action": "create", "command": "git clone --branch main https://github.com/acme/api api && cd api && npm ci && npm run test:integration", "packages": ["git", "nodejs@22"], "variables": {"DATABASE_URL": "postgres://postgres@db:5432/postgres"}, "lifetime_s": 1800}. It runs in the session, so it reaches `db`. Note the id `cap-…`. A secret is `"${{ secrets.NAME }}"` as the whole value of a variable, never a value.
+3. `capsule` {"action": "create", "command": "git clone --branch main https://github.com/acme/api api && cd api && npm ci && npm run test:integration", "packages": ["git", "nodejs@22"], "variables": {"DATABASE_URL": "postgres://postgres@db:5432/postgres"}, "lifetime_s": 1800}. It runs in the desk, so it reaches `db`. Note the id `cap-…`. A secret is `"${{ secrets.NAME }}"` as the whole value of a variable, never a value.
 4. `capsule` {"action": "wait", "capsule": "cap-…", "timeout_ms": 900000}. On `timed_out: true`, wait again.
 5. `capsule` {"action": "logs", "capsule": "cap-…"}, then `capsule` action `get`: read `exit_code`.
 
@@ -65,10 +65,10 @@ A check in a workspace uses the workspace's files and changes nothing. A capsule
 **Shape:** 4.
 **Steps:**
 1. `env` {"action": "create", "source": "env-staging…", "name": "shop-pr-42", "wait": true}.
-2. `session` {"action": "create", "name": "review-42", "environment": "env-copy…"} so the user's session does not move, and `session` {"action": "use", "name": "review-42"} to drive it and back at the end. In the harness (no `session` action `use`) `workspace` action `create` always lands in the current session, which may be on staging: do not create the review workspace there. Tell the user to open `review-42`, and stop.
-3. A review workspace in that session: `workspace` {"action": "create", "name": "api-pr-42", …}; clone the repo; `exec` {"cmd": "git fetch origin pull/42/head:pr-42 && git switch pr-42"} (GitLab: `merge-requests/42/head`).
-4. Run the tests (scenario 1) or `capsule` action `create` in the review session (scenario 2, with `git fetch origin pull/42/head:pr-42 && git switch pr-42` after the clone). For a behaviour check, `intercept` the changed service from the review workspace, drive requests, then `intercept` action `stop`.
-5. Tell the user the result. Delete what you made, after the user says yes: `workspace` action `delete`, `session` {"action": "delete", "session": "review-42"}, `env` action `delete` of the copy. The user's own workspace and session stay as they were.
+2. `desk` {"action": "create", "name": "review-42", "environment": "env-copy…"} so the user's desk does not move, and `desk` {"action": "use", "name": "review-42"} to drive it and back at the end. In the harness (no `desk` action `use`) `workspace` action `create` always lands in the current desk, which may be on staging: do not create the review workspace there. Tell the user to open `review-42`, and stop.
+3. A review workspace in that desk: `workspace` {"action": "create", "name": "api-pr-42", …}; clone the repo; `exec` {"cmd": "git fetch origin pull/42/head:pr-42 && git switch pr-42"} (GitLab: `merge-requests/42/head`).
+4. Run the tests (scenario 1) or `capsule` action `create` in the review desk (scenario 2, with `git fetch origin pull/42/head:pr-42 && git switch pr-42` after the clone). For a behaviour check, `intercept` the changed service from the review workspace, drive requests, then `intercept` action `stop`.
+5. Tell the user the result. Delete what you made, after the user says yes: `workspace` action `delete`, `desk` {"action": "delete", "desk": "review-42"}, `env` action `delete` of the copy. The user's own workspace and desk stay as they were.
 
 **Done when:** the user has the branch's result against the copy and the copy is deleted or kept by the user's choice.
 **If it fails:** `no git connector of OWNER covers HOST/REPO`: the web console. The copy does not come up: `message` of the failing service in `env` action `get`.
@@ -78,12 +78,12 @@ A check in a workspace uses the workspace's files and changes nothing. A capsule
 **Trigger:** "test my api change with Priya's web change".
 **Shape:** 3.
 **Steps:**
-1. Both changes run in the same environment. Your session intercepts `api` from your workspace. Priya's session intercepts `web` from hers. Check with `env` action `get` that `interceptedBy` shows both. Never take her service: one workspace per service.
-2. Drive a request through `web` to `api`: `exec` {"cmd": "curl -fsS http://web:3000/orders"} in your workspace, or `capsule` action `create` in the session.
+1. Both changes run in the same environment. Your desk intercepts `api` from your workspace. Priya's desk intercepts `web` from hers. Check with `env` action `get` that `interceptedBy` shows both. Never take her service: one workspace per service.
+2. Drive a request through `web` to `api`: `exec` {"cmd": "curl -fsS http://web:3000/orders"} in your workspace, or `capsule` action `create` in the desk.
 3. Read both processes' output. Stop yours when done (`intercept` action `stop`); she stops hers.
 
 **Done when:** the request crossed both changes and you told the user the result.
-**If it fails:** the intercept is refused with her session's name: ask her to stop it, or copy the environment (`env` action `create`). An intercept is environment-wide: warn the user that every caller, hers included, reaches your workspace.
+**If it fails:** the intercept is refused with her desk's name: ask her to stop it, or copy the environment (`env` action `create`). An intercept is environment-wide: warn the user that every caller, hers included, reaches your workspace.
 
 ### 7. Clean up
 
@@ -94,13 +94,13 @@ A check in a workspace uses the workspace's files and changes nothing. A capsule
 3. A running standalone one: `capsule` action `delete`. An ended one: `capsule` action `delete` (removes its record).
 
 **Done when:** the named capsules are ended or deleted.
-**If it fails:** `409 SBX is managed by session NAME; use the session`: it ends with its command, its limit, or the session. Wait, or delete the session only if the user asks.
+**If it fails:** `409 SBX is managed by desk NAME; use the desk`: it ends with its command, its limit, or the desk. Wait, or delete the desk only if the user asks.
 
 ## Rules
 
 - Obey the safety rules of the `kloudlite` skill.
 - Give `lifetime_s` always. A capsule that never ends holds quota to its limit.
-- Create capsules in the session when the command needs services. A standalone one reaches no environment.
+- Create capsules in the desk when the command needs services. A standalone one reaches no environment.
 - Give tools with `packages`. Never run a server in a capsule to stand in for a service.
 - A capsule cannot intercept. To receive a service's traffic, use a workspace (`kloudlite-develop`).
-- Delete a copy of an environment or a review session only when the user says so.
+- Delete a copy of an environment or a review desk only when the user says so.

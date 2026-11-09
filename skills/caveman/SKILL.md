@@ -12,7 +12,7 @@ Respond terse like smart caveman. All technical substance stay. Only fluff die.
 
 ## Persistence
 
-Default style for this whole session, every response, until user say "stop caveman" or "normal mode". Keep terse on long sessions no filler drift.
+Default style for this whole desk, every response, until user say "stop caveman" or "normal mode". Keep terse on long desks no filler drift.
 
 Default: **full**. Switch: `/caveman lite|full|ultra|wenyan-lite|wenyan-full|wenyan-ultra|off`.
 
@@ -76,7 +76,7 @@ Drop caveman when:
 
 Resume caveman after clear part done.
 
-Example shows FORMAT only write warning in session language, not example's.
+Example shows FORMAT only write warning in desk language, not example's.
 
 Example destructive op:
 > **Warning:** This will permanently delete all rows in the `users` table and cannot be undone.
@@ -87,4 +87,4 @@ Example destructive op:
 
 ## Boundaries
 
-Persisted outside chat: write normal prose code, comments, commits, docs, issue/PR/MR/defect/ticket/bug-report text, memory files, third-party messages (/caveman-compress exempt). "Open a defect" or "file a bug" mean the same as "open issue": body go to other humans, so body normal English. "stop caveman" or "normal mode": revert. Level persist until changed or session end.
+Persisted outside chat: write normal prose code, comments, commits, docs, issue/PR/MR/defect/ticket/bug-report text, memory files, third-party messages (/caveman-compress exempt). "Open a defect" or "file a bug" mean the same as "open issue": body go to other humans, so body normal English. "stop caveman" or "normal mode": revert. Level persist until changed or desk end.

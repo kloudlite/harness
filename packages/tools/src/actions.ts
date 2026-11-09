@@ -10,7 +10,7 @@ export type Action = {
   properties: Props;
   required: string[];
   run: (a: any) => Promise<string>;
-  /** Keys where an explicit `null` is a value (`session use` with `environment: null` disconnects), not "omitted". */
+  /** Keys where an explicit `null` is a value (`desk use` with `environment: null` disconnects), not "omitted". */
   nulls?: string[];
   /** Unlisted spellings read as the listed key (`{snapshot_id: "source"}`): kept out of the schema on purpose. */
   alias?: Record<string, string>;
@@ -45,7 +45,7 @@ export function failure(message: string, schema?: unknown): Error {
   return new Error(JSON.stringify({ error: message, ...(hint ? { hint } : {}), ...(schema ? { schema } : {}) }));
 }
 
-/** Same property in several actions: one schema, and one description that names who reads what ("the new name (create); the session to pick (use)"). */
+/** Same property in several actions: one schema, and one description that names who reads what ("the new name (create); the desk to pick (use)"). */
 function merge(name: string, k: string, uses: { act: string; v: any }[], every: number): unknown {
   const bare = (v: any) => JSON.stringify({ ...v, description: undefined });
   if (uses.some((u) => bare(u.v) !== bare(uses[0]!.v))) throw new Error(`${name}: property \`${k}\` has two schemas (action ${uses.find((u) => bare(u.v) !== bare(uses[0]!.v))!.act})`);

@@ -23,7 +23,7 @@ export function HintBar({
   queued: number;
   /** Permission mode; only shown when it is not "default". */
   permMode?: string;
-  /** The connected environment. The session you are in is on the prompt card. */
+  /** The connected environment. The desk you are in is on the prompt card. */
   active: string;
   inWorkspace: boolean;
   normal: boolean;

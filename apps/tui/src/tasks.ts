@@ -1,14 +1,14 @@
-//! The Plan panel's view of the boards (components/Plan.tsx, the ^g screen): one board per session,
-//! drawn as a tree under each session's name. Only open work: a task hangs under its first dependency
+//! The Plan panel's view of the boards (components/Plan.tsx, the ^g screen): one board per desk,
+//! drawn as a tree under each desk's name. Only open work: a task hangs under its first dependency
 //! still open, the others show as "waits"; finished tasks leave (^q lists them) and messages are chat
-//! cards, never plan rows. Main sees every session with something open; a workspace sees only itself. Pure so grouping, tree and fold are tested without a renderer. Processes live
+//! cards, never plan rows. Main sees every desk with something open; a workspace sees only itself. Pure so grouping, tree and fold are tested without a renderer. Processes live
 //! on the Jobs screen (^j), not here.
 import type { BoardTask } from "./wire/index.ts";
 
-export type Board = { session: string; tasks: BoardTask[] };
+export type Board = { desk: string; tasks: BoardTask[] };
 export type Tone = "accent" | "muted" | "error" | "success" | "warning";
 /** One drawn line: guides + text on the left, a state column on the right. */
-export type PlanRow = { text: string; right?: string; tone?: Tone; head?: boolean; live?: boolean; task?: BoardTask; session?: string };
+export type PlanRow = { text: string; right?: string; tone?: Tone; head?: boolean; live?: boolean; task?: BoardTask; desk?: string };
 
 const ICON: Record<BoardTask["state"], [string, Tone]> = {
   running: ["●", "accent"],
@@ -19,16 +19,16 @@ const ICON: Record<BoardTask["state"], [string, Tone]> = {
 };
 
 /** The finished tasks of the view, newest first: the ^q screen. */
-export type DoneTask = BoardTask & { session: string; name: string };
+export type DoneTask = BoardTask & { desk: string; name: string };
 export function doneTasks(boards: Board[], names: (key: string) => string, view: string): DoneTask[] {
   return boards
-    .filter((b) => view === "main" || b.session === view)
-    .flatMap((b) => b.tasks.filter((t) => t.state === "done").map((t) => ({ ...t, session: b.session, name: names(b.session) })))
+    .filter((b) => view === "main" || b.desk === view)
+    .flatMap((b) => b.tasks.filter((t) => t.state === "done").map((t) => ({ ...t, desk: b.desk, name: names(b.desk) })))
     .sort((a, b) => b.created - a.created);
 }
 
 /**
- * Rows of the Plan panel and the ^g screen: only work still open. `view` is "main" (every session with
+ * Rows of the Plan panel and the ^g screen: only work still open. `view` is "main" (every desk with
  * open work) or a workspace id (its own board). `status` is the header's word (working / needs you /
  * idle). Finished tasks leave (^q lists them) and messages live in the chat as cards, never here.
  * More than `max` rows fold to the running and blocked ones and `+n more · ^g plan`.
@@ -42,19 +42,19 @@ export function planRows(
 ): PlanRow[] {
   type Cand = PlanRow & { must?: boolean };
   const out: Cand[] = [];
-  for (const b of boards.filter((b) => view === "main" || b.session === view)) {
+  for (const b of boards.filter((b) => view === "main" || b.desk === view)) {
     const open = b.tasks.filter((t) => t.state !== "done");
     if (!open.length) continue;
     const ids = new Set(open.map((t) => t.id));
     // a task hangs under its first dependency still open; a cycle has no root and is not drawn
     const parentOf = (t: BoardTask) => t.dependsOn.find((d) => ids.has(d));
     const kids = (t: BoardTask) => open.filter((c) => parentOf(c) === t.id);
-    out.push({ text: names(b.session), right: status(b.session), head: true });
+    out.push({ text: names(b.desk), right: status(b.desk), head: true });
     const draw = (t: BoardTask, prefix: string, cont: string) => {
       const [icon, tone] = ICON[t.state];
       const blockers = t.state === "queued" ? t.dependsOn.filter((d) => ids.has(d)) : [];
       const right = t.state === "running" ? "working" : blockers.length ? `waits ${blockers.join(", ")}` : t.state;
-      out.push({ text: `${prefix}${icon} ${t.id} ${t.note?.startsWith("ask:") ? `${names(t.note.slice(4))}: ${t.title}` : t.title}`, right, tone, live: t.state === "running", must: t.state !== "queued", task: t, session: names(b.session) });
+      out.push({ text: `${prefix}${icon} ${t.id} ${t.note?.startsWith("ask:") ? `${names(t.note.slice(4))}: ${t.title}` : t.title}`, right, tone, live: t.state === "running", must: t.state !== "queued", task: t, desk: names(b.desk) });
       const k = kids(t);
       k.forEach((c, i) => draw(c, cont + (i === k.length - 1 ? "└─ " : "├─ "), cont + (i === k.length - 1 ? "   " : "│  ")));
     };

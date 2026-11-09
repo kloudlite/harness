@@ -12,7 +12,7 @@ afterEach(() => clearUnusable("huggingface"));
 
 // App reads its settings from hello() once at mount, so tests seed them by re-booting.
 // A fresh backend each time: a turn left pending by the previous test (no auth, it never ends)
-// would otherwise open the next test's session as busy, which the app now honours.
+// would otherwise open the next test's desk as busy, which the app now honours.
 function writeSettings(patch: Record<string, unknown>) {
   const fresh = new LocalBackend();
   fresh.teamView = backend().teamView;
@@ -53,10 +53,10 @@ async function mount(opts?: { vim?: "on" | "off" }) {
     await tick();
     await setup.renderOnce();
   };
-  /** The prompt card's session row alone — the sidebar names workspaces too. */
+  /** The prompt card's desk row alone — the sidebar names workspaces too. */
   const path = async () => {
     const lines = (await frame()).split("\n").filter((l) => l.trim() !== "");
-    // the row under the input: "<session> · <model> <provider>"
+    // the row under the input: "<desk> · <model> <provider>"
     return lines.filter((l) => l.includes(" \u00b7 ")).pop()?.trim() ?? "";
   };
   return { ...setup, frame, path, insert, done: () => setup.renderer.destroy() };
@@ -65,7 +65,7 @@ async function mount(opts?: { vim?: "on" | "off" }) {
 test("sidebar renders", async () => {
   const t = await mount();
   const f = await t.frame();
-  expect(f).toContain("Working Session");
+  expect(f).toContain("Working Desk");
   expect(f).toContain("api-gateway");
   expect(f).toContain("NORMAL"); // modal keyboard starts in NORMAL
   t.done();
@@ -89,7 +89,7 @@ test("card keeps its shape after submit", async () => {
   t.mockInput.pressKey("RETURN");
   const f = await t.frame();
   expect(f.trimEnd().split("\n").length).toBeLessThanOrEqual(ROWS);
-  expect(f).toContain("Working Session"); // session row still in place
+  expect(f).toContain("Working Desk"); // desk row still in place
   expect(f).toContain("hi"); // user turn in the transcript
   t.done();
 });
@@ -148,7 +148,7 @@ test("shift+enter inserts a newline instead of submitting", async () => {
   t.done();
 });
 
-test("input history is per session and recalled with arrows", async () => {
+test("input history is per desk and recalled with arrows", async () => {
   const t = await mount();
   await t.insert();
   await t.mockInput.typeText("first prompt");
@@ -156,13 +156,13 @@ test("input history is per session and recalled with arrows", async () => {
   t.mockInput.pressKey("RETURN");
   await t.frame();
 
-  // main session: up recalls
+  // main desk: up recalls
   t.mockInput.pressKey("ARROW_UP");
   expect(await t.frame()).toContain("first prompt");
   t.mockInput.pressKey("ARROW_DOWN"); // back to empty
   await t.frame();
 
-  // workspace session has its own (empty) history — up recalls nothing
+  // workspace desk has its own (empty) history — up recalls nothing
   t.mockInput.pressKey("ESCAPE"); // INSERT → NORMAL
   await t.frame();
   t.mockInput.pressKey("j");
@@ -205,29 +205,29 @@ test("a terminal below 80x24 gets a size message instead of a broken layout", as
   ok.renderer.destroy();
 });
 
-test("/session name names the session you are in", async () => {
+test("/desk name names the desk you are in", async () => {
   const t = await mount();
   await t.insert();
-  await t.mockInput.typeText("/session name rate limits");
+  await t.mockInput.typeText("/desk name rate limits");
   await t.frame();
   t.mockInput.pressKey("RETURN");
   const f = await t.frame();
-  expect(f).toContain("rate limits"); // hint bar path: the main session alone
-  expect(f).toContain("rate limits"); // sidebar root row is the session
+  expect(f).toContain("rate limits"); // hint bar path: the main desk alone
+  expect(f).toContain("rate limits"); // sidebar root row is the desk
   t.done();
 });
 
-test("workspaces carry their own named sessions", async () => {
+test("workspaces carry their own named desks", async () => {
   const t = await mount();
   t.mockInput.pressKey("1"); // into api-gateway
   await t.frame();
   await t.insert();
-  await t.mockInput.typeText("/session name probe run");
+  await t.mockInput.typeText("/desk name probe run");
   await t.frame();
   t.mockInput.pressKey("RETURN");
   const f = await t.frame();
   expect(f).toContain("probe run"); // the title bar and that workspace's row
-  // the path stays the workspace alone — it does not repeat the session name
+  // the path stays the workspace alone — it does not repeat the desk name
   expect(await t.path()).not.toContain("probe run");
   t.done();
 });
@@ -285,10 +285,10 @@ test("processes view: section headers with counts, crashed row, filter, follow",
   t.done();
 });
 
-test("sidebar: session header, workspaces with their ephemerals, environment with its services", async () => {
+test("sidebar: desk header, workspaces with their ephemerals, environment with its services", async () => {
   const t = await mount();
   const f = await t.frame();
-  expect(f).toContain("✦ "); // session header (title depends on earlier prompts)
+  expect(f).toContain("✦ "); // desk header (title depends on earlier prompts)
   expect(f).toContain("Workspaces");
   expect(f).toContain("api-gateway");
   expect(f).toMatch(/├ rate-limits-probe/); // ephemeral workspaces branch off it
@@ -313,11 +313,11 @@ test("clicking an ephemeral row enters that workspace", async () => {
   t.done();
 });
 
-test("session title bar: the title is inherited, never derived from a prompt", async () => {
+test("desk title bar: the title is inherited, never derived from a prompt", async () => {
   const t = await mount();
-  // the main context is the working session
-  expect((await t.frame()).split("\n")[1]).toContain("Working Session");
-  t.mockInput.pressKey("1"); // api-gateway — the workspace names its session
+  // the main context is the working desk
+  expect((await t.frame()).split("\n")[1]).toContain("Working Desk");
+  t.mockInput.pressKey("1"); // api-gateway — the workspace names its desk
   expect((await t.frame()).split("\n")[1]).toContain("api-gateway");
   t.mockInput.pressKey("2"); // its ephemeral agent names its own
   expect((await t.frame()).split("\n")[1]).toContain("rate-limits-probe");
@@ -371,7 +371,7 @@ test("the TUI registers no tools: question is the daemon's", async () => {
   expect(tools.map((t) => t.name)).toEqual([]);
 });
 
-// Permission mode is per-session chrome: shift+tab cycles it and only a
+// Permission mode is per-desk chrome: shift+tab cycles it and only a
 // non-default mode shows, so the ordinary case stays quiet.
 // Typing "/" opens the command overlay; deleting it back out has to close it,
 // or the menu outlives the slash that opened it.
@@ -417,7 +417,7 @@ test("toggling codemode writes the setting and leaves the rebuild to the daemon"
   boot(
     wrap(real, {
       settings: { write: async (p: Record<string, unknown>) => void writes.push(p) },
-      session: async (key, opts) => (opens.push(key), real.session(key, opts)),
+      desk: async (key, opts) => (opens.push(key), real.desk(key, opts)),
     }),
     { ...hello(), settings: { ...hello().settings, vim: "on", codemode: "on" } },
   );
@@ -442,7 +442,7 @@ test("toggling codemode writes the setting and leaves the rebuild to the daemon"
 
 // The daemon disposes an idle or rebuilt agent and tells the client; the dead handle must not be
 // reused, so the next prompt opens a fresh one.
-test("session_closed makes the next prompt reopen the session", async () => {
+test("desk_closed makes the next prompt reopen the desk", async () => {
   const real = backend();
   let opens = 0;
   let fire: (e: any) => void = () => {};
@@ -452,9 +452,9 @@ test("session_closed makes the next prompt reopen the session", async () => {
     }) as T;
   boot(
     wrap(real, {
-      session: async (key, opts) => {
+      desk: async (key, opts) => {
         opens++;
-        const h = await real.session(key, opts);
+        const h = await real.desk(key, opts);
         return wrap(h, { subscribe: (cb) => ((fire = cb as any), h.subscribe(cb)) });
       },
     }),
@@ -464,7 +464,7 @@ test("session_closed makes the next prompt reopen the session", async () => {
   for (let i = 0; i < 10 && opens < 1; i++) await tick();
   await tick();
   expect(opens).toBe(1);
-  fire({ type: "session_closed", reopen: false });
+  fire({ type: "desk_closed", reopen: false });
   await tick();
   setup.mockInput.pressKey("i");
   await tick();
@@ -477,7 +477,7 @@ test("session_closed makes the next prompt reopen the session", async () => {
   boot(real, hello());
 });
 
-// A reopened session carries tool results as separate `toolResult` messages; the
+// A reopened desk carries tool results as separate `toolResult` messages; the
 // transcript has to fold each into its tool entry or every restored tool looks empty.
 async function restored(messages: unknown[]) {
   const real = backend();
@@ -487,8 +487,8 @@ async function restored(messages: unknown[]) {
     }) as T;
   boot(
     wrap(real, {
-      session: async (key, opts) => {
-        const h = await real.session(key, opts);
+      desk: async (key, opts) => {
+        const h = await real.desk(key, opts);
         return wrap(h, { messages: messages as any });
       },
     }),
@@ -506,7 +506,7 @@ async function restored(messages: unknown[]) {
   return f;
 }
 
-const codemodeSession = (code: string, result: string, isError: boolean) => [
+const codemodeDesk = (code: string, result: string, isError: boolean) => [
   { role: "user", content: [{ type: "text", text: "run it" }] },
   {
     role: "assistant",
@@ -521,27 +521,27 @@ const codemodeSession = (code: string, result: string, isError: boolean) => [
   },
 ];
 
-test("a restored session shows each tool's result", async () => {
-  const f = await restored(codemodeSession("return 1;", "RESULT-MARKER", false));
+test("a restored desk shows each tool's result", async () => {
+  const f = await restored(codemodeDesk("return 1;", "RESULT-MARKER", false));
   expect(f).toContain("RESULT-MARKER");
 });
 
-test("a restored session shows what a codemode script displayed", async () => {
-  const msgs = codemodeSession("return 1;", "shown", false);
+test("a restored desk shows what a codemode script displayed", async () => {
+  const msgs = codemodeDesk("return 1;", "shown", false);
   (msgs[2] as any).details = { display: ["| hcol | hval |\n|---|---|\n| DISP-MARKER | 2 |"] };
   const f = await restored(msgs);
   expect(f).toContain("DISP-MARKER");
 });
 
-test("a restored session shows a failed tool's error", async () => {
-  const f = await restored(codemodeSession("return 1;", "ERROR-MARKER boom", true));
+test("a restored desk shows a failed tool's error", async () => {
+  const f = await restored(codemodeDesk("return 1;", "ERROR-MARKER boom", true));
   expect(f).toContain("ERROR-MARKER boom");
 });
 
 test("a long codemode script's expander counts the script's hidden rows, not just the output's", async () => {
   // COLLAPSE_MAX is 10 in Transcript.tsx; 15 short rows hide 5
   const code = Array.from({ length: 15 }, (_, i) => `const v${i} = ${i};`).join("\n");
-  const f = await restored(codemodeSession(code, "ok", false));
+  const f = await restored(codemodeDesk(code, "ok", false));
   expect(f).not.toContain("+0 lines");
   expect(f).toContain("+5 lines");
 });
@@ -604,14 +604,14 @@ test("dragging over log lines selects the log text (not the gutter) and copies i
   t.done();
 });
 
-/** A session whose turn never ends, so /btw is exercised mid-turn and abort is observable. */
-function btwSession(calls: { btw: string[]; abort: number; prompt: string[] }, reply: () => Promise<string>) {
+/** A desk whose turn never ends, so /btw is exercised mid-turn and abort is observable. */
+function btwDesk(calls: { btw: string[]; abort: number; prompt: string[] }, reply: () => Promise<string>) {
   const noop = async () => {};
   const h: any = new Proxy(
     {
       messages: [],
       busy: false,
-      state: { type: "session_state", model: hello().defaultModel, thinkingLevel: "medium", autoCompact: true, codemode: true, queued: { steering: [], followUp: [] } },
+      state: { type: "desk_state", model: hello().defaultModel, thinkingLevel: "medium", autoCompact: true, codemode: true, queued: { steering: [], followUp: [] } },
       subscribe: () => () => {},
       btw: async (q: string) => (calls.btw.push(q), reply()),
       abort: async () => void calls.abort++,
@@ -622,21 +622,21 @@ function btwSession(calls: { btw: string[]; abort: number; prompt: string[] }, r
   return h;
 }
 
-/** The session opens asynchronously; wait for the app to reach it. */
+/** The desk opens asynchronously; wait for the app to reach it. */
 async function until(t: { frame(): Promise<string> }, ok: () => boolean) {
   for (let i = 0; i < 30 && !ok(); i++) await t.frame();
 }
 
 async function withBtw(reply: () => Promise<string>, run: (t: Awaited<ReturnType<typeof mount>>, calls: { btw: string[]; abort: number; prompt: string[] }) => Promise<void>) {
   const calls = { btw: [] as string[], abort: 0, prompt: [] as string[] };
-  const orig = LocalBackend.prototype.session;
-  LocalBackend.prototype.session = (async () => btwSession(calls, reply)) as any;
+  const orig = LocalBackend.prototype.desk;
+  LocalBackend.prototype.desk = (async () => btwDesk(calls, reply)) as any;
   try {
     const t = await mount({ vim: "off" });
     await run(t, calls);
     t.done();
   } finally {
-    LocalBackend.prototype.session = orig;
+    LocalBackend.prototype.desk = orig;
   }
 }
 
@@ -689,14 +689,14 @@ test("jobs row says running when the pod gave no start time", async () => {
 });
 
 
-/** A busy session: agent_start is announced on subscribe, so the next enter is mid-turn. */
-function busySession(calls: { route: string[]; steer: string[]; followUp: string[] }, route: () => Promise<any>) {
+/** A busy desk: agent_start is announced on subscribe, so the next enter is mid-turn. */
+function busyDesk(calls: { route: string[]; steer: string[]; followUp: string[] }, route: () => Promise<any>) {
   const noop = async () => {};
   return new Proxy(
     {
       messages: [],
       busy: true,
-      state: { type: "session_state", model: hello().defaultModel, thinkingLevel: "medium", autoCompact: true, codemode: true, queued: { steering: [], followUp: [] } },
+      state: { type: "desk_state", model: hello().defaultModel, thinkingLevel: "medium", autoCompact: true, codemode: true, queued: { steering: [], followUp: [] } },
       subscribe: (cb: any) => (cb({ type: "agent_start" }), () => {}),
       route: async (t: string) => (calls.route.push(t), route()),
       steer: async (t: string) => void calls.steer.push(t),
@@ -708,14 +708,14 @@ function busySession(calls: { route: string[]; steer: string[]; followUp: string
 
 async function withBusy(route: () => Promise<any>, run: (t: Awaited<ReturnType<typeof mount>>, calls: { route: string[]; steer: string[]; followUp: string[] }) => Promise<void>) {
   const calls = { route: [] as string[], steer: [] as string[], followUp: [] as string[] };
-  const orig = LocalBackend.prototype.session;
-  LocalBackend.prototype.session = (async () => busySession(calls, route)) as any;
+  const orig = LocalBackend.prototype.desk;
+  LocalBackend.prototype.desk = (async () => busyDesk(calls, route)) as any;
   try {
     const t = await mount({ vim: "off" });
     await run(t, calls);
     t.done();
   } finally {
-    LocalBackend.prototype.session = orig;
+    LocalBackend.prototype.desk = orig;
   }
 }
 
@@ -734,7 +734,7 @@ async function mountUnconnected(connected: string[]) {
         providers: async () => (await real.auth.providers()).map((a) => ({ ...a, ok: connected.includes(a.provider) })),
       }),
     }),
-    // the session starts on DEFAULT_MODEL, fixed at import, so "unconnected" is whatever it is not
+    // the desk starts on DEFAULT_MODEL, fixed at import, so "unconnected" is whatever it is not
     { ...hello(), settings: { ...hello().settings, vim: "off" } },
   );
   const setup = await testRender(<App />, { width: COLS, height: ROWS, kittyKeyboard: true });
@@ -756,10 +756,10 @@ test("prompt refusal: with nothing usable the message is not sent and stays in t
   boot(real, hello());
 });
 
-// The whole repair chain on one session: start moves off an unconnected model, a 403 leaves the
-// only connected provider blocked, and connecting another provider moves the session onto it.
+// The whole repair chain on one desk: start moves off an unconnected model, a 403 leaves the
+// only connected provider blocked, and connecting another provider moves the desk onto it.
 // The agent-event subscription is made once; a /model picked afterwards must still count when a
-// 403 arrives, or the notice claims a switch the session never made.
+// 403 arrives, or the notice claims a switch the desk never made.
 // A token that resolves but has no inference permission is found by the scope probe at start, so
 // /model shows it as a blocked, reconnectable provider before any prompt has failed.
 // An automatic switch stays on screen with the way back; /model undo reverses exactly it.

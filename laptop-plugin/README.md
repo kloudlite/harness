@@ -1,8 +1,8 @@
 # Kloudlite plugin for Claude Code
 
-Gives Claude Code the Kloudlite skills and the session's tools.
+Gives Claude Code the Kloudlite skills and the desk's tools.
 
-Needs no `kloudlite` binary: the MCP server is `https://dev.kloudlite.io/mcp`. The first tool call opens the browser sign-in, and the consent page picks the teams; the agent picks or creates the session.
+Needs no `kloudlite` binary: the MCP server is `https://dev.kloudlite.io/mcp`. The first tool call opens the browser sign-in, and the consent page picks the teams; the agent picks or creates the desk.
 
 ## Install
 

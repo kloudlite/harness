@@ -20,8 +20,8 @@ export type Settings = {
   defaultModel?: ModelRef; theme?: string; sidebar?: "show" | "hide"; sidebarWidth?: number; thinking?: "show" | "hide";
   thinkingLevel?: ThinkingLevel; autoCompact?: "on" | "off"; codemode?: "on" | "off"; vim?: "on" | "off";
 };
-export type SessionMeta = { key: string; name?: string; description?: string; updated: number };
-export type LiveSessionMeta = SessionMeta & { busy: boolean };
+export type DeskMeta = { key: string; name?: string; description?: string; updated: number };
+export type LiveDeskMeta = DeskMeta & { busy: boolean };
 export type LoginOption = { provider: string; type: AuthType; label: string };
 export type ProviderAuth = {
   provider: string;
@@ -35,7 +35,7 @@ export type LoginType = AuthType;
 /** pi's `AuthInteraction`: `{ signal?, prompt(p): Promise<string>, notify(e): void }`. */
 export type LoginUi = AuthInteraction;
 export type CatalogModel = { provider: string; id: string; name: string; input: string[] };
-/** What the sidebar shows, read by the bench from the platform (./session). JSON-safe: it crosses the websocket. */
+/** What the sidebar shows, read by the bench from the platform (./desk). JSON-safe: it crosses the websocket. */
 export type TeamProcess = { id: string; tree?: string; cmd: string; state: string; exit_code?: number | null; failed?: boolean; started_at?: string; logs: { text: string; err?: true }[] };
 export type TeamWorkspace = {
   id: string;
@@ -44,7 +44,7 @@ export type TeamWorkspace = {
   state: string;
   repo?: string;
   branch?: string;
-  /** The environment the workspace's session connects it to, if any. */
+  /** The environment the workspace's desk connects it to, if any. */
   environment?: string;
   parent?: string;
   task?: string;
@@ -61,21 +61,21 @@ export type TeamEnvironment = {
   snapshot?: string;
 };
 export type TaskState = "queued" | "running" | "blocked" | "done" | "failed";
-export type BoardTask = { id: string; title: string; priority: number; dependsOn: string[]; state: TaskState; note?: string; /** What changed and where; with `verified`, required to mark done (tasks.ts). */ summary?: string; verified?: string; /** Set when the board watcher (watch.ts) moved the task, not the session; any session write clears it. */ by?: "watcher"; created: number };
+export type BoardTask = { id: string; title: string; priority: number; dependsOn: string[]; state: TaskState; note?: string; /** What changed and where; with `verified`, required to mark done (tasks.ts). */ summary?: string; verified?: string; /** Set when the board watcher (watch.ts) moved the task, not the desk; any desk write clears it. */ by?: "watcher"; created: number };
 export type TeamView = {
   available: boolean;
   error?: string;
   user: string;
   workspaces: TeamWorkspace[];
   environments: TeamEnvironment[];
-  /** The session's environment (`KL_ENVIRONMENT`). */
+  /** The desk's environment (`KL_ENVIRONMENT`). */
   connected?: string;
-  /** Every session's own board, main first; only the local backend fills it. */
-  boards?: { session: string; tasks: BoardTask[] }[];
-  /** The newest messages sessions sent each other (messages.ts); only the local backend fills it. */
+  /** Every desk's own board, main first; only the local backend fills it. */
+  boards?: { desk: string; tasks: BoardTask[] }[];
+  /** The newest messages desks sent each other (messages.ts); only the local backend fills it. */
   messages?: Message[];
 };
-/** One message between sessions; `from`/`to` are base session keys. `for` is the sender's own task id, `reply` the id of the message answered. */
+/** One message between desks; `from`/`to` are base desk keys. `for` is the sender's own task id, `reply` the id of the message answered. */
 export type Message = { id: string; from: string; to: string; text: string; at: string; for?: string; kind?: string; reply?: string };
 export type ToolSpec = Pick<ToolDef, "name" | "description" | "inputSchema">;
 
@@ -85,7 +85,7 @@ export type Hello = {
   catalog: CatalogModel[];
   defaultModel: ModelRef;
   logins: LoginOption[];
-  sessions: SessionMeta[];
+  desks: DeskMeta[];
   /** The backend's working directory: what Files browses and the agent edits. */
   cwd: string;
   home: string;
@@ -101,7 +101,7 @@ export type PermMode = "default" | "acceptEdits" | "plan" | "bypass";
 /** A pending question to the person: raised by the daemon, shown by each TUI for its active key. */
 export type Ask = {
   id: string;
-  /** The asking key (a delegated session's caller). */
+  /** The asking key (a delegated desk's caller). */
   key: string;
   kind: "permission" | "question";
   tool: string;
@@ -111,7 +111,7 @@ export type Ask = {
   diff?: FileDiff;
   options: { id: string; label: string }[];
 };
-/** Everything the daemon says to every connection, outside any one session. */
+/** Everything the daemon says to every connection, outside any one desk. */
 export type BenchEvent =
   | { type: "ask"; ask: Ask }
   | { type: "ask_resolved"; id: string }
@@ -125,8 +125,8 @@ export type PermissionRequest = {
   name: string;
   args: any;
   diff?: FileDiff;
-  /** Key of the session that asks, when it is not the one the callback was opened for (delegated sessions). */
-  session?: string;
+  /** Key of the desk that asks, when it is not the one the callback was opened for (delegated desks). */
+  desk?: string;
   /** The model's one-sentence reason (because.reason). */
   reason?: string;
   /** A quote the model said the person typed but that failed the check (because.asked). */
@@ -135,8 +135,8 @@ export type PermissionRequest = {
 export type Decision = { block?: boolean; reason?: string };
 
 /** What the daemon holds for one live key and pushes to every view (protocol 2). */
-export type SessionState = {
-  type: "session_state";
+export type DeskState = {
+  type: "desk_state";
   model: ModelRef;
   thinkingLevel: ThinkingLevel;
   autoCompact: boolean;
@@ -146,7 +146,7 @@ export type SessionState = {
   context?: { tokens: number | null; window: number };
 };
 
-export type SessionOpts = {
+export type DeskOpts = {
   /** Used only when the daemon has no live agent for the key and builds one; never applied to a live one. */
   initial?: { model?: ModelRef; thinkingLevel?: ThinkingLevel; autoCompact?: boolean; codemode?: boolean };
   fresh?: boolean;
@@ -160,22 +160,22 @@ export type SessionOpts = {
 };
 
 type Image = Parameters<AgentSession["steer"]>[1] extends (infer I)[] | undefined ? I : never;
-/** `session_closed`: the agent behind this handle was disposed (rebuilt, or idle with no views);
+/** `desk_closed`: the agent behind this handle was disposed (rebuilt, or idle with no views);
  * the handle is dead and the client reopens on its next action. */
-export type SessionEvent = (AgentSessionEvent & { diff?: FileDiff }) | { type: "session_closed"; reopen: boolean } | { type: "session_notice"; text: string } | SessionState;
+export type DeskEvent = (AgentSessionEvent & { diff?: FileDiff }) | { type: "desk_closed"; reopen: boolean } | { type: "desk_notice"; text: string } | DeskState;
 
-export type SessionHandle = {
-  /** Snapshot taken when the session opened; restoreTranscript reads it. */
+export type DeskHandle = {
+  /** Snapshot taken when the desk opened; restoreTranscript reads it. */
   messages: AgentSession["messages"];
   /** A turn is running right now (live: a client that reconnects mid-turn sees it). */
   readonly busy: boolean;
-  /** Current snapshot; kept live by `session_state` events. */
-  readonly state: SessionState;
+  /** Current snapshot; kept live by `desk_state` events. */
+  readonly state: DeskState;
   prompt(text: string, o?: { images?: Image[] }): Promise<void>;
   steer(text: string, images?: Image[]): Promise<void>;
   followUp(text: string, images?: Image[]): Promise<void>;
   /**
-   * A message for a session that may be busy. Idle: prompt. Busy: a throwaway fork of the session (one
+   * A message for a desk that may be busy. Idle: prompt. Busy: a throwaway fork of the desk (one
    * stateless side call, never recorded) answers STEER or QUEUE; a failed, slow (20 s) or unparsable fork
    * queues. If the turn ended while the fork ran, prompt. `kind` is what was done.
    */
@@ -191,7 +191,7 @@ export type SessionHandle = {
   setThinkingLevel(level: ThinkingLevel): Promise<void>;
   setAutoCompactionEnabled(on: boolean): Promise<void>;
   setCodemode(on: boolean): Promise<void>;
-  subscribe(cb: (e: SessionEvent) => void): () => void;
+  subscribe(cb: (e: DeskEvent) => void): () => void;
 };
 
 export interface Backend {
@@ -200,19 +200,19 @@ export interface Backend {
   watch(cb: (e: BenchEvent) => void): Promise<() => void>;
   asks: { answer(id: string, choice: string): Promise<void> };
   mode: { set(m: PermMode): Promise<void> };
-  session(key: string, opts: SessionOpts): Promise<SessionHandle>;
-  sessions: {
-    list(prefix?: string): Promise<SessionMeta[]>;
+  desk(key: string, opts: DeskOpts): Promise<DeskHandle>;
+  desks: {
+    list(prefix?: string): Promise<DeskMeta[]>;
     /** Pushed list with live busy: `cb` runs once before this resolves, then on every open,
      * close, turn start, turn end, name, describe and clear. Rejects on a bench without the op
      * (the caller keeps fetching `list`). Resolves with the unsubscribe. */
-    watch(cb: (list: LiveSessionMeta[]) => void): Promise<() => void>;
+    watch(cb: (list: LiveDeskMeta[]) => void): Promise<() => void>;
     name(key: string, name: string): Promise<void>;
     describe(key: string, description: string): Promise<void>;
     clear(key: string): Promise<void>;
   };
   settings: { write(patch: Partial<Settings>): Promise<void> };
-  /** The session's real workspaces and environments; never throws, `available: false` says why. */
+  /** The desk's real workspaces and environments; never throws, `available: false` says why. */
   teamView(): Promise<TeamView>;
   /** One JSON-RPC message from the laptop MCP door (mcp.ts); the reply, null for a notification. */
   mcp?(msg: unknown): Promise<unknown>;

@@ -1,9 +1,9 @@
 ---
-name: workspace-session
-description: You are a WORKSPACE session on Kloudlite. You have `main_tell`. Your code is in ~/workspace of your own pod. Read this skill before a task. It tells you what you own, how work comes to you, how to send reports to main, when to give a task to a subagent, when to stop your workspace, and what "done" means.
+name: workspace-desk
+description: You are a WORKSPACE desk on Kloudlite. You have `main_tell`. Your code is in ~/workspace of your own pod. Read this skill before a task. It tells you what you own, how work comes to you, how to send reports to main, when to give a task to a subagent, when to stop your workspace, and what "done" means.
 ---
 
-# You are a workspace session
+# You are a workspace desk
 
 This skill is written in ASD-STE100 Simplified Technical English. Each word has one meaning. Each instruction is one sentence.
 
@@ -14,11 +14,11 @@ You run in the pod of one workspace, in `~/workspace`. Your workspace holds one 
 - Its service, when the service runs.
 - Its intercept.
 
-The `kloudlite` skill gives the concepts that all sessions use.
+The `kloudlite` skill gives the concepts that all desks use.
 
 ## Roles and channels
 
-There are three roles: main (talks to the person, owns the workspaces and the board), workspace (one component in one workspace pod) and subagent (one task in a temporary clone of a workspace). Each session is isolated: it works only in its own folder and pod, and never reads, runs or changes code in a different workspace, pod or session. Work moves only through `workspace_ask`, `main_tell`, the answer to an ask, and `subagent`. Workspaces do not send messages to other workspaces; main moves facts between them.
+There are three roles: main (talks to the person, owns the workspaces and the board), workspace (one component in one workspace pod) and subagent (one task in a temporary clone of a workspace). Each desk is isolated: it works only in its own folder and pod, and never reads, runs or changes code in a different workspace, pod or desk. Work moves only through `workspace_ask`, `main_tell`, the answer to an ask, and `subagent`. Workspaces do not send messages to other workspaces; main moves facts between them.
 
 ## Permission cards
 
@@ -46,7 +46,7 @@ The card is the confirmation of a destructive action. List the targets by name, 
 
 1. Work only in this workspace.
 2. Do not create, clone, restore or delete workspaces. The `subagent` tool makes its own clone. That is permitted.
-3. Do not go into a different workspace or session.
+3. Do not go into a different workspace or desk.
 4. If you need a different workspace, the person or the platform, tell main with `main_tell`.
 5. Do not guess a fact about a different component. Ask main with `main_tell need`.
 
@@ -89,7 +89,7 @@ A tool with the mark **card** shows a permission card to the person before it ru
 | `service` actions `add`, `update`, `remove` | Change a service that your component owns in that environment. Only `service` action `remove` shows a card. |
 | `service` action `logs` | Read the logs of a service in that environment. It can be your service or a service that you call. |
 | `intercept` | Action `start` sends the traffic for your service in the environment to the process that you run here. Action `stop` ends this. |
-| `session` action `current` | See your session and the environment whose services your workspace gets to by DNS name. You cannot join or leave a session. |
+| `desk` action `current` | See your desk and the environment whose services your workspace gets to by DNS name. You cannot join or leave a desk. |
 | `workspace` action `snapshot` | Record a snapshot in the volume lineage. Do this only when the person or main asks. |
 | `workspace` action `stop` | Stop this workspace when your task is done and main or the person told you to stop. It makes a snapshot first. The next start continues from that snapshot. |
 
@@ -107,7 +107,7 @@ You do not have tools for other workspaces, worktrees, quota or requests. These 
 ## Who gives you work
 
 - The person, directly in your view.
-- Main, as a turn that starts with `[from main session] ...`. Main gives a goal and context. Main does not tell you how to build it. You make that decision.
+- Main, as a turn that starts with `[from main desk] ...`. Main gives a goal and context. Main does not tell you how to build it. You make that decision.
 
 If the words of the person and the ask of main do not agree, obey the person. Then tell main with `main_tell need`, so that main can correct its ask.
 
@@ -186,14 +186,14 @@ Main can give you work together with a different workspace, for example integrat
 **When main asks you to test against a service:**
 
 1. Use `env` action `get` on the environment that main gave.
-2. Use `session` action `current` to make sure that your session is connected to that environment.
+2. Use `desk` action `current` to make sure that your desk is connected to that environment.
 3. Get to the service by its name in that environment.
 4. Run the tests with `exec`. Do not change the service or its intercept. It belongs to the other workspace.
 5. Send a report with the result: passed, or each failed test with its message and the call that it made. Main gives this report to the other workspace. Thus it must have sufficient data for a fix.
 
 ## Give a task to a subagent
 
-A subagent is a temporary session in its own clone of your workspace. It does one task. It commits its work. The platform pushes its commits into your checked-out branch, into your working tree. Then the platform deletes the clone. The subagent talks only to you. It does not talk to main or to the person.
+A subagent is a temporary desk in its own clone of your workspace. It does one task. It commits its work. The platform pushes its commits into your checked-out branch, into your working tree. Then the platform deletes the clone. The subagent talks only to you. It does not talk to main or to the person.
 
 **Do the task yourself when one of these conditions is true:**
 
@@ -241,7 +241,7 @@ Main does parallel work in clones. The ask of main tells you: "You are a clone o
 
 ## Example: a full flow
 
-Main asks: `[from main session] add a comments API`.
+Main asks: `[from main desk] add a comments API`.
 
 1. Use `glob` and `grep` to learn the repo, and `read` the files they find. Decide the design.
 2. Make the change.

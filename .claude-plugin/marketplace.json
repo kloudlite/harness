@@ -6,13 +6,13 @@
     {
       "name": "kloudlite",
       "source": "./laptop-plugin/plugin",
-      "description": "Work on Kloudlite workspaces from Claude Code through the session's tools and skills.",
+      "description": "Work on Kloudlite workspaces from Claude Code through the desk's tools and skills.",
       "version": "0.4.0",
       "author": { "name": "Kloudlite" },
       "homepage": "https://github.com/kloudlite/harness",
       "repository": "https://github.com/kloudlite/harness",
       "category": "development",
-      "keywords": ["kloudlite", "workspaces", "mcp", "sessions"]
+      "keywords": ["kloudlite", "workspaces", "mcp", "desks"]
     }
   ]
 }

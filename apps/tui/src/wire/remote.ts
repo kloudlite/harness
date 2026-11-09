@@ -2,11 +2,11 @@
 //! Tools the TUI owns stay here — the host calls back for them; the permission gate is the daemon's (cards). The pipe's
 //! stderr (the bench-proxy's waking progress) is shown until `hello`, then buffered: after that
 //! the renderer owns the screen, so the tail is printed once the TUI exits.
-import type { Backend, BenchEvent, Hello, LoginUi, SessionHandle, SessionOpts, SessionState } from "./index.ts";
+import type { Backend, BenchEvent, Hello, LoginUi, DeskHandle, DeskOpts, DeskState } from "./index.ts";
 import { Peer, PROTOCOL } from "./wire.ts";
 
 export class RemoteBackend implements Backend {
-  #opts = new Map<string, SessionOpts>();
+  #opts = new Map<string, DeskOpts>();
   #subs = new Map<string, Set<(e: any) => void>>();
   #logins = new Map<string, LoginUi>();
   #lid = 0;
@@ -23,8 +23,8 @@ export class RemoteBackend implements Backend {
       return ui.prompt(prompt);
     });
     peer.onEvent((ev, key, event) => {
-      if (ev === "session") for (const cb of this.#subs.get(key) ?? []) cb(event);
-      else if (ev === "sessions") for (const cb of this.#watchers) cb(event as any);
+      if (ev === "desk") for (const cb of this.#subs.get(key) ?? []) cb(event);
+      else if (ev === "desks") for (const cb of this.#watchers) cb(event as any);
       else if (ev === "bench") for (const cb of this.#bench) cb(event as any);
       else if (ev === "auth") this.#logins.get(key)?.notify(event as any);
     });
@@ -36,9 +36,9 @@ export class RemoteBackend implements Backend {
     try {
       hello = await this.hello();
     } catch {
-      throw mismatch("the session does not serve the laptop TUI");
+      throw mismatch("the desk does not serve the laptop TUI");
     }
-    if (hello.protocol !== PROTOCOL) throw mismatch(`protocol ${hello.protocol} on the session, ${PROTOCOL} here`);
+    if (hello.protocol !== PROTOCOL) throw mismatch(`protocol ${hello.protocol} on the desk, ${PROTOCOL} here`);
     return hello;
   }
 
@@ -46,12 +46,12 @@ export class RemoteBackend implements Backend {
     return this.peer.request("hello", null);
   }
 
-  async session(key: string, opts: SessionOpts): Promise<SessionHandle> {
+  async desk(key: string, opts: DeskOpts): Promise<DeskHandle> {
     const { tools, permission: _p, ...rest } = opts;
     this.#opts.set(key, opts);
     const subs = new Set<(e: any) => void>();
     this.#subs.set(key, subs);
-    const { messages, busy, state: first } = await this.peer.request<{ messages: any; busy: boolean; state: SessionState }>("session.open", {
+    const { messages, busy, state: first } = await this.peer.request<{ messages: any; busy: boolean; state: DeskState }>("desk.open", {
       key,
       ...rest,
       tools: tools.map(({ name, description, inputSchema }) => ({ name, description, inputSchema })),
@@ -77,12 +77,12 @@ export class RemoteBackend implements Backend {
         for (const k of ["i", "kind", "delta", "id", "name"]) delete e[k];
         e.message = cur;
       }
-      if (e.type === "session_state") state = e;
+      if (e.type === "desk_state") state = e;
       if (e.type === "agent_start") running = true;
-      else if (e.type === "agent_end" || e.type === "session_closed") running = false;
+      else if (e.type === "agent_end" || e.type === "desk_closed") running = false;
     });
     const call = (method: string) => (...args: unknown[]) =>
-      this.peer.request<void>("session.call", { key, method, args });
+      this.peer.request<void>("desk.call", { key, method, args });
     return {
       messages,
       get busy() {
@@ -94,9 +94,9 @@ export class RemoteBackend implements Backend {
       prompt: call("prompt"),
       steer: call("steer"),
       followUp: call("followUp"),
-      route: (text: string, images?: unknown[]) => this.peer.request<{ kind: "steer" | "followUp" | "prompt"; reason: string }>("session.call", { key, method: "route", args: [text, images] }),
+      route: (text: string, images?: unknown[]) => this.peer.request<{ kind: "steer" | "followUp" | "prompt"; reason: string }>("desk.call", { key, method: "route", args: [text, images] }),
       clearQueue: call("clearQueue"),
-      btw: (q: string) => this.peer.request<string>("session.call", { key, method: "btw", args: [q] }),
+      btw: (q: string) => this.peer.request<string>("desk.call", { key, method: "btw", args: [q] }),
       compact: call("compact"),
       abort: call("abort"),
       setModel: call("setModel"),
@@ -109,7 +109,7 @@ export class RemoteBackend implements Backend {
         await call("dispose")();
       },
       subscribe: (cb) => (subs.add(cb), () => void subs.delete(cb)),
-    } as SessionHandle;
+    } as DeskHandle;
   }
 
   #bench = new Set<(e: BenchEvent) => void>();
@@ -130,12 +130,12 @@ export class RemoteBackend implements Backend {
     Object.fromEntries(names.map((n) => [n, (...args: unknown[]) => this.peer.request(`${group}.${String(n)}`, args)])) as T;
 
   #watchers = new Set<(l: any[]) => void>();
-  sessions: Backend["sessions"] = {
-    ...this.#ops<Omit<Backend["sessions"], "watch">>("sessions", ["list", "name", "describe", "clear"]),
+  desks: Backend["desks"] = {
+    ...this.#ops<Omit<Backend["desks"], "watch">>("desks", ["list", "name", "describe", "clear"]),
     watch: async (cb) => {
       this.#watchers.add(cb);
       try {
-        await this.peer.request("sessions.watch", null);
+        await this.peer.request("desks.watch", null);
       } catch (e) {
         this.#watchers.delete(cb); // an old bench: "unknown op"
         throw e;

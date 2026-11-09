@@ -9,7 +9,7 @@ import { useWheelAccel } from "../wheel.ts";
 
 /**
  * Section label: bold title-case, then a hairline across the rest of the row —
- * the same separator the session title bar uses, instead of SHOUTING CAPS.
+ * the same separator the desk title bar uses, instead of SHOUTING CAPS.
  */
 export function Heading({ children, count, width, flush }: { children: string; count?: number; width: number; flush?: boolean }) {
   const label = count === undefined ? children : `${children}  ${count}`;
@@ -58,8 +58,8 @@ function Row({
 }
 
 /**
- * Session header, WORKSPACES (each with its ephemeral workspaces under a guide
- * rail; the task plan lives in the Work panel of the session, not here), and a pinned Environment block at the bottom — the connected
+ * Desk header, WORKSPACES (each with its ephemeral workspaces under a guide
+ * rail; the task plan lives in the Work panel of the desk, not here), and a pinned Environment block at the bottom — the connected
  * environment with the services that belong to it directly under it.
  */
 export function Sidebar({
@@ -78,7 +78,7 @@ export function Sidebar({
 }: {
   workspaces: Workspace[];
   services: Service[];
-  /** Undefined = the session has no environment: the block renders nothing. */
+  /** Undefined = the desk has no environment: the block renders nothing. */
   envName?: string;
   envOwner?: string;
   /** The signed-in user: only their workspaces are focusable. */
@@ -87,11 +87,11 @@ export function Sidebar({
   unavailable?: string;
   /** The restore point the environment is on, if the agent switched to one. */
   snapshot?: string;
-  /** Per-workspace: its session has a turn running */
+  /** Per-workspace: its desk has a turn running */
   running: boolean[];
   /** Per-workspace: a permission card or question is waiting for the user */
   waiting: boolean[];
-  /** 0 = the session, 1..N = workspace */
+  /** 0 = the desk, 1..N = workspace */
   focus: number;
   width: number;
   onFocus?: (focus: number) => void;
@@ -104,7 +104,7 @@ export function Sidebar({
 
   return (
     <box flexDirection="column" width={width} height="100%" flexShrink={0} backgroundColor={theme.sidebarBg}>
-      {/* session header: the product mark, then what we're connected to */}
+      {/* desk header: the product mark, then what we're connected to */}
       <box
         flexDirection="row"
         height={3}
@@ -116,7 +116,7 @@ export function Sidebar({
         <text selectable={false}>
           <span fg={theme.accent}>✦ </span>
           <span fg={theme.fg} attributes={TextAttributes.BOLD}>Working</span>
-          <span fg={theme.muted}> Session</span>
+          <span fg={theme.muted}> Desk</span>
         </text>
       </box>
 

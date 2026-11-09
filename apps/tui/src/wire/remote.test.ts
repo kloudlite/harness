@@ -2,19 +2,19 @@ import { expect, test } from "bun:test";
 import { connect, RemoteBackend } from "./remote.ts";
 import { serve } from "./serve.ts";
 import { Peer } from "./wire.ts";
-import type { Backend, SessionOpts } from "./index.ts";
+import type { Backend, DeskOpts } from "./index.ts";
 
 const enc = new TextEncoder();
 
-/** A Backend whose session drives the callbacks the way pi would. */
+/** A Backend whose desk drives the callbacks the way pi would. */
 function fake(): Backend & { seen: string[] } {
   const seen: string[] = [];
   const subs = new Set<(e: any) => void>();
-  let opts!: SessionOpts;
+  let opts!: DeskOpts;
   const b: any = {
     seen,
     hello: async () => ({ protocol: 2, cwd: "/home/kl", tools: [] }),
-    session: async (_key: string, o: SessionOpts) => {
+    desk: async (_key: string, o: DeskOpts) => {
       opts = o;
       return {
         messages: [{ role: "user", content: "earlier" }] as any,
@@ -27,7 +27,7 @@ function fake(): Backend & { seen: string[] } {
         subscribe: (cb: any) => (subs.add(cb), () => subs.delete(cb)),
       };
     },
-    sessions: {}, fs: {}, podfs: {}, settings: {}, models: {}, auth: {}, teamView: async () => ({ available: false, error: "x", user: "u", workspaces: [], environments: [] }),
+    desks: {}, fs: {}, podfs: {}, settings: {}, models: {}, auth: {}, teamView: async () => ({ available: false, error: "x", user: "u", workspaces: [], environments: [] }),
   };
   return b;
 }
@@ -39,11 +39,11 @@ function wired(backend: Backend) {
   return { remote: new RemoteBackend(client), client, host };
 }
 
-test("session round trip: messages, TUI tool, events with Error", async () => {
+test("desk round trip: messages, TUI tool, events with Error", async () => {
   const b = fake();
   const { remote } = wired(b);
   const events: any[] = [];
-  const h = await remote.session("k", {
+  const h = await remote.desk("k", {
     initial: { model: { provider: "p", id: "m" } },
     tools: [{ name: "question", description: "", inputSchema: { type: "object" }, run: async (i: any) => `answered ${i.q}` }],
   });
@@ -58,7 +58,7 @@ test("session round trip: messages, TUI tool, events with Error", async () => {
 test("disconnect rejects pending calls", async () => {
   const b = fake();
   const { remote, client } = wired(b);
-  const h = await remote.session("k", { initial: { model: { provider: "p", id: "m" } }, tools: [{ name: "question", description: "", inputSchema: { type: "object" }, run: () => new Promise<string>(() => {}) }] });
+  const h = await remote.desk("k", { initial: { model: { provider: "p", id: "m" } }, tools: [{ name: "question", description: "", inputSchema: { type: "object" }, run: () => new Promise<string>(() => {}) }] });
   const p = h.prompt("ls");
   await Bun.sleep(5);
   client.close();
@@ -90,20 +90,20 @@ test("stderr passes through before hello and is buffered after", async () => {
 
 test("btw returns its string over the wire", async () => {
   const b = fake();
-  const base = b.session;
-  b.session = async (k: string, o: SessionOpts) => ({ ...(await base(k, o)), btw: async (q: string) => `answer to ${q}` }) as any;
+  const base = b.desk;
+  b.desk = async (k: string, o: DeskOpts) => ({ ...(await base(k, o)), btw: async (q: string) => `answer to ${q}` }) as any;
   const { remote } = wired(b);
-  const h = await remote.session("k", { initial: { model: { provider: "p", id: "m" } }, tools: [] });
+  const h = await remote.desk("k", { initial: { model: { provider: "p", id: "m" } }, tools: [] });
   expect(await h.btw("why?")).toBe("answer to why?");
 });
 
 test("compact carries its instructions over the wire", async () => {
   const b = fake();
-  const base = b.session;
+  const base = b.desk;
   const seen: unknown[] = [];
-  b.session = async (k: string, o: SessionOpts) => ({ ...(await base(k, o)), compact: async (i?: string) => void seen.push(i) }) as any;
+  b.desk = async (k: string, o: DeskOpts) => ({ ...(await base(k, o)), compact: async (i?: string) => void seen.push(i) }) as any;
   const { remote } = wired(b);
-  const h = await remote.session("k", { initial: { model: { provider: "p", id: "m" } }, tools: [] });
+  const h = await remote.desk("k", { initial: { model: { provider: "p", id: "m" } }, tools: [] });
   await h.compact("keep the plan");
   expect(seen).toEqual(["keep the plan"]);
 });
@@ -111,9 +111,9 @@ test("compact carries its instructions over the wire", async () => {
 test("message updates cross as deltas and arrive as pi's whole message", async () => {
   let fire!: (e: any) => void;
   const b: any = fake();
-  const session = b.session;
-  b.session = async (k: string, o: SessionOpts) => {
-    const h = await session(k, o);
+  const desk = b.desk;
+  b.desk = async (k: string, o: DeskOpts) => {
+    const h = await desk(k, o);
     const sub = h.subscribe;
     h.subscribe = (cb: any) => ((fire = cb), sub(cb));
     return h;
@@ -124,7 +124,7 @@ test("message updates cross as deltas and arrive as pi's whole message", async (
   serve(b, host);
   const remote = new RemoteBackend(client);
   const seen: any[] = [];
-  const h = await remote.session("k", { initial: { model: { provider: "p", id: "m" } }, tools: [] });
+  const h = await remote.desk("k", { initial: { model: { provider: "p", id: "m" } }, tools: [] });
   h.subscribe((e) => seen.push(structuredClone(e)));
   // what pi emits: the whole partial on every event, twice
   let msg: any = { role: "assistant", timestamp: 1, content: [] };

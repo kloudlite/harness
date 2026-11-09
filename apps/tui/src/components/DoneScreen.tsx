@@ -9,7 +9,7 @@ import type { DoneTask } from "../tasks.ts";
 import { follow } from "./PlanScreen.tsx";
 
 /** ^q. Laid out like Files: finished tasks newest first on the left, the selected one's title,
- *  session and note on the right; tab moves between panes. */
+ *  desk and note on the right; tab moves between panes. */
 export function DoneScreen({ tasks, main, onClose }: { tasks: DoneTask[]; main: boolean; onClose: () => void }) {
   const wheel = useWheelAccel();
   const listRef = useRef<ScrollBoxRenderable>(null);
@@ -53,7 +53,7 @@ export function DoneScreen({ tasks, main, onClose }: { tasks: DoneTask[]; main: 
               tasks.map((d, i) => {
                 const active = i === at && pane === "list";
                 return (
-                  <box key={`${d.session}${d.id}`} height={1} overflow="hidden" paddingLeft={1} paddingRight={1} backgroundColor={active ? theme.selection : undefined} onMouseDown={() => setSel(i)}>
+                  <box key={`${d.desk}${d.id}`} height={1} overflow="hidden" paddingLeft={1} paddingRight={1} backgroundColor={active ? theme.selection : undefined} onMouseDown={() => setSel(i)}>
                     <text selectable={false} fg={active ? theme.bg : theme.fg}>{clip(main ? `${d.name} ${d.id} ${d.title}` : `${d.id} ${d.title}`, 60)}</text>
                   </box>
                 );

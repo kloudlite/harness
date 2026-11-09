@@ -1,6 +1,6 @@
 //! What a TUI does with what the daemon pushes. Pure: app.tsx owns React state and calls these.
-//! The daemon holds every session's state; nothing here invents state the daemon did not send.
-import type { Ask, SessionState, TeamView } from "./wire/index.ts";
+//! The daemon holds every desk's state; nothing here invents state the daemon did not send.
+import type { Ask, DeskState, TeamView } from "./wire/index.ts";
 import type { Entry } from "./components/Transcript.tsx";
 import { fromTeam } from "./workspaces";
 
@@ -51,7 +51,7 @@ export function upsertById(entries: Entry[], e: Entry): Entry[] {
   return next;
 }
 
-export function applyState(s: SessionState) {
+export function applyState(s: DeskState) {
   return {
     model: s.model,
     context: s.context,

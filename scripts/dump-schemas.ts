@@ -10,7 +10,7 @@ import { anyPodTools, platformTools, webFetch, webSearch, type ToolDef } from ".
 const pod = await anyPodTools();
 const withScratch = (t: ToolDef): ToolDef => {
   const s: any = t.inputSchema;
-  return { ...t, description: `${t.description} A \`scratch:\` path is the session's scratch folder.`, inputSchema: { ...s, required: (s.required ?? []).filter((n: string) => n !== "workspace") } };
+  return { ...t, description: `${t.description} A \`scratch:\` path is the desk's scratch folder.`, inputSchema: { ...s, required: (s.required ?? []).filter((n: string) => n !== "workspace") } };
 };
 const tools: ToolDef[] = [
   webFetch,

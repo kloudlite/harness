@@ -1,7 +1,7 @@
 import { TextAttributes } from "@opentui/core";
 import { theme } from "../theme.ts";
 import { clip } from "../ui/text.ts";
-import type { QueuedMessage } from "../sessions.ts";
+import type { QueuedMessage } from "../desks.ts";
 
 
 /**

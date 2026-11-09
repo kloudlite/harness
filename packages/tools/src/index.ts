@@ -11,7 +11,7 @@ export interface ToolDef<I = any> {
   run(input: I, signal?: AbortSignal): Promise<string>;
 }
 
-/** Tools registered for a session. Empty by default. */
+/** Tools registered for a desk. Empty by default. */
 export class Registry {
   #tools = new Map<string, ToolDef<any>>();
 
@@ -40,8 +40,8 @@ export class Registry {
   }
 }
 export { webFetch, webSearch } from "./web.ts";
-export { api, apiJson, platformTools, sessionWorkspaces } from "./platform.ts";
-export { POD_TOOLS, anyPodTools, podTools, podFence, type PodFence, podExec, podGet, podText, podPost, podHold, sessionHold, touched, inflight, processNotify, type Notify, type ExecResult } from "./pod.ts";
+export { api, apiJson, platformTools, deskWorkspaces } from "./platform.ts";
+export { POD_TOOLS, anyPodTools, podTools, podFence, type PodFence, podExec, podGet, podText, podPost, podHold, deskHold, touched, inflight, processNotify, type Notify, type ExecResult } from "./pod.ts";
 export { scratchTools, scratchRoot } from "./scratch.ts";
 export { ensureRunning } from "./ensure.ts";
 export { checkArgs, guarded } from "./args.ts";

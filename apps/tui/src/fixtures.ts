@@ -3,7 +3,7 @@
 import type { TeamView } from "./wire/index.ts";
 import type { Environment, Workspace } from "./workspaces.ts";
 
-/** The working session's workspaces — they move with it, never with an environment. */
+/** The working desk's workspaces — they move with it, never with an environment. */
 export const MOCK_WORKSPACES: Workspace[] = [
   { id: "w1", name: "api-gateway", owner: "karthik", status: "attached", ports: [8080, 9090], repo: "kloudlite/api-gateway", branch: "feat/rate-limits", changes: 12, processes: [
     { id: "p1", name: "server", command: "gateway serve --port 8080", status: "running", startedAt: "2026-10-09T08:00:00Z", logs: [

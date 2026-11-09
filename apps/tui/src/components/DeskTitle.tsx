@@ -4,11 +4,11 @@ import { clip } from "../ui/text.ts";
 
 
 /**
- * The bar above a chat session: its title, and under it the context the
- * session belongs to (environment › workspace) or its own description.
- * Clicking it opens `/session`, where the title and description are set.
+ * The bar above a chat desk: its title, and under it the context the
+ * desk belongs to (environment › workspace) or its own description.
+ * Clicking it opens `/desk`, where the title and description are set.
  */
-export function SessionTitle({
+export function DeskTitle({
   title,
   description,
   busy,
@@ -17,13 +17,13 @@ export function SessionTitle({
 }: {
   title: string;
   description?: string;
-  /** a turn is streaming in this session */
+  /** a turn is streaming in this desk */
   busy?: boolean;
   width: number;
   onOpen?: () => void;
 }) {
   return (
-    // the session column sets gap 1 between its children; the hairline is the
+    // the desk column sets gap 1 between its children; the hairline is the
     // separator here, so cancel that gap and let the transcript start right under it
     <box flexDirection="column" flexShrink={0} paddingTop={1} marginBottom={-1} onMouseDown={onOpen}>
       <box flexDirection="row" justifyContent="space-between" height={1} overflow="hidden">

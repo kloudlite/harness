@@ -1,7 +1,7 @@
-//! Platform API tools: the model's hands on /v1 (workspaces, environments, volumes, sessions).
+//! Platform API tools: the model's hands on /v1 (workspaces, environments, volumes, desks).
 //! The bearer is a short-lived tool token (rotates every 900 s) in a file, so it is read on
 //! EVERY call, never cached. Non-2xx comes back as text for the model, never a throw.
-//! Main sessions get the whole table; a workspace session gets the subset its own token's
+//! Main desks get the whole table; a workspace desk gets the subset its own token's
 //! route list allows (WORKSPACE_TOOL_ROUTES), with its workspace fixed and `env` defaulted.
 //! `all` (the laptop MCP door, backend/src/mcp.ts) is main's table plus the workspace-only tools,
 //! each aimed by a required `workspace`/`env`.
@@ -69,25 +69,25 @@ export async function apiJson<T>(method: string, path: string, body?: unknown): 
 
 export const seg = encodeURIComponent;
 
-/** The workspaces `workspace list` shows: a session (KL_SESSION) serves its own members only, as the sidebar does
- * (backend/src/session.ts); without it a second session saw the first one's. `status` reads the same rows. */
-export async function sessionWorkspaces(team?: string): Promise<any[]> {
+/** The workspaces `workspace list` shows: a desk (KL_DESK) serves its own members only, as the sidebar does
+ * (backend/src/desk.ts); without it a second desk saw the first one's. `status` reads the same rows. */
+export async function deskWorkspaces(team?: string): Promise<any[]> {
   const all = await apiJson<any[]>("GET", `/v1/workspaces${qs({ team })}`);
-  const session = process.env.KL_SESSION;
-  return session ? all.filter((w) => w.session === session && w.id !== process.env.KL_BENCH) : all;
+  const desk = process.env.KL_DESK;
+  return desk ? all.filter((w) => w.desk === desk && w.id !== process.env.KL_BENCH) : all;
 }
 
-const NO_SESSION = "no session is set (KL_SESSION is not set)";
+const NO_DESK = "no desk is set (KL_DESK is not set)";
 
-/** The bench's own session: a bench belongs to one session and never joins another, so `session use`
- * here only moves that session's environment. The laptop door (`kloudlite mcp`) answers `current`,
- * `use` and `create` itself, from the session the laptop picked. */
-async function currentSession(): Promise<string> {
-  const id = process.env.KL_SESSION;
-  if (!id) return NO_SESSION;
-  const r = await raw("GET", `/v1/sessions/${seg(id)}`);
+/** The bench's own desk: a bench belongs to one desk and never joins another, so `desk use`
+ * here only moves that desk's environment. The laptop door (`kloudlite mcp`) answers `current`,
+ * `use` and `create` itself, from the desk the laptop picked. */
+async function currentDesk(): Promise<string> {
+  const id = process.env.KL_DESK;
+  if (!id) return NO_DESK;
+  const r = await raw("GET", `/v1/desks/${seg(id)}`);
   if (r.unavailable) throw new Error(UNAVAILABLE);
-  if (r.status === 404 || r.status === 403) return `session ${id} has ended`;
+  if (r.status === 404 || r.status === 403) return `desk ${id} has ended`;
   if (r.status < 200 || r.status >= 300) throw new Error(httpError(r.status, r.text));
   const d = r.data as any;
   return JSON.stringify({ id: d.id, name: d.name, environment: d.environment });
@@ -189,9 +189,9 @@ async function load(path: string): Promise<{ doc: any } | { err: string }> {
 }
 
 const OWNER = { type: "string", description: "The owner: your handle, or a team slug." };
-const OWNER_DEFAULT = { type: "string", description: "The owner: your handle, or a team slug. Default: this session's team." };
+const OWNER_DEFAULT = { type: "string", description: "The owner: your handle, or a team slug. Default: this desk's team." };
 const SBX = { type: "string", description: "The capsule id or name." };
-const SES = { type: "string", description: "The session id, name or `team/name`." };
+const SES = { type: "string", description: "The desk id, name or `team/name`." };
 const PIPE = { type: "string", description: "The pipeline name." };
 const RUN = { type: "string", description: "The run id (the `id` of a run from `run list` or `run start`)." };
 const TIMEOUT = { type: "number", description: "Milliseconds this call waits before it answers (default 25000, maximum 900000). At the limit the answer has `timed_out: true`: call again." };
@@ -206,9 +206,9 @@ const TAIL = { type: "integer", description: "Keep only the last N lines (defaul
 const HEAD = { type: "integer", description: "Keep only the first N lines (applied before `tail`)." };
 const PVER = { type: "integer", description: "A version number. `get`: that version. `delete`: only that version (not the latest, not one a run reads)." };
 const OFFSET = { type: "integer", description: "Byte offset into the job's output. `logs`: the whole page from there (`next`, `complete`), else the last lines. `wait`: also answers that page as `output`." };
-const TEAMSLUG = { type: "string", description: "The team slug. In a session its own team is used." };
+const TEAMSLUG = { type: "string", description: "The team slug. In a desk its own team is used." };
 const TEAM = { type: "string", description: "A team you belong to. Omit it for your own." };
-const ENVREF = { anyOf: [{ type: "string" }, { type: "null" }], description: "An environment id or name of the session's team. `use` with null disconnects." };
+const ENVREF = { anyOf: [{ type: "string" }, { type: "null" }], description: "An environment id or name of the desk's team. `use` with null disconnects." };
 const MAX_TAIL = 2000;
 
 /** Cut a log to its first `head` and last `tail` lines (tail defaults to 200); a note says how many lines went. */
@@ -251,7 +251,7 @@ async function getText(path: string): Promise<string> {
 
 /** Poll a document with back-off (tick, then 1.5x up to 6 ticks) until `done`. At the limit: `limit()` when given
  * (a hand-off, which does not wait for a slow read either), else the last view with `timed_out: true`.
- * One loop for every `wait`: an environment, a workspace, a session, a run. */
+ * One loop for every `wait`: an environment, a workspace, a desk, a run. */
 async function pollUntil(get: () => Promise<string>, done: (d: any) => boolean, limitMs: number, tickMs: number, trim: (d: any) => any = (d) => d, limit?: () => string): Promise<string> {
   const end = Date.now() + limitMs;
   let wait = tickMs;
@@ -308,7 +308,7 @@ const single = (name: string, description: string, a: Action) => def(name, descr
 
 /** The platform table. Resource tools take an `action`; the rest are single-purpose. `main` and `all` list
  * everything except what only a workspace does (packages edits, intercept); `workspace` is the slice a workspace's own token reaches, with its workspace fixed and `env`
- * defaulted to its session's. `noStop` drops `workspace stop` (a subagent never stops its workspace). */
+ * defaulted to its desk's. `noStop` drops `workspace stop` (a subagent never stops its workspace). */
 export function platformTools(kind: "main" | "workspace" | "all", wsId?: string, tickMs = 5000, noStop = false): ToolDef[] {
   const ws = kind === "workspace";
   const W = ws ? `/v1/workspaces/${seg(wsId!)}` : "";
@@ -320,16 +320,16 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
   /** An action that needs the main-only `workspace` argument. */
   const mact = (props: Props, req: string[], run: (a: any) => Promise<string>) => act({ workspace: WS, ...props }, ["workspace", ...req], run);
 
-  /** `env` for a workspace session: the environment its session connects it to (the workspace doc carries it, resolved through the session). */
+  /** `env` for a workspace desk: the environment its desk connects it to (the workspace doc carries it, resolved through the desk). */
   const envOf = async (a: any): Promise<{ env: string } | { err: string }> => {
     if (a.env) return { env: a.env };
     if (!ws) return { err: "error: env is required" };
     const g = await load(W);
     if ("err" in g) return g;
-    if (!g.doc?.session) return { err: "error: this workspace is in no session" };
-    return g.doc.environment ? { env: g.doc.environment } : { err: "error: this workspace's session has no environment" };
+    if (!g.doc?.desk) return { err: "error: this workspace is in no desk" };
+    return g.doc.environment ? { env: g.doc.environment } : { err: "error: this workspace's desk has no environment" };
   };
-  const ENVP = ws ? { ...ENV, description: "The environment id or name. Default: the environment of this workspace's session." } : ENV;
+  const ENVP = ws ? { ...ENV, description: "The environment id or name. Default: the environment of this workspace's desk." } : ENV;
   const eact = (props: Props, req: string[], run: (env: string, a: any) => Promise<string>, alias?: Record<string, string>): Action => ({
     ...act({ env: ENVP, ...props }, ws ? req : ["env", ...req], async (a) => {
       const e = await envOf(a);
@@ -356,11 +356,11 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
     try {
       return await pollUntil(read, w.done, softMs(a), tickMs, undefined, () => promoted(w.id ? w.id(d) : d.id, w.kind));
     } catch (e: any) {
-      // A session's bench reads only the environment its session is connected to, so a create
+      // A desk's bench reads only the environment its desk is connected to, so a create
       // answers the object and the way in rather than the 403 the first poll met.
       const m = String(e?.message ?? e);
-      if (m.startsWith("403") && m.includes("not connected to this session")) {
-        return JSON.stringify({ ...d, hint: "created; this session is not connected to it: `session` `use` with `environment`, then `env` `wait`" }, null, 2);
+      if (m.startsWith("403") && m.includes("not connected to this desk")) {
+        return JSON.stringify({ ...d, hint: "created; this desk is not connected to it: `desk` `use` with `environment`, then `env` `wait`" }, null, 2);
       }
       throw e;
     }
@@ -412,16 +412,16 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
       ws
         ? { ...(noStop ? {} : { stop: stopAct }), snapshot: snapAct }
         : {
-            list: act({ team: S }, [], async (a) => JSON.stringify(await sessionWorkspaces(a.team), null, 2)),
+            list: act({ team: S }, [], async (a) => JSON.stringify(await deskWorkspaces(a.team), null, 2)),
             get: mact({}, [], async (a) => api("GET", `/v1/workspaces/${seg(a.workspace)}`)),
-            // In a session (KL_SESSION) a workspace is created and deleted THROUGH it, so it is managed: a
-            // direct create would be standalone and then refused by this session's own tools, and a direct
-            // delete of a managed one is a 409. The session already names the owner, so `team` is dropped.
+            // In a desk (KL_DESK) a workspace is created and deleted THROUGH it, so it is managed: a
+            // direct create would be standalone and then refused by this desk's own tools, and a direct
+            // delete of a managed one is a 409. The desk already names the owner, so `team` is dropped.
             create: act({ name: S, image: S, packages: SL, team: S, source: { type: "string", description: "A workspace (id or name) to clone instead of creating an empty one." }, task: { type: "string", description: "What the clone is for (at most 200 characters)." }, ...WAITING }, ["name"], async (a) => {
               if (a.source) return thenWaitWs(await api("POST", `/v1/workspaces/${seg(a.source)}/clone`, strip({ name: a.name, task: a.task })), a);
               const body = { name: a.name, image: a.image, packages: a.packages };
-              const ses = process.env.KL_SESSION;
-              return thenWaitWs(ses ? await api("POST", `/v1/sessions/${seg(ses)}/workspaces`, strip(body)) : await api("POST", "/v1/workspaces", strip({ team: a.team, ...body })), a);
+              const ses = process.env.KL_DESK;
+              return thenWaitWs(ses ? await api("POST", `/v1/desks/${seg(ses)}/workspaces`, strip(body)) : await api("POST", "/v1/workspaces", strip({ team: a.team, ...body })), a);
             }),
             restore: act({ name: S, snapshot_id: { type: "string", description: "A volume name, `name@N` or a snapshot id." }, team: S, image: S, packages: SL, ...WAITING }, ["name", "snapshot_id"], async (a) =>
               thenWaitWs(await api("POST", "/v1/workspaces/restore", strip({ name: a.name, snapshot_id: a.snapshot_id, team: a.team, image: a.image, packages: a.packages })), a)),
@@ -447,8 +447,8 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
               return JSON.stringify(recorded ? { ...d, restart: lastAt(d), hint: "restarted; restart_required is still set" } : { ...d, restart: null, hint: "the restart was accepted; its record follows on the next get" });
             }),
             delete: mact({}, [], async (a) => {
-              const ses = process.env.KL_SESSION;
-              return deleting(`/v1/workspaces/${seg(a.workspace)}`, () => api("DELETE", ses ? `/v1/sessions/${seg(ses)}/workspaces/${seg(a.workspace)}` : `/v1/workspaces/${seg(a.workspace)}`));
+              const ses = process.env.KL_DESK;
+              return deleting(`/v1/workspaces/${seg(a.workspace)}`, () => api("DELETE", ses ? `/v1/desks/${seg(ses)}/workspaces/${seg(a.workspace)}` : `/v1/workspaces/${seg(a.workspace)}`));
             }),
             wait: mact({ timeout_ms: TIMEOUT }, [], async (a) => pollUntil(() => api("GET", `/v1/workspaces/${seg(a.workspace)}`), wsAny, timeoutMs(a), tickMs)),
             ttl: mact({ ttl_secs: TTL, clear: CLEAR }, [], async (a) => { const b = ttlBody(a); return typeof b === "string" ? b : (await api("PUT", `/v1/workspaces/${seg(a.workspace)}/ttl`, b), api("GET", `/v1/workspaces/${seg(a.workspace)}`)); }),
@@ -497,46 +497,46 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
           }),
   );
 
-  // ---- session
+  // ---- desk
   tools.push(
-    resource("session", ws ? "The session of this workspace and its environment. Action: current." : "Sessions: the one link between workspaces and an environment. Actions: current, list, create, use, start, stop, delete, ttl.",
+    resource("desk", ws ? "The desk of this workspace and its environment. Action: current." : "Desks: the one link between workspaces and an environment. Actions: current, list, create, use, start, stop, delete, ttl.",
       ws
         ? {
             current: act({}, [], async () => {
               const g = await load(W);
-              return "err" in g ? g.err : JSON.stringify({ session: g.doc?.session ?? null, environment: g.doc?.environment ?? null }, null, 2);
+              return "err" in g ? g.err : JSON.stringify({ desk: g.doc?.desk ?? null, environment: g.doc?.environment ?? null }, null, 2);
             }),
           }
         : {
-            current: act({}, [], currentSession),
-            list: act({ team: TEAM }, [], async (a) => api("GET", `/v1/sessions${qs({ team: a.team })}`)),
+            current: act({}, [], currentDesk),
+            list: act({ team: TEAM }, [], async (a) => api("GET", `/v1/desks${qs({ team: a.team })}`)),
             create: act({ name: S, team: TEAM, environment: ENVREF, ttl_secs: TTL }, ["name"], async (a) =>
-              api("POST", "/v1/sessions", strip({ name: a.name, team: a.team, environment: a.environment, ttl_secs: a.ttl_secs }))),
+              api("POST", "/v1/desks", strip({ name: a.name, team: a.team, environment: a.environment, ttl_secs: a.ttl_secs }))),
             use: act({ name: S, team: TEAM, environment: ENVREF }, [], async (a) => {
-              const id = process.env.KL_SESSION;
-              if (!id) return NO_SESSION;
+              const id = process.env.KL_DESK;
+              if (!id) return NO_DESK;
               if (a.name) {
-                // a bench serves one session: naming another is the laptop door's move, not this tool's
-                const cur = JSON.parse(await currentSession());
-                if (a.name !== cur?.id && a.name !== cur?.name) return `error: this bench belongs to session ${cur?.name ?? id}; \`use\` here only sets \`environment\``;
+                // a bench serves one desk: naming another is the laptop door's move, not this tool's
+                const cur = JSON.parse(await currentDesk());
+                if (a.name !== cur?.id && a.name !== cur?.name) return `error: this bench belongs to desk ${cur?.name ?? id}; \`use\` here only sets \`environment\``;
               }
-              if (a.environment === undefined) return currentSession();
-              const r = await raw("PUT", `/v1/sessions/${seg(id)}/environment`, { environment: a.environment });
+              if (a.environment === undefined) return currentDesk();
+              const r = await raw("PUT", `/v1/desks/${seg(id)}/environment`, { environment: a.environment });
               if (r.unavailable) throw new Error(UNAVAILABLE);
-              if (r.status === 404 || r.status === 403) return `session ${id} has ended`;
+              if (r.status === 404 || r.status === 403) return `desk ${id} has ended`;
               if (r.status < 200 || r.status >= 300) throw new Error(httpError(r.status, r.text));
-              return currentSession();
+              return currentDesk();
             }, ["environment"]),
-            start: act({ session: SES, ...WAITING }, ["session"], async (a) => thenWait(await api("POST", `/v1/sessions/${seg(a.session)}/start`), a, { kind: "session", path: () => `/v1/sessions/${seg(a.session)}`, done: (d) => d?.state === "running", id: () => a.session, reread: true })),
-            // no follow-up read: a stop of the bench's own session ends the link before a second call answers
-            stop: act({ session: SES }, ["session"], async (a) => {
-              const out = await api("POST", `/v1/sessions/${seg(a.session)}/stop`);
+            start: act({ desk: SES, ...WAITING }, ["desk"], async (a) => thenWait(await api("POST", `/v1/desks/${seg(a.desk)}/start`), a, { kind: "desk", path: () => `/v1/desks/${seg(a.desk)}`, done: (d) => d?.state === "running", id: () => a.desk, reread: true })),
+            // no follow-up read: a stop of the bench's own desk ends the link before a second call answers
+            stop: act({ desk: SES }, ["desk"], async (a) => {
+              const out = await api("POST", `/v1/desks/${seg(a.desk)}/stop`);
               let body: any;
               try { body = JSON.parse(out); } catch {}
-              return JSON.stringify({ id: a.session, state: "stopping", ...(body && typeof body === "object" ? body : {}) }, null, 2);
+              return JSON.stringify({ id: a.desk, state: "stopping", ...(body && typeof body === "object" ? body : {}) }, null, 2);
             }),
-            delete: act({ session: SES }, ["session"], async (a) => deleting(`/v1/sessions/${seg(a.session)}`, () => api("DELETE", `/v1/sessions/${seg(a.session)}`))),
-            ttl: act({ session: SES, ttl_secs: TTL, clear: CLEAR }, ["session"], async (a) => { const b = ttlBody(a); return typeof b === "string" ? b : (await api("PUT", `/v1/sessions/${seg(a.session)}/ttl`, b), api("GET", `/v1/sessions/${seg(a.session)}`)); }),
+            delete: act({ desk: SES }, ["desk"], async (a) => deleting(`/v1/desks/${seg(a.desk)}`, () => api("DELETE", `/v1/desks/${seg(a.desk)}`))),
+            ttl: act({ desk: SES, ttl_secs: TTL, clear: CLEAR }, ["desk"], async (a) => { const b = ttlBody(a); return typeof b === "string" ? b : (await api("PUT", `/v1/desks/${seg(a.desk)}/ttl`, b), api("GET", `/v1/desks/${seg(a.desk)}`)); }),
           }),
   );
 
@@ -575,7 +575,7 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
         const g = await load(wsPath(a));
         return "err" in g ? g.err : JSON.stringify(g.doc?.packages ?? [], null, 2);
       }),
-      // the orchestrating session reads packages; a workspace (or the laptop door) changes them
+      // the orchestrating desk reads packages; a workspace (or the laptop door) changes them
       ...(kind === "main" ? {} : {
         add: packagesEdit((cur, a) => {
           const add: string[] = a.packages ?? [];
@@ -591,7 +591,7 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
     }),
   );
 
-  // ---- intercept (a workspace session intercepts for itself only: no `workspace` argument); not the orchestrator's
+  // ---- intercept (a workspace desk intercepts for itself only: no `workspace` argument); not the orchestrator's
   if (kind !== "main") tools.push(
     resource("intercept", "Send an environment service's traffic to a workspace. Actions: start (`wait` until the proxy is ready), stop (the service goes back to its own pod).", {
       start: eact(
@@ -634,8 +634,8 @@ function mainOnly(tickMs: number): ToolDef[] {
       create: act({ command: { oneOf: [S, SL], description: "A shell string (run with `sh -c`), or an argv array." }, image: S, packages: SL, variables: { type: "object", additionalProperties: S, description: "Environment variables for the command. A value of exactly `${{ secrets.NAME }}` reads a secret." }, lifetime_s: { ...I, description: "The capsule's hard lifetime in seconds, 10 to 86400 (default 300). It ends when the command exits or this runs out." }, team: TEAMSLUG, from_workspace: { type: "string", description: "A workspace of yours (id, name or `team/name`) whose current files the capsule starts as, uncommitted work included." }, from_snapshot: { type: "string", description: "A snapshot id or `name@N` reference whose files the capsule starts as." }, ...WAITING }, ["command"], async (a) => {
         const cmd = Array.isArray(a.command) ? a.command : ["sh", "-c", String(a.command)];
         const body = { cmd, image: a.image, packages: a.packages, env: a.variables, timeout_secs: a.lifetime_s ?? a.timeout_s, from_workspace: a.from_workspace, from_snapshot: a.from_snapshot };
-        const ses = process.env.KL_SESSION;
-        const out = ses ? await api("POST", `/v1/sessions/${seg(ses)}/capsules`, strip(body)) : await api("POST", "/v1/capsules", strip({ team: a.team, ...body }));
+        const ses = process.env.KL_DESK;
+        const out = ses ? await api("POST", `/v1/desks/${seg(ses)}/capsules`, strip(body)) : await api("POST", "/v1/capsules", strip({ team: a.team, ...body }));
         if (!a.wait) return out;
         const id = JSON.parse(out).id;
         return capsuleWait(`/v1/capsules/${seg(id)}`, softMs(a), () => promoted(id, "capsule"));

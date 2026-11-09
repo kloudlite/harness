@@ -16,7 +16,7 @@ Every scenario ends with its cleanup. To check a result, use `kloudlite-verify`.
 **Trigger:** "set up this repo", "give me a workspace for acme/api".
 **Shape:** 1.
 **Steps:**
-1. Orient (`session` action `current`, `workspace` action `list`). Reuse a workspace that holds the repo.
+1. Orient (`desk` action `current`, `workspace` action `list`). Reuse a workspace that holds the repo.
 2. Read the repo's `package.json`, `go.mod` or `pyproject.toml` for packages. If there is no workspace yet, `workspace` {"action": "create", "name": "api", "packages": ["git", "nodejs@22"], "wait": true}. It answers when the workspace is `ready`.
 4. `exec` {"workspace": "ws-…", "cmd": "git clone https://github.com/acme/api .", "quiet": true}. The directory must be empty; else clone into a folder and give `cwd` later.
 5. `read` {"workspace": "ws-…", "paths": ["AGENTS.md"]}. Add packages it names with `packages` action `add`.
@@ -40,18 +40,18 @@ Every scenario ends with its cleanup. To check a result, use `kloudlite-verify`.
 **If it fails:** a service `failing`: read its `message` and `service` action `logs`, fix with `service` action `update`, wait again. `422` on a name: errors reference.
 **Then:** scenario 3.
 
-### 3. Session that joins them
+### 3. Desk that joins them
 
 **Trigger:** "connect my workspace to staging".
 **Shape:** 2.
 **Steps:**
-1. `session` action `current`. If the session has the environment, go to step 3.
-2. `session` {"action": "use", "environment": "env-…"}. To make a session for this work: `session` {"action": "create", "name": "orders", "environment": "env-…"}, then `session` {"action": "use", "name": "orders"} to drive it. In the harness (no `session` action `use`; see Hosts in the `kloudlite` skill) you cannot drive another session: tell the user to open it, or use `session` action `use` on the current one after the user agrees.
-3. A workspace joins only by being created in the session: `workspace` action `create` with the session picked. A standalone workspace stays out; clone the repo into a new managed one.
+1. `desk` action `current`. If the desk has the environment, go to step 3.
+2. `desk` {"action": "use", "environment": "env-…"}. To make a desk for this work: `desk` {"action": "create", "name": "orders", "environment": "env-…"}, then `desk` {"action": "use", "name": "orders"} to drive it. In the harness (no `desk` action `use`; see Hosts in the `kloudlite` skill) you cannot drive another desk: tell the user to open it, or use `desk` action `use` on the current one after the user agrees.
+3. A workspace joins only by being created in the desk: `workspace` action `create` with the desk picked. A standalone workspace stays out; clone the repo into a new managed one.
 4. `exec` {"workspace": "ws-…", "cmd": "getent hosts db"}.
 
 **Done when:** `db` resolves from the workspace.
-**If it fails:** no resolve: the workspace is standalone, or the session has no environment (`session` action `current`), or the environment is stopped (`env` action `start`).
+**If it fails:** no resolve: the workspace is standalone, or the desk has no environment (`desk` action `current`), or the environment is stopped (`env` action `start`).
 **Then:** scenario 4.
 
 ### 4. Run a component against real services
@@ -87,8 +87,8 @@ Every scenario ends with its cleanup. To check a result, use `kloudlite-verify`.
 **Trigger:** "add shipped-order emails across api, worker and web".
 **Shape:** 3.
 **Steps:**
-1. Scenarios 2 and 3 once: one environment with `web`, `api`, `worker`, `db`, `cache`, one session.
-2. A managed workspace per component (scenario 1 for each, in the session).
+1. Scenarios 2 and 3 once: one environment with `web`, `api`, `worker`, `db`, `cache`, one desk.
+2. A managed workspace per component (scenario 1 for each, in the desk).
 3. Start each process (scenario 4) and intercept its own service (scenario 5).
 4. Change the contract first (api), then its callers. `env` action `get`: every service shows its intercept.
 5. At the end `intercept` action `stop` each service, one by one.
@@ -116,7 +116,7 @@ Every scenario ends with its cleanup. To check a result, use `kloudlite-verify`.
 **Trigger:** "try two approaches", "work on two features at once".
 **Shape:** 3 or 4.
 **Steps:**
-1. Against the services: a second managed workspace in the session, which clones the repo, or `worktree` {"action": "add", "workspace": "ws-…", "name": "export"} in the same managed workspace; run each tree's process on its own port.
+1. Against the services: a second managed workspace in the desk, which clones the repo, or `worktree` {"action": "add", "workspace": "ws-…", "name": "export"} in the same managed workspace; run each tree's process on its own port.
 2. Only one tree's process can hold the intercept of a service. Intercept one, stop it, intercept the other.
 3. Without services: `workspace` {"action": "create", "source": "ws-…", "name": "api-try", "task": "approach B"}. A clone is standalone and does not reach the environment.
 4. Commit each part on its own branch: `exec` `git switch -c export && git commit …`. Merge in the original workspace with `git fetch` and `git merge`.
@@ -131,12 +131,12 @@ Every scenario ends with its cleanup. To check a result, use `kloudlite-verify`.
 **Shape:** 4.
 **Steps:**
 1. `env` {"action": "create", "env": "env-staging…", "name": "shop-repro"}; add `source` to copy an environment, or a snapshot id to restore it into a new one. `env` action `wait`.
-2. Tell the user the next step moves the whole session to the copy and stops the session's intercepts on staging.
-3. `session` {"action": "use", "environment": "env-copy…"}. Reproduce and fix (scenarios 4, 5, 7).
-4. `session` action `use` back to staging.
+2. Tell the user the next step moves the whole desk to the copy and stops the desk's intercepts on staging.
+3. `desk` {"action": "use", "environment": "env-copy…"}. Reproduce and fix (scenarios 4, 5, 7).
+4. `desk` action `use` back to staging.
 5. `env` {"action": "delete", "env": "env-copy…"} after the user says yes.
 
-**Done when:** the bug is fixed on the copy, the session is on staging, the copy is deleted or kept by the user's choice.
+**Done when:** the bug is fixed on the copy, the desk is on staging, the copy is deleted or kept by the user's choice.
 **If it fails:** `409` with a limit: the copy counts against the quota.
 
 ### 10. Change a service
@@ -181,7 +181,7 @@ Every scenario ends with its cleanup. To check a result, use `kloudlite-verify`.
 2. `workspace` {"action": "snapshot", "workspace": "ws-…", "volume": "api-base", "message": "before the refactor"}. Give `volume` only on the first snapshot.
 3. `volume` {"action": "get", "volume": "<id from volume list>"}: note `api-base@3`.
 4. Restore: `workspace` {"action": "restore", "name": "api-restored", "snapshot_id": "api-base@3"}; add `team` for a team volume, and `"wait": true` to answer when it is `ready`.
-5. Say the result is standalone: it does not reach the environment. A managed one needs a new workspace in the session and a copy of the files.
+5. Say the result is standalone: it does not reach the environment. A managed one needs a new workspace in the desk and a copy of the files.
 
 **Done when:** the snapshot is `ready` in the history, or the restored workspace is `ready` with the files.
 **If it fails:** `422` asking for `volume`: ask the user for a name. `409` name taken: ask for another.
@@ -222,22 +222,22 @@ Every scenario ends with its cleanup. To check a result, use `kloudlite-verify`.
 
 ### 17. Stop for the day
 
-**Trigger:** "stop everything for today", "stop for the day". "Stop my session" alone is the `kloudlite` skill's lifecycle row.
+**Trigger:** "stop everything for today", "stop for the day". "Stop my desk" alone is the `kloudlite` skill's lifecycle row.
 **Steps:**
 1. `env` action `get`: `intercept` action `stop` each intercept you made, one by one. A stopped workspace keeps its intercept wish and it takes hold again on the next start, so stop it first.
 2. `process` action `list` per workspace; `process` action `kill` what you started. Report what is left to the user.
-3. `workspace` {"action": "stop", "workspace": "ws-…"} for each workspace of the session, one by one.
-4. `env` action `stop` only when the user asks; a stopped session already lets an unused environment go idle.
-5. Last, and only when the user wants the session itself stopped: tell the user that `session` action `stop` also stops the bench, so your tools end with it; then `session` {"action": "stop", "session": "orders"} as the final act. Do nothing after it.
+3. `workspace` {"action": "stop", "workspace": "ws-…"} for each workspace of the desk, one by one.
+4. `env` action `stop` only when the user asks; a stopped desk already lets an unused environment go idle.
+5. Last, and only when the user wants the desk itself stopped: tell the user that `desk` action `stop` also stops the bench, so your tools end with it; then `desk` {"action": "stop", "desk": "orders"} as the final act. Do nothing after it.
 
 **Done when:** `workspace` action `get` shows each workspace `stopped` and `env` action `get` shows no intercept of yours. After step 5 you cannot check; say what you did before you called it.
-**If it fails:** an idle session stops by itself after 30 minutes. A refused `workspace` action `stop` (a process you cannot kill): tell the user.
+**If it fails:** an idle desk stops by itself after 30 minutes. A refused `workspace` action `stop` (a process you cannot kill): tell the user.
 
 ### 18. Reach the environment from the laptop
 
 **Trigger:** "I want to run psql from my terminal".
 **Steps:**
-1. The user runs `kloudlite env` (the tunnel to the session's environment); you do not. Give the command and the service name and port from `env` action `get`, for example `psql -h db -p 5432`.
+1. The user runs `kloudlite env` (the tunnel to the desk's environment); you do not. Give the command and the service name and port from `env` action `get`, for example `psql -h db -p 5432`.
 2. On a host with a shell, you may run it for the user.
 
 **Done when:** the user connects.
@@ -246,7 +246,7 @@ Every scenario ends with its cleanup. To check a result, use `kloudlite-verify`.
 ## Rules
 
 - Obey the safety rules of the `kloudlite` skill.
-- Use the session's environment. Copy it only for scenario 9, or when the user asks.
+- Use the desk's environment. Copy it only for scenario 9, or when the user asks.
 - Run servers as environment services; run only the user's own code in a workspace.
 - Stop every intercept you made. Delete what you created for the task; keep what the user had.
 - Never handle a secret value in output. A restart after a new variable is the user's choice.
