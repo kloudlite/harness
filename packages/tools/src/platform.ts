@@ -108,7 +108,7 @@ export const qs = (p: Record<string, string | undefined>) => {
   const s = u.toString();
   return s ? `?${s}` : "";
 };
-const VOLUME = { type: "string", description: "The name this snapshot gives its volume (volume list shows it; volume get takes it): required on its first push, optional (but equal) after." };
+const VOLUME = { type: "string", description: "The name this snapshot gives its volume (volume list shows it; volume get takes it): required on its first push, optional (but equal) after. A clone shares its source's volume and history: its snapshots appear there and take the source's volume name." };
 const strip = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined));
 
 type Props = Record<string, unknown>;
@@ -467,7 +467,7 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
         : {
             list: act({ team: S }, [], async (a) => api("GET", `/v1/environments${qs({ owner: a.team })}`)),
             get: eact({}, [], async (env) => (await wake(env), envView(env))),
-            create: act({ name: S, services: { type: "array", items: SERVICE }, team: S, region: S, source: { type: "string", description: "An environment (id or name) to clone live, or a snapshot id to restore into a new environment. Omit it for an empty one." }, ...WAITING }, ["name"], async (a) => {
+            create: act({ name: S, services: { type: "array", items: SERVICE }, team: S, region: S, source: { type: "string", description: "An environment (id or name) to clone live, or a snapshot id to restore into a new environment. Omit it for an empty one. A clone shares its source's volume and history: its snapshots appear there and take the source's volume name." }, ...WAITING }, ["name"], async (a) => {
               const services = a.services?.map(withServiceDefaults);
               if (a.source) {
                 const r = await raw("GET", `/v1/environments/${seg(a.source)}`);
@@ -667,7 +667,19 @@ function mainOnly(tickMs: number): ToolDef[] {
       delete: act({ volume: S }, ["volume"], async (a) => (await api("DELETE", `/v1/volumes/${seg(a.volume)}`), JSON.stringify({ volume: a.volume, state: "deleted" }, null, 2))),
     }),
     resource("snapshot", "Snapshots of a volume. Action: delete one.", {
-      delete: act({ volume: S, snapshot: S }, ["volume", "snapshot"], async (a) => (await api("DELETE", `/v1/volumes/${seg(a.volume)}/snapshots/${seg(a.snapshot)}`), JSON.stringify({ volume: a.volume, snapshot: a.snapshot, state: "deleted" }, null, 2))),
+      delete: act({ volume: S, snapshot: S }, ["volume", "snapshot"], async (a) => {
+        // the route is keyed by the volume id; a display name resolves from the list rows as `volume get` does (a clone shares its source's row)
+        const rows: any[] = await apiJson<any[]>("GET", "/v1/volumes").then((r) => (Array.isArray(r) ? r : [])).catch(() => []);
+        const byId = rows.some((r) => r?.id === a.volume);
+        const named = byId ? [] : rows.filter((r) => r?.name === a.volume).map((r) => r.id);
+        if (named.length > 1) throw new Error(`409: volume name ${a.volume} is ambiguous; use one of these ids: ${named.join(", ")}`);
+        try { await api("DELETE", `/v1/volumes/${seg(named[0] ?? a.volume)}/snapshots/${seg(a.snapshot)}`); }
+        catch (e) {
+          if (!byId && !named.length && rows.length && String((e as Error).message).startsWith("404")) throw new Error(`404: no volume named ${a.volume}; volume list shows names and ids`);
+          throw e;
+        }
+        return JSON.stringify({ volume: a.volume, snapshot: a.snapshot, state: "deleted" }, null, 2);
+      }),
     }),
     resource("pipeline", "Pipelines: versioned definitions. Actions: list, get (a version, or the pipeline with its versions), save, delete (one version with `version`).", {
       list: act({ owner: OWNER }, ["owner"], async (a) => api("GET", `/v1/pipelines/${seg(a.owner)}`)),

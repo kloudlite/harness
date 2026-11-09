@@ -35,7 +35,7 @@ One tool per resource. `action` picks the verb; the arguments below are the unio
 
 | Tool | Arguments | Answers |
 |---|---|---|
-| `env` | `action`, `env?`, `name?`, `services?`, `team?`, `region?`, `source?`, `ttl_secs?`, `clear?`, `message?`, `volume?`, `discard?`, `wait?`, `soft_ms?`, `timeout_ms?` | `list`, `get` (services, state, `stopped_reason`, `stopped_at`, `hint`, `interceptedBy`, `proxy`, `restart_required`, `volume`), `create` (a service is `{name, image, ports, env, mounts, command}`; with `source`: an environment copies it, a snapshot id restores it), `start`, `stop` (answers the stopped state; `wait: true` waits for stopped, not ready), `delete`, `wait` (`timed_out: true` at the limit), `ttl`, `snapshot`, `restore` (overwrites THIS environment in place and creates nothing; for a new one `create` with `source` a snapshot; `source` is the snapshot id; `409 lost` lists services that lose data, `discard` accepts it) |
+| `env` | `action`, `env?`, `name?`, `services?`, `team?`, `region?`, `source?`, `ttl_secs?`, `clear?`, `message?`, `volume?`, `discard?`, `wait?`, `soft_ms?`, `timeout_ms?` | `list`, `get` (services, state, `stopped_reason`, `stopped_at`, `hint`, `interceptedBy`, `proxy`, `restart_required`, `volume`), `create` (a service is `{name, image, ports, env, mounts, command}`; with `source`: an environment copies it, a snapshot id restores it), `start`, `stop` (answers the stopped state; `wait: true` waits for stopped, not ready), `delete`, `wait` (`timed_out: true` at the limit), `ttl`, `snapshot` (a clone shares its source's volume and history: its snapshots appear there and take the source's volume name), `restore` (overwrites THIS environment in place and creates nothing; for a new one `create` with `source` a snapshot; `source` is the snapshot id; `409 lost` lists services that lose data, `discard` accepts it) |
 | `service` | `action`, `env`, `service?`, `name?`, `restart?`, `tail?`, `since?`, `previous?`, `wait?`, `soft_ms?` | `add` and `update` (`update` merges into the live service by name: fields given replace those fields, absent ones keep their values, `env` merges by key and `{X: null}` removes X; `restart: true` restarts it to read new variables) take `service`; `remove` and `logs` take `name`; `logs` takes `tail` (2000 max), `since` (seconds), `previous` |
 
 ## Intercepts and volumes
@@ -44,7 +44,7 @@ One tool per resource. `action` picks the verb; the arguments below are the unio
 |---|---|---|
 | `intercept` | `action`, `env`, `service`, `workspace?`, `ports?` `[{service, workspace}]`, `wait?`, `soft_ms?` | `start` sends the service's traffic to the workspace (kind `env` when promoted); `stop` gives the service back |
 | `volume` | `action`, `volume?`, `kind?`, `owner?` | `list`, `get` (snapshots, `refs` with the newest push under `latest`, and `working`: where each current workspace or environment stands on the volume, with `working_copies` on each snapshot; takes the volume id or the name a snapshot gave it), `delete` (a detached volume) |
-| `snapshot` | `action`, `volume`, `snapshot` | `delete` one snapshot |
+| `snapshot` | `action`, `volume`, `snapshot` | `delete` one snapshot (`volume` is the name or id) |
 
 ## Capsules
 

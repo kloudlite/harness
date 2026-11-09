@@ -18,7 +18,7 @@ All work runs in the context of one team: a person's own team or a shared team. 
 3. **Desk.** One piece of work: the agent's conversation, the workspaces and capsules it uses, and the environment they reach. Private to its creator; teammates use their own desks on the same environment.
 4. **Intercept.** Sends all traffic of one environment service to a workspace of the desk; the service pauses; callers keep the same name and port. Environment-wide.
 5. **Capsule.** A disposable sandbox: an isolated container that runs one command or one shell and ends when it exits. In a desk it reaches the environment. Files are gone at the end. It is never where an agent works; that is a workspace.
-6. **Volume.** The saved storage of one workspace or environment: its disk and the chain of snapshots. A named volume numbers its snapshots `name@N`. A reference is `name` (newest), `name@N`, or a snapshot id.
+6. **Volume.** The saved storage of one workspace or environment: its disk and the chain of snapshots. A named volume numbers its snapshots `name@N`. A clone shares its source's volume and history: its snapshots appear there and take the source's volume name. A reference is `name` (newest), `name@N`, or a snapshot id.
 7. **Pipeline.** A versioned JSON definition of jobs; each job runs its steps in its own capsule; a run starts one version by hand, on a schedule, from a webhook, or after another pipeline.
 8. **Secrets and variables.** A variable is `NAME=value` in the `env` of a workspace, service, capsule or job. A secret is a named value of an owner; a variable refers to it as the whole value `${{ secrets.NAME }}`. No one reads a value back.
 9. **Connector.** A link from an owner to a code host (GitHub, GitLab) or a container registry: read-only clone over HTTPS; image push and private pull. Connected in the web console.
@@ -99,7 +99,7 @@ Parallel work: only a managed workspace reaches the environment, and a clone is 
 | Desk | `desk-` | `running`, `starting`, `idle`, `stopped` |
 | Capsule | `cap-` | `phase`: `pending`, `starting`, `running`, `terminated`; with `reason` `Exited`, `exit_code` is the result |
 
-Get ids from the `list` actions of `workspace` and `env`, or from `desk` `current`. Tools take the id or the name; write the name to the user. `volume` `get` and `delete` take the volume `id` from `volume` `list`. Restore takes a reference in `snapshot_id`; create takes one in `source`.
+Get ids from the `list` actions of `workspace` and `env`, or from `desk` `current`. Tools take the id or the name; write the name to the user. `volume` `get` and `delete` take the volume `id` from `volume` `list`; `snapshot` `delete` takes the id or the name. Restore takes a reference in `snapshot_id`; create takes one in `source`.
 
 A desk goes `idle` after 30 minutes without use, and its workspaces stop. A start, a create in the desk, or a connect wakes it. What the user stopped stays stopped. After a wake, the next tool answer reports each workspace restart and stop that happened while idle.
 

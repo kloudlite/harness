@@ -803,3 +803,14 @@ test("soft_ms 60000 on a poll that never finishes hands off before 56 s, inside 
     jest.useRealTimers();
   }
 });
+
+test("snapshot delete takes the volume's display name, an id, and refuses an unknown or ambiguous name", async () => {
+  routes["GET /v1/volumes"] = json([{ id: "env-1", name: "data" }, { id: "env-2", name: "twin" }, { id: "env-3", name: "twin" }]);
+  routes["DELETE /v1/volumes/env-1/snapshots/s1"] = () => new Response(null, { status: 204 });
+  const t = platformTools("main");
+  await tool(t, "snapshot").run({ action: "delete", volume: "data", snapshot: "s1" });
+  await tool(t, "snapshot").run({ action: "delete", volume: "env-1", snapshot: "s1" });
+  expect(calls.filter((c) => c.method === "DELETE").map((c) => c.url)).toEqual(["/v1/volumes/env-1/snapshots/s1", "/v1/volumes/env-1/snapshots/s1"]);
+  await expect(tool(t, "snapshot").run({ action: "delete", volume: "nope", snapshot: "s1" })).rejects.toThrow("no volume named nope; volume list shows names and ids");
+  await expect(tool(t, "snapshot").run({ action: "delete", volume: "twin", snapshot: "s1" })).rejects.toThrow(/env-2.*env-3/);
+});
