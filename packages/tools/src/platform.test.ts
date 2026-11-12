@@ -828,3 +828,12 @@ test("snapshot delete takes the volume's display name, an id, and refuses an unk
   await expect(tool(t, "snapshot").run({ action: "delete", volume: "nope", snapshot: "s1" })).rejects.toThrow("no volume named nope; volume list shows names and ids");
   await expect(tool(t, "snapshot").run({ action: "delete", volume: "twin", snapshot: "s1" })).rejects.toThrow(/env-2.*env-3/);
 });
+
+test("capsule wait on a pending view with exit_code null keeps waiting to the bound", async () => {
+  const t = platformTools("main");
+  routes["POST /v1/capsules/c1/wait"] = json({ phase: "running", exit_code: null });
+  const out = JSON.parse(await tool(t, "capsule_wait").run({ capsule: "c1", timeout_ms: 1 }));
+  expect(out.timed_out).toBe(true);
+  routes["POST /v1/capsules/c1/wait"] = json({ phase: "terminated", exit_code: 0 });
+  expect(JSON.parse(await tool(t, "capsule_wait").run({ capsule: "c1" })).exit_code).toBe(0);
+});
