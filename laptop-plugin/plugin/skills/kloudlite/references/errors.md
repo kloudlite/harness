@@ -4,7 +4,7 @@ The status comes first; the body is one sentence. Report it as it is, then take 
 
 | Error | Action |
 |---|---|
-| `409` `{dimension}: {used} of {limit} in use; request more under Quota` | Do not retry. Tell the user. Free something, or `request_create` kind `quota` when asked. |
+| `409` `{dimension}: {used} of {limit} in use; request more under Quota` | Do not retry. Tell the user. Free something, or `request_create` kind `quota` when asked. A pipeline job refused by `capsules`, `cpu` or `memoryGb` waits up to 30 minutes instead (`waiting for quota: …`). |
 | `403 your access to {team} is paused` | A team admin must unpause. Stop. |
 | `403 you are no longer a member of {team}` | Stop. The user cannot act there. |
 | `404 not found` | The object does not exist or is not the user's. Check the id with the list tool. |

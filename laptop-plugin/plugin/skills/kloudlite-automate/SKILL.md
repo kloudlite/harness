@@ -18,7 +18,7 @@ Read the `kloudlite` skill first. It holds the definitions and the safety rules.
 - `${{ inputs.X }}`, `${{ matrix.X }}`, `${{ needs.JOB.result }}`, `${{ event }}`, `${{ run.number }}` interpolate. A `${{ secrets.NAME }}` must be the whole value of an `env` entry.
 - `webhook.body.*` is readable only in `env` and `if`. Read it into `env`; use `"$NAME"` in `run`.
 - Limits: 50 jobs, 100 steps per job, 64 KiB, 50 pipelines per owner, 100 versions.
-- A job with no `if` runs only when every job in `needs` succeeded. Jobs with no `needs` run in parallel, up to 8 at a time. A failed job fails the run.
+- A job with no `if` runs only when every job in `needs` succeeded. Jobs with no `needs` run in parallel, up to 8 at a time. A failed job fails the run. A job beyond quota waits up to 30 minutes before it fails.
 
 ## Scenarios
 

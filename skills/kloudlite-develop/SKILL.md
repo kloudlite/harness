@@ -17,7 +17,7 @@ Every scenario ends with its cleanup. To check a result, use `kloudlite-verify`.
 **Shape:** 1.
 **Steps:**
 1. Orient (`desk` action `current`, `workspace` action `list`). Reuse a workspace that holds the repo.
-2. Read the repo's `package.json`, `go.mod` or `pyproject.toml` for packages. If there is no workspace yet, `workspace` {"action": "create", "name": "api", "packages": ["git", "nodejs@22"], "wait": true} (`packages` are top-level nixpkgs names; Python libraries go in with pip). It answers when the workspace is `ready`.
+2. Read the repo's `package.json`, `go.mod` or `pyproject.toml` for packages. If there is no workspace yet, `workspace` {"action": "create", "name": "shop-api", "packages": ["git", "nodejs@22"], "wait": true} (`packages` are top-level nixpkgs names; Python libraries go in with pip). It answers when the workspace is `ready`.
 4. `exec` {"workspace": "ws-…", "cmd": "git clone https://github.com/acme/api .", "quiet": true}. The directory must be empty; else clone into a folder and give `cwd` later.
 5. `read` {"workspace": "ws-…", "paths": ["AGENTS.md"]}. Add packages it names with `packages` action `add`: top-level nixpkgs names (`python3`, `nodejs_22`, optional `@version`), never `python3Packages.x`; install Python libraries with pip.
 
@@ -180,7 +180,7 @@ Every scenario ends with its cleanup. To check a result, use `kloudlite-verify`.
 1. Only on request. `workspace` action `get`: read `volume`.
 2. `workspace` {"action": "snapshot", "workspace": "ws-…", "volume": "api-base", "message": "before the refactor"}. Give `volume` only on the first snapshot.
 3. `volume` {"action": "get", "volume": "<id from volume list>"}: note `api-base@3`.
-4. Restore: `workspace` {"action": "restore", "name": "api-restored", "snapshot_id": "api-base@3"}; add `team` for a team volume, and `"wait": true` to answer when it is `ready`.
+4. Restore: `workspace` {"action": "restore", "name": "api-restored", "snapshot_id": "api-base@3"}; add `team` for a team volume, and `"wait": true` to answer when it is `ready`. Made from a desk, the restored workspace joins the desk and reaches its environment; a restore from the laptop CLI joins none.
 5. Say the result is standalone: it does not reach the environment. A managed one needs a new workspace in the desk and a copy of the files.
 
 **Done when:** the snapshot is `ready` in the history, or the restored workspace is `ready` with the files.
@@ -191,7 +191,7 @@ Every scenario ends with its cleanup. To check a result, use `kloudlite-verify`.
 **Trigger:** "reset the data to last night's snapshot".
 **Steps:**
 1. `env` action `get`: read `volume`. `volume` action `get`: find the snapshot the user names. Take one first only if the user asks: `env` action `snapshot`.
-2. Name the environment and the snapshot; data written since is lost. Wait for a yes.
+2. Name the environment and the snapshot; data written since is lost, in every service, and the only warning is your own: a `409` comes just for services or folders the snapshot lacks. Wait for a yes.
 3. `env` {"action": "restore", "env": "env-…", "snapshot_id": "…"}.
 4. On `409` with `lost`: list the services; only after a yes, repeat with "discard": [each name in `lost`].
 5. `env` action `wait`.

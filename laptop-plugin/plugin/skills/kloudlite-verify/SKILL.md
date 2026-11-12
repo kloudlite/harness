@@ -54,7 +54,7 @@ A check in a workspace uses the workspace's files and changes nothing. A capsule
 **Steps:**
 1. `capsule` {"action": "list", "limit": 10}: find it by time or command (`q`, `state` narrow it).
 2. `capsule` action `get`: `phase`, `reason`, `exit_code`, `message`, the times.
-3. `capsule` action `logs`: an ended capsule keeps its last 256 KiB.
+3. `capsule` action `logs`: an ended capsule keeps its last 256 KiB. Secret values show as `***` in the output.
 
 **Done when:** you told the user the result and, for a failure, the cause.
 **If it fails:** an older record than 90 days is gone.
