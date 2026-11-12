@@ -130,13 +130,13 @@ Every scenario ends with its cleanup. To check a result, use `kloudlite-verify`.
 **Trigger:** "reproduce it without breaking staging".
 **Shape:** 4.
 **Steps:**
-1. `env` {"action": "create", "env": "env-staging…", "name": "shop-repro"}; add `source` to copy an environment, or a snapshot id to restore it into a new one. `env` action `wait`.
+1. `env` {"action": "create", "name": "shop-repro", "source": "env-staging…"}; `source` is the environment to copy, or a snapshot id to restore into a new one. `env` action `wait`.
 2. Tell the user the next step makes a new desk on the copy; the current desk and its intercepts on staging stay as they are.
 3. `desk` {"action": "create", "name": "repro", "environment": "env-copy…"}, then pass `desk: "repro"` on every call. Reproduce and fix (scenarios 4, 5, 7).
 4. Pass the original desk on later calls; a call without `desk` is refused.
 5. `env` {"action": "delete", "env": "env-copy…"} after the user says yes.
 
-**Done when:** the bug is fixed on the copy, the desk is on staging, the copy is deleted or kept by the user's choice.
+**Done when:** the bug is fixed on the copy, the original desk still points at staging, the copy is deleted or kept by the user's choice.
 **If it fails:** `409` with a limit: the copy counts against the quota.
 
 ### 10. Change a service
