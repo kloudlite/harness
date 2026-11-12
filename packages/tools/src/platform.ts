@@ -79,11 +79,10 @@ export async function deskWorkspaces(team?: string): Promise<any[]> {
 
 const NO_DESK = "no desk is set (KL_DESK is not set)";
 
-/** The bench's own desk: a bench belongs to one desk and never joins another, so `desk use`
- * here only moves that desk's environment. The laptop door (`kloudlite mcp`) answers `current`,
- * `use` and `create` itself, from the desk the laptop picked. */
-async function currentDesk(): Promise<string> {
-  const id = process.env.KL_DESK;
+/** A desk's `{id, name, environment}`: the thread's own (KL_DESK) unless `desk` names another. A
+ * bench belongs to one desk, and `desk connect` here only moves a desk's environment. */
+async function currentDesk(desk?: string): Promise<string> {
+  const id = desk ?? process.env.KL_DESK;
   if (!id) return NO_DESK;
   const r = await raw("GET", `/v1/desks/${seg(id)}`);
   if (r.unavailable) throw new Error(UNAVAILABLE);
@@ -208,7 +207,7 @@ const PVER = { type: "integer", description: "A version number. `get`: that vers
 const OFFSET = { type: "integer", description: "Byte offset into the job's output. `logs`: the whole page from there (`next`, `complete`), else the last lines. `wait`: also answers that page as `output`." };
 const TEAMSLUG = { type: "string", description: "The team slug. In a desk its own team is used." };
 const TEAM = { type: "string", description: "A team you belong to. Omit it for your own." };
-const ENVREF = { anyOf: [{ type: "string" }, { type: "null" }], description: "An environment id or name of the desk's team. `use` with null disconnects." };
+const ENVREF = { anyOf: [{ type: "string" }, { type: "null" }], description: "An environment id or name of the desk's team. `connect` with null disconnects." };
 const MAX_TAIL = 2000;
 
 /** Cut a log to its first `head` and last `tail` lines (tail defaults to 200); a note says how many lines went. */
@@ -360,7 +359,7 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
       // answers the object and the way in rather than the 403 the first poll met.
       const m = String(e?.message ?? e);
       if (m.startsWith("403") && m.includes("not connected to this desk")) {
-        return JSON.stringify({ ...d, hint: "created; this desk is not connected to it: `desk` `use` with `environment`, then `env` `wait`" }, null, 2);
+        return JSON.stringify({ ...d, hint: "created; this desk is not connected to it: `desk` `connect` with `environment`, then `env` `wait`" }, null, 2);
       }
       throw e;
     }
@@ -499,33 +498,27 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
 
   // ---- desk
   tools.push(
-    resource("desk", ws ? "The desk of this workspace and its environment. Action: current." : "Desks: the one link between workspaces and an environment. Actions: current, list, create, use, start, stop, delete, ttl.",
+    resource("desk", ws ? "The desk of this workspace and its environment. Action: list." : "Desks: the one link between workspaces and an environment. Actions: list, create, connect (sets a desk's environment; null disconnects), start, stop, delete, ttl.",
       ws
         ? {
-            current: act({}, [], async () => {
+            list: act({}, [], async () => {
               const g = await load(W);
               return "err" in g ? g.err : JSON.stringify({ desk: g.doc?.desk ?? null, environment: g.doc?.environment ?? null }, null, 2);
             }),
           }
         : {
-            current: act({}, [], currentDesk),
             list: act({ team: TEAM }, [], async (a) => api("GET", `/v1/desks${qs({ team: a.team })}`)),
             create: act({ name: S, team: TEAM, environment: ENVREF, ttl_secs: TTL }, ["name"], async (a) =>
               api("POST", "/v1/desks", strip({ name: a.name, team: a.team, environment: a.environment, ttl_secs: a.ttl_secs }))),
-            use: act({ name: S, team: TEAM, environment: ENVREF }, [], async (a) => {
-              const id = process.env.KL_DESK;
+            connect: act({ desk: SES, environment: ENVREF }, [], async (a) => {
+              const id = a.desk ?? process.env.KL_DESK;
               if (!id) return NO_DESK;
-              if (a.name) {
-                // a bench serves one desk: naming another is the laptop door's move, not this tool's
-                const cur = JSON.parse(await currentDesk());
-                if (a.name !== cur?.id && a.name !== cur?.name) return `error: this bench belongs to desk ${cur?.name ?? id}; \`use\` here only sets \`environment\``;
-              }
-              if (a.environment === undefined) return currentDesk();
+              if (a.environment === undefined) return "error: `environment` is required (an id or name, or null to disconnect)";
               const r = await raw("PUT", `/v1/desks/${seg(id)}/environment`, { environment: a.environment });
               if (r.unavailable) throw new Error(UNAVAILABLE);
               if (r.status === 404 || r.status === 403) return `desk ${id} has ended`;
               if (r.status < 200 || r.status >= 300) throw new Error(httpError(r.status, r.text));
-              return currentDesk();
+              return currentDesk(id);
             }, ["environment"]),
             start: act({ desk: SES, ...WAITING }, ["desk"], async (a) => thenWait(await api("POST", `/v1/desks/${seg(a.desk)}/start`), a, { kind: "desk", path: () => `/v1/desks/${seg(a.desk)}`, done: (d) => d?.state === "running", id: () => a.desk, reread: true })),
             // no follow-up read: a stop of the bench's own desk ends the link before a second call answers

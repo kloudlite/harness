@@ -51,8 +51,8 @@ const tool = (tools: ReturnType<typeof platformTools>, n: string) => {
   if (!r) throw new Error(`no tool ${n}`);
   const action = n.slice(r.name.length + 1);
   const tweak: Record<string, (i: any) => any> = {
-    desk_connect: (i) => ({ action: "use", environment: i.environment }),
-    desk_disconnect: () => ({ action: "use", environment: null }),
+    desk_connect: (i) => ({ action: "connect", environment: i.environment }),
+    desk_disconnect: () => ({ action: "connect", environment: null }),
     workspace_clone: ({ workspace, ...i }) => ({ action: "create", source: workspace, ...i }),
   };
   return { ...r, name: n, run: (i: any) => r.run(tweak[n] ? tweak[n]!(i ?? {}) : { action, ...(i ?? {}) }) };
@@ -91,7 +91,7 @@ test("a workspace desk has the slice its token reaches, folded; main keeps today
   const actions = (t: ReturnType<typeof platformTools>, n: string) => (tool(t, n).inputSchema as any).properties.action.enum;
   expect(actions(slice, "workspace")).toEqual(["stop", "snapshot"]);
   expect(actions(slice, "env")).toEqual(["get", "wait"]);
-  expect(actions(slice, "desk")).toEqual(["current"]);
+  expect(actions(slice, "desk")).toEqual(["list"]);
   expect(actions(platformTools("workspace", "w1", 5000, true), "workspace")).toEqual(["snapshot"]);
   const main = platformTools("main");
   expect(actions(main, "packages")).toEqual(["list"]);
@@ -153,24 +153,22 @@ test("workspace desks default env through the workspace's desk", async () => {
   expect(t.some((x) => x.name === "workspace_create")).toBe(false);
 });
 
-test("the bench offers desk current and use: a bench belongs to its desk and never joins another", () => {
-  for (const kind of ["main", "all"] as const) expect((tool(platformTools(kind, "w1"), "desk").inputSchema as any).properties.action.enum).toEqual(expect.arrayContaining(["current", "use", "create"]));
-  expect((tool(platformTools("workspace", "w1"), "desk").inputSchema as any).properties.action.enum).toEqual(["current"]);
+test("the bench offers desk list, create and connect: a bench belongs to its desk and never joins another", () => {
+  for (const kind of ["main", "all"] as const) {
+    const e = (tool(platformTools(kind, "w1"), "desk").inputSchema as any).properties.action.enum;
+    expect(e).toEqual(expect.arrayContaining(["list", "create", "connect"]));
+    expect(e).not.toContain("use");
+    expect(e).not.toContain("current");
+  }
+  expect((tool(platformTools("workspace", "w1"), "desk").inputSchema as any).properties.action.enum).toEqual(["list"]);
 });
 
-test("desk_current shows the workspace's own desk; the bench's is its KL_DESK", async () => {
+test("desk_list in a workspace shows its own desk and environment", async () => {
   routes["GET /v1/workspaces/w1"] = json({ desk: "desk-1", environment: "e9" });
-  expect(JSON.parse(await tool(platformTools("workspace", "w1"), "desk_current").run({}))).toEqual({ desk: "desk-1", environment: "e9" });
-  const t = platformTools("main");
-  expect(await tool(t, "desk_current").run({})).toContain("no desk");
-  process.env.KL_DESK = "desk-1";
-  routes["GET /v1/desks/desk-1"] = json({ id: "desk-1", name: "main", environment: "e9" });
-  expect(JSON.parse(await tool(t, "desk_current").run({}))).toEqual({ id: "desk-1", name: "main", environment: "e9" });
-  routes["GET /v1/desks/desk-1"] = json({ error: "no such desk" }, 404);
-  expect(await tool(t, "desk_current").run({})).toContain("ended");
+  expect(JSON.parse(await tool(platformTools("workspace", "w1"), "desk_list").run({}))).toEqual({ desk: "desk-1", environment: "e9" });
 });
 
-test("desk use sets or clears the bench's environment (null disconnects) and refuses another desk", async () => {
+test("desk connect sets or clears an environment (null disconnects); desk defaults to the thread's own", async () => {
   const t = platformTools("main");
   delete process.env.KL_DESK;
   expect(await tool(t, "desk_connect").run({ environment: "e2" })).toContain("no desk");
@@ -181,13 +179,14 @@ test("desk use sets or clears the bench's environment (null disconnects) and ref
   expect(calls.filter((c) => c.method === "PUT").at(-1)!.body).toEqual({ environment: "e2" });
   routes["PUT /v1/desks/desk-1/environment"] = json({ id: "desk-1", name: "main", environment: null });
   routes["GET /v1/desks/desk-1"] = json({ id: "desk-1", name: "main", environment: null });
-  expect(JSON.parse(await tool(t, "desk_disconnect").run({}))).toEqual({ id: "desk-1", name: "main", environment: null });
+  expect(JSON.parse(await tool(t, "desk_connect").run({ environment: null }))).toEqual({ id: "desk-1", name: "main", environment: null });
   expect(calls.filter((c) => c.method === "PUT").at(-1)!.body).toEqual({ environment: null });
-  // absent keeps; another desk's name is refused
-  const n = calls.length;
-  await tool(t, "desk").run({ action: "use" });
-  expect(calls.slice(n).map((c) => c.method)).toEqual(["GET"]);
-  await expect(tool(t, "desk").run({ action: "use", name: "other", environment: "e3" })).rejects.toThrow("belongs to desk main");
+  // an explicit desk wins over KL_DESK
+  routes["PUT /v1/desks/other/environment"] = json({});
+  routes["GET /v1/desks/other"] = json({ id: "other", name: "other", environment: "e3" });
+  expect(JSON.parse(await tool(t, "desk").run({ action: "connect", desk: "other", environment: "e3" })).id).toBe("other");
+  routes["PUT /v1/desks/desk-1/environment"] = json({ error: "no such desk" }, 404);
+  expect(await tool(t, "desk_connect").run({ environment: "e2" })).toContain("ended");
 });
 
 test("env_get folds service_status readiness into services[]; workspace_clone sends task only when given", async () => {

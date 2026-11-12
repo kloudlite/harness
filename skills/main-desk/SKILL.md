@@ -99,7 +99,7 @@ A tool with the mark **card** shows a permission card to the person before it ru
 |---|---|
 | `env` | `list` and `get` see the environments, their services, and the intercepts. `create` makes an environment; with `source` it copies an environment, or grows one from a snapshot. `start`, `stop` and `delete` change its state; only `delete` shows a card. `wait` waits until every service is ready, a service fails, or the state is `error` or `deleted`. `snapshot` and `restore` (**card**) make a snapshot, or put this environment back to one. `create`, `start` and `restore` take `wait: true`. |
 | `service` | `add`, `update` and `remove` add, change or remove the services of an environment. Use these for standard services, for example a database. A workspace adds and changes its own service. Only `remove` shows a card. `logs` (with `name`) reads the logs of a service. |
-| `desk` | `current` sees this desk and its environment (none if it is disconnected). `use` with `environment` connects this desk to an environment of its team (id or name); its intercepts in the old environment are stopped first. `use` with `environment: null` disconnects it; its intercepts there are stopped. |
+| `desk` | `list` sees your desks and their environments (none if disconnected). `connect` with `environment` connects this desk to an environment of its team (id or name); its intercepts in the old environment are stopped first. `connect` with `environment: null` disconnects it; its intercepts there are stopped. `desk` is yours by default; you never pass it on other tools. |
 
 Intercepts are not your work. The workspace that runs the service starts and ends the intercept. Ask that workspace to do it.
 
@@ -229,8 +229,8 @@ The person asks: "Add a comments feature. Add an API in the backend and a commen
 Some work needs two workspaces at the same time. Example: the backend runs its service, and a tests workspace sends requests to it. You control all of the work. Send one ask at a time. Use the facts from the last report in each ask.
 
 1. **Use the same environment.** A workspace can get to the services of an environment only if its desk is connected to that environment.
-   - Use `desk` action `current` to see the desk and its environment.
-   - If the desk is not connected to it, report `NEED`: the person picks the desk on the laptop.
+   - Use `desk` action `list` to see the desk and its environment.
+   - If the desk is not connected to it, report `NEED`: connect it with `desk` action `connect`, or ask the person.
    - Use `env` action `get` to see the service names.
 2. **Start the service.** Ask the backend: "Run your service and intercept `<service>` in `<env>`. Keep it running. Send a report when it is ready." The report gives the service, the environment and the port. It also tells you that the intercept is in force. `env` action `get` also shows the intercept.
 3. **Run the tests.** Ask the tests workspace: "Run the integration tests against `<service>` in `<env>`. This service runs the backend branch `<branch>` at `<commit>`." The report gives the result: passed, or the tests that failed and how they failed.

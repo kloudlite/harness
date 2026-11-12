@@ -10,5 +10,5 @@ test("instructions name the one wait vocabulary", () => {
 });
 
 test("instructions name the desk argument and the task exemption", () => {
-  for (const w of ["`desk` on any call", "clients that wait on MCP tasks never see it"]) expect(INSTRUCTIONS).toContain(w);
+  for (const w of ["`desk` (id or name) on any call", "clients that wait on MCP tasks never see it"]) expect(INSTRUCTIONS).toContain(w);
 });

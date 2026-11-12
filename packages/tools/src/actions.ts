@@ -10,7 +10,7 @@ export type Action = {
   properties: Props;
   required: string[];
   run: (a: any) => Promise<string>;
-  /** Keys where an explicit `null` is a value (`desk use` with `environment: null` disconnects), not "omitted". */
+  /** Keys where an explicit `null` is a value (`desk connect` with `environment: null` disconnects), not "omitted". */
   nulls?: string[];
   /** Unlisted spellings read as the listed key (`{snapshot_id: "source"}`): kept out of the schema on purpose. */
   alias?: Record<string, string>;

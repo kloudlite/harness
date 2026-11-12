@@ -27,7 +27,7 @@ A check in a workspace uses the workspace's files and changes nothing. A capsule
 
 **Trigger:** "run the integration tests against staging".
 **Steps:**
-1. `desk` action `current`: the desk needs an environment. `env` action `get`: service names and ports.
+1. `desk` action `list`: the desk needs an environment (`desk` `connect` sets one). `env` action `get`: service names and ports.
 2. A capsule starts empty, so it gets the code with `git clone` through the connector (`connector_list` must show a code host). It tests what is pushed: the branch must be on the remote. For uncommitted work, add `"from_workspace": "ws-…"` to `capsule` action `create` (the capsule starts as that workspace's current files, so no clone is needed), or use scenario 1.
 3. `capsule` {"action": "create", "command": "git clone --branch main https://github.com/acme/api api && cd api && npm ci && npm run test:integration", "packages": ["git", "nodejs@22"], "variables": {"DATABASE_URL": "postgres://postgres@db:5432/postgres"}, "lifetime_s": 1800}. It runs in the desk, so it reaches `db`. Note the id `cap-…`. A secret is `"${{ secrets.NAME }}"` as the whole value of a variable, never a value.
 4. `capsule` {"action": "wait", "capsule": "cap-…", "timeout_ms": 900000}. On `timed_out: true`, wait again.
@@ -65,7 +65,7 @@ A check in a workspace uses the workspace's files and changes nothing. A capsule
 **Shape:** 4.
 **Steps:**
 1. `env` {"action": "create", "source": "env-staging…", "name": "shop-pr-42", "wait": true}.
-2. `desk` {"action": "create", "name": "review-42", "environment": "env-copy…"} then pass `desk: "review-42"` on every call that works in it. In the harness (no `desk` argument) `workspace` action `create` always lands in the current desk, which may be on staging: do not create the review workspace there. Tell the user to open `review-42`, and stop.
+2. `desk` {"action": "create", "name": "review-42", "environment": "env-copy…"} then pass `desk: "review-42"` on every call that works in it. In the harness (no `desk` argument) `workspace` action `create` always lands in its own desk, which may be on staging: do not create the review workspace there. Tell the user to open `review-42`, and stop.
 3. A review workspace in that desk: `workspace` {"action": "create", "name": "api-pr-42", …}; clone the repo; `exec` {"cmd": "git fetch origin pull/42/head:pr-42 && git switch pr-42"} (GitLab: `merge-requests/42/head`).
 4. Run the tests (scenario 1) or `capsule` action `create` in the review desk (scenario 2, with `git fetch origin pull/42/head:pr-42 && git switch pr-42` after the clone). For a behaviour check, `intercept` the changed service from the review workspace, drive requests, then `intercept` action `stop`.
 5. Tell the user the result. Delete what you made, after the user says yes: `workspace` action `delete`, `desk` {"action": "delete", "desk": "review-42"}, `env` action `delete` of the copy. The user's own workspace and desk stay as they were.

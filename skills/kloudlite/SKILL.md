@@ -62,13 +62,13 @@ Read your row. The task skills never name a host.
 | Remote connector (claude.ai, ChatGPT) | `/mcp` over OAuth | no | no | the one agent |
 | Kloudlite runtime (shared) | split by role: main, workspace, subagent | no | no | the role skills |
 
-A call acts in the desk named by its `desk` argument (id or name, on the laptop door and the remote server, the plugin and a remote connector); without it, in the connection's default desk. `team` names which of the teams you connected. Only the harness drives one fixed desk and cannot switch; `workspace` with `action: "create"` always uses the current desk. In the harness, a task that needs another desk is for the user to open.
+A call acts in the desk named by its `desk` argument (id or name, on the laptop door and the remote server, the plugin and a remote connector); a door refuses a call without it. `team` names which of the teams you connected. Only the harness drives one fixed desk, which it supplies itself: its agents pass no `desk`, and `workspace` with `action: "create"` always lands in that desk. In the harness, a task that needs another desk is for the user to open.
 
 Use a tool, not a command. Two things have no tool: connecting a provider (the web console) and `kloudlite env`, the tunnel to the laptop. For those, give the user the exact command, or run it only on a host with a shell.
 
 ## How to work
 
-1. **Orient first.** Call `desk` with `action: "current"`, `workspace` with `action: "list"` (the owner's workspaces; `thisDesk` marks this desk's), then `env` with `action: "get"` of the desk's environment. Three calls, every task, before any create. Say in one line what exists.
+1. **Orient first.** Call `desk` with `action: "list"`, `workspace` with `action: "list"` (the owner's workspaces; `thisDesk` marks this desk's), then `env` with `action: "get"` of the desk's environment. Three calls, every task, before any create. Say in one line what exists.
 1b. **Scope is this desk.** The tools reach everything of the owner; a task is about this desk's workspaces and environment unless the person names another object. Act outside the desk only on an explicit name or id; when a request would touch something outside and the person did not name it, say what you found and ask before acting.
 2. **Reuse before create.** A workspace that holds the repo, an environment that runs the app, a desk on it: reuse them. Create only what is missing, and name it in the answer ("created workspace `api` and environment `shop-dev`"). Never a second object for the same job.
 3. **Derive the set-up from the repository.** Read `docker-compose.yml`, `.env.example`, `README`, `Procfile`, `package.json`, `go.mod`, `pyproject.toml`, `Cargo.toml`: they give services, ports, variables and packages. Ask the user only what the repo does not say (which registry, which environment to share).
@@ -112,7 +112,7 @@ Parallel work: only a managed workspace reaches the environment, and a clone joi
 | Desk | `desk-` | `running`, `starting`, `idle`, `stopped` |
 | Capsule | `cap-` | `phase`: `pending`, `starting`, `running`, `terminated`; with `reason` `Exited`, `exit_code` is the result |
 
-Get ids from the `list` actions of `workspace` and `env`, or from `desk` `current`. Tools take the id or the name; write the name to the user. `volume` `get` and `delete` take the volume `id` from `volume` `list`; `snapshot` `delete` takes the id or the name. Restore takes a reference in `snapshot_id`; create takes one in `source`.
+Get ids from the `list` actions of `workspace` and `env`, or from `desk` `list`. Tools take the id or the name; write the name to the user. `volume` `get` and `delete` take the volume `id` from `volume` `list`; `snapshot` `delete` takes the id or the name. Restore takes a reference in `snapshot_id`; create takes one in `source`.
 
 A desk goes `idle` after 30 minutes without use, and its workspaces stop. A start, a create in the desk, or a connect wakes it. What the user stopped stays stopped. After a wake, the next tool answer reports each workspace restart and stop that happened while idle.
 
@@ -122,7 +122,7 @@ The tools act on one desk. Most tools are one per resource: `action` picks the v
 
 | Group | Tools | Actions |
 |---|---|---|
-| Desk | `desk` | `desk`: `current`, `list`, `create`, `start`, `stop`, `delete`, `ttl` |
+| Desk | `desk` | `desk`: `list`, `create`, `connect`, `start`, `stop`, `delete`, `ttl` |
 | Workspaces | `workspace`, `workspace_vars`, `worktree` | `workspace`: `list`, `get`, `create`, `restore`, `start`, `stop`, `restart`, `delete`, `wait`, `ttl`, `snapshot`; `workspace_vars`: `get`, `set`; `worktree`: `add`, `drop` |
 | Code | `read`, `write`, `edit`, `glob`, `grep` | none |
 | Run | `exec`, `process`, `watch` | `process`: `list`, `output`, `wait`, `write`, `close_stdin`, `kill`; `watch`: `start`, `poll`, `stop` |
@@ -137,7 +137,7 @@ The tools act on one desk. Most tools are one per resource: `action` picks the v
 | Secrets and connectors | `secret_set`, `secret_list`, `secret_delete`, `connector_list` | none |
 | Web | `web_fetch`, `web_search` | none |
 
-With several desks and none picked, the server lists only `desk`: ask the user which, call it with `action: "pick"` and the `id`, continue.
+A call without `desk` is refused with ``pass `desk` (id or name); `desk` `list` shows yours``: call `desk` `list`, ask the user which if it is not clear, and pass that `desk` on every call.
 
 ## Reads, lifecycle and deletes
 
@@ -181,15 +181,15 @@ Act on the symptom you see.
 |---|---|
 | No Kloudlite tool at all (no `desk` or `workspace` under any prefix) | Do not guess and do not call an API. Tell the user the five steps below. Never run the installer or the login yourself unless told. |
 | A tool answers ``not logged in — run `kloudlite login` `` | Tell the user that command, then to restart the client. |
-| The server lists only `desk` | Ask which desk, call `desk` with `action: "pick"`, continue. |
+| ``pass `desk` (id or name)`` | Call `desk` `list`, pass `desk` on every call. |
 | `403 your access to TEAM is paused` | A team admin must restore access. Stop. |
 
 The five steps:
 
 1. Install `kloudlite` (macOS, Linux; WSL on Windows): `curl -fsSL https://dev.kloudlite.io/install.sh | sh`
 2. Sign in (opens the browser): `kloudlite login`
-3. Connect the agent. Claude Code with the plugin (tools and skills; needs no `kloudlite` binary): `/plugin marketplace add kloudlite/harness`, then `/plugin install kloudlite@kloudlite`; the first tool call opens the browser sign-in, and the consent page picks the teams; the agent picks or creates the desk. Another MCP client: `claude mcp add kl -- kloudlite mcp`, or the JSON `{"mcpServers": {"kl": {"command": "kloudlite", "args": ["mcp"]}}}`; for another team or desk, `["mcp", "TEAM", "--desk", "DESK"]`. A client that cannot start a program uses the remote URL `https://dev.kloudlite.io/mcp` with OAuth.
-4. Pick or create a desk: `kloudlite desks use NAME`, or `kloudlite desks use --new-environment NAME`. With no desk, `kloudlite mcp` creates `main`.
+3. Connect the agent. Claude Code with the plugin (tools and skills; needs no `kloudlite` binary): `/plugin marketplace add kloudlite/harness`, then `/plugin install kloudlite@kloudlite`; the first tool call opens the browser sign-in, and the consent page picks the teams; the agent lists or creates the desk. Another MCP client: `claude mcp add kl -- kloudlite mcp`, or the JSON `{"mcpServers": {"kl": {"command": "kloudlite", "args": ["mcp"]}}}`; for another team or desk, `["mcp", "TEAM", "--desk", "DESK"]`. A client that cannot start a program uses the remote URL `https://dev.kloudlite.io/mcp` with OAuth.
+4. Make a desk: `desk` `create` (with `environment` to connect one), or open one once with `kloudlite -s NAME`. Every call then names it in `desk`.
 5. Restart the client. It then lists the server `kl`.
 
-After setup, `desk` with `action: "current"` must name the desk the user expects. If not, pass `desk` with the name (and `team` for a team desk) on each call.
+After setup, `desk` with `action: "list"` must show the desk the user expects. Pass `desk` with its name (and `team` for a team desk) on each call.

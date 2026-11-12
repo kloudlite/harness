@@ -21,7 +21,7 @@ Tie-breaker for "stop": one lifecycle verb on a named object (stop, start, delet
 | why can't I create a workspace | base | Quota |
 | ask for more quota | base | Quota: request_create when asked |
 | tools say not logged in | base | Setup and recovery symptom |
-| the server lists only desk(pick) | base | Setup and recovery symptom |
+| a call refused for no `desk` | base | Setup and recovery symptom |
 | 403 your access to acme is paused | base | Setup and recovery symptom |
 | connect Kloudlite to my agent (no Kloudlite tool present) | base | Setup steps, if the skill is installed at all |
 | set up this repo | kloudlite-develop | Creates the shape |

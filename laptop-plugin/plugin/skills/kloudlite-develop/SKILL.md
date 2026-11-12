@@ -16,7 +16,7 @@ Every scenario ends with its cleanup. To check a result, use `kloudlite-verify`.
 **Trigger:** "set up this repo", "give me a workspace for acme/api".
 **Shape:** 1.
 **Steps:**
-1. Orient (`desk` action `current`, `workspace` action `list`). Reuse a workspace that holds the repo.
+1. Orient (`desk` action `list`, `workspace` action `list`). Reuse a workspace that holds the repo.
 2. Read the repo's `package.json`, `go.mod` or `pyproject.toml` for packages. If there is no workspace yet, `workspace` {"action": "create", "name": "shop-api", "packages": ["git", "nodejs@22"], "wait": true} (`packages` are top-level nixpkgs names; Python libraries go in with pip). It answers when the workspace is `ready`.
 4. `exec` {"workspace": "ws-…", "cmd": "git clone https://github.com/acme/api .", "quiet": true}. The directory must be empty; else clone into a folder and give `cwd` later.
 5. `read` {"workspace": "ws-…", "paths": ["AGENTS.md"]}. Add packages it names with `packages` action `add`: top-level nixpkgs names (`python3`, `nodejs_22`, optional `@version`), never `python3Packages.x`; install Python libraries with pip.
@@ -45,13 +45,13 @@ Every scenario ends with its cleanup. To check a result, use `kloudlite-verify`.
 **Trigger:** "connect my workspace to staging".
 **Shape:** 2.
 **Steps:**
-1. `desk` action `current`. If the desk has the environment, go to step 3.
-2. `desk` {"action": "create", "name": "orders", "environment": "env-…"} makes a desk for this work and connects the environment; it does not move anything. Then pass `desk: "orders"` on every call that works in it. In the harness (no `desk` argument; see Hosts in the `kloudlite` skill) you cannot drive another desk: tell the user to open it.
-3. A workspace joins only by being created in the desk: `workspace` action `create` with the desk picked. A standalone workspace stays out; clone the repo into a new managed one.
+1. `desk` action `list`: the desk's `environment`. If it is the one wanted, go to step 3. To connect or change it on a desk you hold: `desk` {"action": "connect", "desk": "orders", "environment": "env-…"} (`environment: null` disconnects; the harness leaves `desk` out and connects its own desk), then go to step 3.
+2. Or `desk` {"action": "create", "name": "orders", "environment": "env-…"} makes a desk for this work and connects the environment; it does not move anything. Then pass `desk: "orders"` on every call that works in it. In the harness (no `desk` argument; see Hosts in the `kloudlite` skill) you cannot drive another desk: tell the user to open it.
+3. A workspace joins only by being created in the desk: `workspace` action `create` with `desk` naming it. A standalone workspace stays out; clone the repo into a new managed one.
 4. `exec` {"workspace": "ws-…", "cmd": "getent hosts db"}.
 
 **Done when:** `db` resolves from the workspace.
-**If it fails:** no resolve: the workspace is standalone, or the desk has no environment (`desk` action `current`), or the environment is stopped (`env` action `start`).
+**If it fails:** no resolve: the workspace is standalone, or the desk has no environment (`desk` action `list`), or the environment is stopped (`env` action `start`).
 **Then:** scenario 4.
 
 ### 4. Run a component against real services
