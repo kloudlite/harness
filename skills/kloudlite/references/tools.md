@@ -56,9 +56,9 @@ One tool per resource. `action` picks the verb; the arguments below are the unio
 
 | Tool | Arguments | Answers |
 |---|---|---|
-| `pipeline` | `action`, `owner`, `pipeline?`, `version?`, `definition?` | `list`, `get` (one definition; without `version`, the pipeline with its versions), `save` (a new version; a definition equal to the newest saves nothing), `delete` (the pipeline; finished runs stay; `409` while any run, finished or live, still reads that version; finished runs are kept 90 days; run numbers continue while runs of that pipeline name exist; with `version`, one old version, `409` for the latest or one a live run reads) |
-| `webhook_rotate` | `owner`, `pipeline` | A new webhook URL, shown once |
-| `run` | `action`, `owner`, `pipeline?`, `run?`, `inputs?`, `version?`, `key?`, `state?`, `limit?`, `job?`, `offset?`, `tail?`, `head?`, `wait?`, `soft_ms?`, `timeout_ms?` | `start` (a run id; the same `key` answers the first run), `list`, `get` (state, jobs, `failedStep`, `exitCode`), `wait` (the end), `logs` (a page of the job log; without `offset` only its last 200 lines unless `tail`/`head`; repeat with `offset` = `next` while `complete` is false), `cancel` |
+| `pipeline` | `action`, `owner?`, `pipeline?`, `version?`, `definition?` | `list`, `get` (one definition; without `version`, the pipeline with its versions), `save` (a new version; a definition equal to the newest saves nothing), `delete` (the pipeline; finished runs stay; `409` while any run, finished or live, still reads that version; finished runs are kept 90 days; run numbers continue while runs of that pipeline name exist; with `version`, one old version, `409` for the latest or one a live run reads) |
+| `webhook_rotate` | `owner?`, `pipeline` | A new webhook URL, shown once |
+| `run` | `action`, `owner?`, `pipeline?`, `run?`, `inputs?`, `version?`, `key?`, `state?`, `limit?`, `job?`, `offset?`, `tail?`, `head?`, `wait?`, `soft_ms?`, `timeout_ms?` | `start` (a run id; the same `key` answers the first run), `list`, `get` (state, jobs, `failedStep`, `exitCode`), `wait` (the end), `logs` (a page of the job log; without `offset` only its last 200 lines unless `tail`/`head`; repeat with `offset` = `next` while `complete` is false), `cancel` |
 
 ## Secrets and connectors
 

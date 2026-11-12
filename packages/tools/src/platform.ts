@@ -193,10 +193,10 @@ const SBX = { type: "string", description: "The capsule id or name." };
 const SES = { type: "string", description: "The desk id, name or `team/name`." };
 const PIPE = { type: "string", description: "The pipeline name." };
 const RUN = { type: "string", description: "The run id (the `id` of a run from `run list` or `run start`)." };
-const TIMEOUT = { type: "number", description: "Milliseconds this call waits before it answers (default 25000, maximum 900000; a remote connector gets default 5000, maximum 20000). At the limit the answer has `timed_out: true`: call again." };
+const TIMEOUT = { type: "number", description: "Milliseconds this call waits before it answers (default 5000, maximum 20000 on a remote connector; default 25000, maximum 900000 in the harness). At the limit the answer has `timed_out: true`: call again." };
 const WAITING = {
   wait: { type: "boolean", description: "Wait for the object to settle instead of answering at once." },
-  soft_ms: { type: "number", description: "With `wait`: the call answers within this many milliseconds, handing off with `promoted: true` if the work is not done (default 25000, maximum 600000; a remote connector gets default 5000, maximum 20000). Resume with the `wait` action named by `kind`." },
+  soft_ms: { type: "number", description: "With `wait`: the call answers within this many milliseconds, handing off with `promoted: true` if the work is not done (default 5000, maximum 20000 on a remote connector; default 25000, maximum 600000 in the harness). Resume with the `wait` action named by `kind`." },
 };
 const MINE = { type: "boolean", description: "Your own secret in the team `owner` (any active member), not the team's shared one." };
 const TTL = { type: "integer", description: "Seconds of unused time before it is deleted, 600 to 2592000." };
@@ -608,11 +608,12 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
 /** Everything a workspace token does not reach: capsules, pipelines and runs, volumes, requests, secrets. */
 function mainOnly(tickMs: number): ToolDef[] {
   const sbx = (a: any) => `/v1/capsules/${seg(a.capsule)}`;
-  const pipe = (a: any) => `/v1/pipelines/${seg(a.owner)}/${seg(a.pipeline)}`;
+  const own = (a: any) => a.owner || process.env.KL_TEAM;
+  const pipe = (a: any) => `/v1/pipelines/${seg(own(a))}/${seg(a.pipeline)}`;
   const run = (a: any) => `${pipe(a)}/runs/${seg(a.run)}`;
   const secret = (a: any) => `/v1/secrets/${seg(a.owner ?? process.env.KL_TEAM)}${a.mine ? "/mine" : ""}`;
-  const RUNREF = { owner: OWNER, pipeline: PIPE, run: RUN };
-  const RUNREQ = ["owner", "pipeline", "run"];
+  const RUNREF = { owner: OWNER_DEFAULT, pipeline: PIPE, run: RUN };
+  const RUNREQ = ["pipeline", "run"];
   /** `run wait` and a waiting `run start`: the run without its definition, plus the log page at `offset` when one is given. */
   const runWait = async (a: any, limitMs: number, limit?: () => string): Promise<string> => {
     const view = await pollUntil(() => api("GET", run(a)), (d) => RUN_ENDED.includes(d?.state), limitMs, tickMs, ({ definition: _d, ...rest }) => rest, limit);
@@ -675,36 +676,36 @@ function mainOnly(tickMs: number): ToolDef[] {
       }),
     }),
     resource("pipeline", "Pipelines: versioned definitions. Actions: list, get (a version, or the pipeline with its versions), save, delete (one version with `version`).", {
-      list: act({ owner: OWNER }, ["owner"], async (a) => api("GET", `/v1/pipelines/${seg(a.owner)}`)),
-      get: act({ owner: OWNER, pipeline: PIPE, version: PVER }, ["owner", "pipeline"], async (a) => {
+      list: act({ owner: OWNER_DEFAULT }, [], async (a) => api("GET", `/v1/pipelines/${seg(own(a))}`)),
+      get: act({ owner: OWNER_DEFAULT, pipeline: PIPE, version: PVER }, ["pipeline"], async (a) => {
         if (a.version !== undefined) return api("GET", `${pipe(a)}${qs({ version: String(a.version) })}`);
         const [p, versions] = await Promise.all([api("GET", pipe(a)), api("GET", `${pipe(a)}/versions`)]);
         return JSON.stringify({ ...JSON.parse(p), versions: JSON.parse(versions) }, null, 2);
       }),
-      save: act({ owner: OWNER, definition: { type: "object", description: "The pipeline definition (JSON). Its `name` names the pipeline; an equal definition saves nothing; a save that turns the webhook on answers `webhookUrl` once." } }, ["owner", "definition"], async (a) => {
+      save: act({ owner: OWNER_DEFAULT, definition: { type: "object", description: "The pipeline definition (JSON). Its `name` names the pipeline; an equal definition saves nothing; a save that turns the webhook on answers `webhookUrl` once." } }, ["definition"], async (a) => {
         const name = a.definition?.name;
         if (typeof name !== "string" || !name) return "error: `definition` needs a `name`";
-        const r = await raw("GET", `/v1/pipelines/${seg(a.owner)}/${seg(name)}`);
+        const r = await raw("GET", `/v1/pipelines/${seg(own(a))}/${seg(name)}`);
         if (r.unavailable) throw new Error(UNAVAILABLE);
-        if (r.status === 404) return api("POST", `/v1/pipelines/${seg(a.owner)}`, a.definition);
+        if (r.status === 404) return api("POST", `/v1/pipelines/${seg(own(a))}`, a.definition);
         if (r.status < 200 || r.status >= 300) throw new Error(httpError(r.status, r.text));
-        return api("PUT", `/v1/pipelines/${seg(a.owner)}/${seg(name)}`, a.definition);
+        return api("PUT", `/v1/pipelines/${seg(own(a))}/${seg(name)}`, a.definition);
       }),
-      delete: act({ owner: OWNER, pipeline: PIPE, version: PVER }, ["owner", "pipeline"], async (a) => {
+      delete: act({ owner: OWNER_DEFAULT, pipeline: PIPE, version: PVER }, ["pipeline"], async (a) => {
         if (a.version !== undefined) return (await api("DELETE", `${pipe(a)}/versions/${a.version}`), JSON.stringify({ pipeline: a.pipeline, version: a.version, state: "deleted" }, null, 2));
         return deleting(pipe(a), () => api("DELETE", pipe(a)));
       }),
     }),
     resource("run", "Pipeline runs. Actions: start, list, get, wait, logs (a job's output), cancel.", {
-      start: act({ owner: OWNER, pipeline: PIPE, inputs: { type: "object", additionalProperties: S, description: "String values by input name." }, version: { ...I, description: "The version to run. Default: the newest." }, key: { type: "string", description: "A retry key: a second start with the same key answers the first run." }, ...WAITING }, ["owner", "pipeline"], async (a) => {
+      start: act({ owner: OWNER_DEFAULT, pipeline: PIPE, inputs: { type: "object", additionalProperties: S, description: "String values by input name." }, version: { ...I, description: "The version to run. Default: the newest." }, key: { type: "string", description: "A retry key: a second start with the same key answers the first run." }, ...WAITING }, ["pipeline"], async (a) => {
         const out = await api("POST", `${pipe(a)}/runs`, strip({ inputs: a.inputs, version: a.version, key: a.key }));
         if (!a.wait) return out;
         const id = JSON.parse(out).id;
         return runWait({ ...a, run: id, offset: undefined }, softMs(a), () => promoted(id, "run"));
       }),
-      list: act({ owner: OWNER, pipeline: PIPE, state: { type: "string", enum: ["queued", "running", "success", "failure", "cancelled"] }, limit: I }, ["owner"], async (a) => {
+      list: act({ owner: OWNER_DEFAULT, pipeline: PIPE, state: { type: "string", enum: ["queued", "running", "success", "failure", "cancelled"] }, limit: I }, [], async (a) => {
         const q = qs({ state: a.state, limit: a.limit === undefined ? undefined : String(a.limit) });
-        return api("GET", a.pipeline ? `${pipe(a)}/runs${q}` : `/v1/pipelines/${seg(a.owner)}/runs${q}`);
+        return api("GET", a.pipeline ? `${pipe(a)}/runs${q}` : `/v1/pipelines/${seg(own(a))}/runs${q}`);
       }),
       get: act(RUNREF, RUNREQ, async (a) => api("GET", run(a))),
       wait: act({ ...RUNREF, timeout_ms: TIMEOUT, job: { ...I, description: "The job's index in the run (default 0)." }, offset: OFFSET }, RUNREQ, async (a) => runWait(a, timeoutMs(a))),
@@ -750,7 +751,7 @@ function mainOnly(tickMs: number): ToolDef[] {
         return JSON.stringify({ ...(body && typeof body === "object" ? body : {}), note: "takes effect after restart" }, null, 2);
       }),
     }),
-    def("webhook_rotate", "Make a new webhook secret for a pipeline; the old URL stops at once. The answer holds the new `webhookUrl` once: keep it secret. 409 when the webhook trigger is off.", { owner: OWNER, pipeline: PIPE }, ["owner", "pipeline"], async (a) => api("POST", `${pipe(a)}/webhook/rotate`)),
+    def("webhook_rotate", "Make a new webhook secret for a pipeline; the old URL stops at once. The answer holds the new `webhookUrl` once: keep it secret. 409 when the webhook trigger is off.", { owner: OWNER_DEFAULT, pipeline: PIPE }, ["pipeline"], async (a) => api("POST", `${pipe(a)}/webhook/rotate`)),
     def("secret_set", "Store a secret under a name (`A-Z`, `0-9`, `_`), replacing one. The value is never read back; a pod reads it as an env value that is exactly `${{ secrets.NAME }}`. A team's shared secret needs a team admin; `mine` sets your own.", { owner: OWNER_DEFAULT, name: S, value: S, mine: MINE }, ["name", "value"], async (a) => {
       await api("PUT", `${secret(a)}/${seg(a.name)}`, { value: a.value });
       // The route answers 204: the date comes from the names list, which never carries a value.
