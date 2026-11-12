@@ -6,6 +6,6 @@ export const INSTRUCTIONS = `Kloudlite runs code in workspaces (dev machines wit
 - \`desk\` (id or name) on any call names the desk it acts in; \`desk list\` shows yours, \`desk connect\` sets a desk's environment (\`environment: null\` disconnects).
 - \`wait: true\` on create, start, restore or run start waits \`soft_ms\` (default 5000, as \`exec\` does); \`timeout_ms\` is how long a \`wait\` action waits.
 - A long call answers within seconds with {promoted, id, kind, poll_after_ms} (clients that wait on MCP tasks never see it): after poll_after_ms call the \`kind\` tool's \`wait\` with \`id\` (kind desk: \`get\`; kind process: loop \`process wait\` with \`since\`/\`since_err\` = the last \`next\`/\`next_err\` until \`state\` is not running). A remote door cuts a wait at 20 s; \`timed_out: true\`: call again.
-- Each turn, call \`status\` first.
+- Each turn, call \`status\` first, with \`desk\`.
 - Destructive actions (delete, kill, cancel, restore) ask first.
 - A path starting with \`scratch:\` in read or write is the desk's scratch folder.`;
