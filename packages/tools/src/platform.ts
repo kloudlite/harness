@@ -798,5 +798,6 @@ function mainOnly(tickMs: number): ToolDef[] {
       },
     ),
     def("regions", "List the regions a team can live in. A team has one region, set when it is made.", {}, [], async () => api("GET", "/v1/regions")),
+    def("devices", "List the person's own machines (devices): id (`dev-…`, what `workspace` create takes as `device`), name, os, whether it is online, enabled, the account it serves (a handle or a team) and the workspaces it reports. A device workspace needs a device that is online and active in the team. Read only: starting, connecting or removing a device is the person's, on their machine.", {}, [], async () => api("GET", "/v1/devices")),
   ];
 }

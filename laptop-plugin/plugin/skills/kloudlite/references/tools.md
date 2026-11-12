@@ -75,6 +75,7 @@ One tool per resource. `action` picks the verb; the arguments below are the unio
 |---|---|---|
 | `quota` | `owner?` | Ceilings and use |
 | `regions` | none | Regions |
+| `devices` | none | The person's machines: `id` (`dev-…`, the `device` of `workspace` create), name, os, `online`, `enabled`, `account`, and the workspaces each reports. Read only |
 | `requests_list`, `request_get`, `request_create` | `owner?`, `id`, `kind`, `reason` | Requests to an admin |
 | `status` | `all?` | `notices` not yet shown (`all` lists the last 50, delivered ones included, kept across bench restarts in `~/.kl/notices.json`), `workspaces` (the desk's) and `environment` with their states, running `processes` of those workspaces and any a tool touched. Call it once at the start of each turn |
 | `web_fetch`, `web_search` | `url`; `query` | Page text; results |

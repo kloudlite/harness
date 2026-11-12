@@ -288,7 +288,7 @@ test("a workspace spelled by name is keyed by its id; a detached exec defaults t
   handler = (u) => {
     if (u.endsWith("/v1/workspaces/web-app")) return j({ id: "w9" });
     if (u.endsWith("/v1/workspaces/web-app/tools")) return j({ address: "10.0.0.5:7788" });
-    if (u.endsWith("/tools")) return j({ tools: [] });
+    if (u.endsWith("/tools")) return j({ tools: [{ name: "exec", description: "exec", schema: { type: "object", properties: { cmd: { type: "string" }, detach: { type: "boolean" } } } }, { name: "process_kill", description: "kill", schema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] } }] });
     return u.endsWith("/tools/exec") ? j({ id: "p1" }) : j({});
   };
   const t = await podTools("web-app");

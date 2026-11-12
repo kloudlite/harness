@@ -42,15 +42,19 @@ function coerce(v: unknown, s: Schema): unknown {
 }
 
 /** The coerced arguments, or the one sentence that names what is wrong. */
+/** Spellings a tool reads without listing (a fixed target, the old wait names): never an "unknown argument". */
+const READ_NOT_LISTED = new Set(["because", "workspace", "timeout", "timeout_s", "max_wait_ms"]);
+
 export function checkArgs(schema: Record<string, unknown>, input: unknown): { args: any } | { error: string } {
   const s = schema as Schema;
   const props = s.properties ?? {};
   const given: Record<string, unknown> = input && typeof input === "object" && !Array.isArray(input) ? { ...(input as object) } : {};
   for (const k of Object.keys(given)) if (given[k] === null) delete given[k]; // null is how a model says "omitted"
   const missing = (s.required ?? []).filter((k) => given[k] === undefined);
-  const unknown = Object.keys(given).filter((k) => !(k in props));
-  if (missing.length && unknown.length)
-    return { error: `unknown argument ${unknown.map((k) => `\`${k}\``).join(", ")}; this tool takes ${Object.keys(props).join(", ") || "no arguments"} (${missing.map((k) => `\`${k}\``).join(", ")} required)` };
+  const unknown = Object.keys(given).filter((k) => !(k in props) && !READ_NOT_LISTED.has(k));
+  // A name this call does not take is refused, never dropped: `device` sent to an action without it would otherwise make a different object.
+  if (unknown.length)
+    return { error: `unknown argument ${unknown.map((k) => `\`${k}\``).join(", ")}; this tool takes ${Object.keys(props).join(", ") || "no arguments"}${missing.length ? ` (${missing.map((k) => `\`${k}\``).join(", ")} required)` : ""}` };
   if (missing.length) return { error: `\`${missing[0]}\` is required` };
   for (const [k, p] of Object.entries(props)) {
     if (given[k] === undefined) continue;

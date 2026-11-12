@@ -43,12 +43,12 @@ team ─┬─ desk ── joins ──> workspaces, capsules ──> environmen
 
 ## Device workspaces
 
-A device workspace runs on the person's own Mac, in an operating system sandbox, and its folder is an ordinary folder there. `workspace` with `action: "create"` and `device` (an id `dev-…` that the person reads from `kloudlite devices list`) makes one in the desk. Without `device` the workspace is a cloud one, whatever else the call says.
+A device workspace runs on the person's own Mac, in an operating system sandbox, and its folder is an ordinary folder there. `workspace` with `action: "create"` and `device` (an id `dev-…` from the `devices` tool) makes one in the desk. Without `device` the workspace is a cloud one, whatever else the call says.
 
 1. The device must be online and active in the team that owns the desk. If it is offline or active elsewhere, the create is refused with a sentence that says which; the person runs `kloudlite start` or `kloudlite devices connect TEAM`.
 2. A device workspace has no ssh. Its tools (`read`, `write`, `exec`) reach it through the gateway. `exec` runs in the sandbox: it writes only the workspace folder, and the network reaches only the hosts the person allowed.
 3. `workspace` `snapshot` takes a copy-on-write snapshot on the Mac (the workspace restarts while it is made). `create` with `source` and `snapshot` (a `dsnap-…` id) clones it, and the copy joins the desk. `restore` with a `dsnap-…` id as `snapshot_id` makes a new workspace the same way.
-4. An agent cannot list devices or start the Mac's service; those are the person's. A name is unique within its account, and these names are reserved in every account: `ws`, `env`, `api`, `admin`, `system`, `kl`, `bld-…`, and anything that looks like an id.
+4. `devices` lists the machines with `online`, `enabled` and `account`: pick one that is online and whose `account` is the desk's team. An agent cannot start the Mac's service or connect a device to a team; hand the person the command. A name is unique within its account, and these names are reserved in every account: `ws`, `env`, `api`, `admin`, `system`, `kl`, `bld-…`, and anything that looks like an id.
 
 ## Hosts
 
@@ -83,6 +83,9 @@ Use a tool, not a command. Two things have no tool: connecting a provider (the w
 13. **Quota and errors.** A `409` that names a limit does not pass on a retry: tell the user, and offer `request_create` only when asked. Report every error as it is. Never go around it through another object, desk or tool. `references/errors.md` gives the action for each.
 14. **Destructive actions** need an explicit request that names the targets. List the targets by name first. A refusal is final.
 15. **Answer shape.** Result first, then the objects created and removed, then the next step. Never a dump of tool output.
+16. **Argument errors.** A call with an argument the action does not take is refused with `unknown argument` and the list the action takes. Read the list, fix the call, and call once more. Do not retry the same call, and do not drop the argument and carry on: the object you get would not be the one you asked for.
+17. **No probe objects.** Do not create a workspace, environment or capsule only to learn what a tool does, and do not delete what the user made. This skill says what each tool does; if it does not say, ask.
+18. **Do not search for a shell on the person's machine.** You have no ssh to a device workspace and no shell on the person's Mac. Work in the workspace with `exec`, `read`, `write`, `edit` and the other tools; they are all it exposes. Anything that needs the Mac itself (`kloudlite login`, `start`, `devices …`) is a command to hand to the person, exactly written.
 
 ## Pick the shape
 
@@ -127,7 +130,7 @@ The tools act on one desk. Most tools are one per resource: `action` picks the v
 | Environments | `env`, `service` | `env`: `list`, `get`, `create`, `start`, `stop`, `delete`, `wait`, `ttl`, `snapshot`, `restore`; `service`: `add`, `update`, `remove`, `logs` |
 | Intercepts | `intercept` | none |
 | Volumes | `volume`, `snapshot` | `volume`: `list`, `get`, `delete`; `snapshot`: `delete` |
-| Account | `quota`, `regions`, `requests_list`, `request_get`, `request_create` | none |
+| Account | `quota`, `regions`, `devices`, `requests_list`, `request_get`, `request_create` | none |
 | Capsules | `capsule` | `capsule`: `create`, `get`, `list`, `wait`, `logs`, `delete` |
 | Pipelines | `pipeline`, `run`, `webhook_rotate` | `pipeline`: `list`, `get`, `save`, `delete`; `run`: `start`, `list`, `get`, `wait`, `logs`, `cancel` |
 | Secrets and connectors | `secret_set`, `secret_list`, `secret_delete`, `connector_list` | none |
