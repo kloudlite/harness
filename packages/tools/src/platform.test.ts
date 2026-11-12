@@ -489,6 +489,21 @@ test("a wait action answers the object with timed_out at timeout_ms; the old spe
   for (const x of platformTools("all", "w1")) for (const k of ["timeout", "timeout_s", "max_wait_ms"]) expect((x.inputSchema as any).properties[k]).toBeUndefined();
 });
 
+test("workspace create sends `device` to make a device workspace, and `snapshot` with `source` clones a device snapshot", async () => {
+  const t = platformTools("main");
+  routes["POST /v1/workspaces"] = json({}, 202);
+  await tool(t, "workspace_create").run({ name: "d1", device: "dev-1" });
+  expect(calls.at(-1)).toMatchObject({ url: "/v1/workspaces", body: { name: "d1", device: "dev-1" } });
+  process.env.KL_DESK = "s1";
+  routes["POST /v1/desks/s1/workspaces"] = json({}, 202);
+  await tool(t, "workspace_create").run({ name: "d2", device: "dev-1" });
+  expect(calls.at(-1)).toMatchObject({ url: "/v1/desks/s1/workspaces", body: { name: "d2", device: "dev-1" } });
+  delete process.env.KL_DESK;
+  routes["POST /v1/workspaces/w1/clone"] = json({}, 202);
+  await tool(t, "workspace_create").run({ name: "d3", source: "w1", snapshot: "dsnap-1" });
+  expect(calls.at(-1)).toMatchObject({ url: "/v1/workspaces/w1/clone", body: { name: "d3", snapshot: "dsnap-1" } });
+});
+
 test("workspace create with source clones; env create with an environment source clones, else grows from the snapshot", async () => {
   const t = platformTools("main");
   routes["POST /v1/workspaces/w1/clone"] = json({}, 202);

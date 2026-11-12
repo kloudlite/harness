@@ -41,6 +41,15 @@ team ─┬─ desk ── joins ──> workspaces, capsules ──> environmen
       └─ connectors ──> git clone; image push and pull
 ```
 
+## Device workspaces
+
+A device workspace runs on the person's own Mac, in an operating system sandbox, and its folder is an ordinary folder there. `workspace` with `action: "create"` and `device` (an id `dev-…` that the person reads from `kloudlite devices list`) makes one in the desk. Without `device` the workspace is a cloud one, whatever else the call says.
+
+1. The device must be online and active in the team that owns the desk. If it is offline or active elsewhere, the create is refused with a sentence that says which; the person runs `kloudlite start` or `kloudlite devices connect TEAM`.
+2. A device workspace has no ssh. Its tools (`read`, `write`, `exec`) reach it through the gateway. `exec` runs in the sandbox: it writes only the workspace folder, and the network reaches only the hosts the person allowed.
+3. `workspace` `snapshot` takes a copy-on-write snapshot on the Mac (the workspace restarts while it is made). `create` with `source` and `snapshot` (a `dsnap-…` id) clones it, and the copy joins the desk. `restore` with a `dsnap-…` id as `snapshot_id` makes a new workspace the same way.
+4. An agent cannot list devices or start the Mac's service; those are the person's. A name is unique within its account, and these names are reserved in every account: `ws`, `env`, `api`, `admin`, `system`, `kl`, `bld-…`, and anything that looks like an id.
+
 ## Hosts
 
 Read your row. The task skills never name a host.
