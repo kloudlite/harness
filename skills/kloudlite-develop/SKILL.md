@@ -118,7 +118,7 @@ Every scenario ends with its cleanup. To check a result, use `kloudlite-verify`.
 **Steps:**
 1. Against the services: a second managed workspace in the desk, which clones the repo, or `worktree` {"action": "add", "workspace": "ws-…", "name": "export"} in the same managed workspace; run each tree's process on its own port.
 2. Only one tree's process can hold the intercept of a service. Intercept one, stop it, intercept the other.
-3. Without services: `workspace` {"action": "create", "source": "ws-…", "name": "api-try", "task": "approach B"}. A clone is standalone and does not reach the environment.
+3. A copy of the state: `workspace` {"action": "create", "source": "ws-…", "name": "api-try", "task": "approach B"}. The copy joins the desk, so it reaches the environment. For a standalone copy that does not, clone from the laptop with `workspaces clone`.
 4. Commit each part on its own branch: `exec` `git switch -c export && git commit …`. Merge in the original workspace with `git fetch` and `git merge`.
 5. Tear down: `worktree` action `drop` and `workspace` action `delete` for what you made, never one that holds unmerged work.
 

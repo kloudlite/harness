@@ -27,7 +27,7 @@ All work runs in the context of one team: a person's own team or a shared team. 
 
 Three facts decide every topology choice:
 
-1. **Managed vs standalone.** A workspace created in a desk is managed: it reaches the environment, and the desk starts, stops and deletes it. A standalone workspace never joins a desk. `workspace` with `action: "create"` and a `source`, and `action: "restore"`, make standalone workspaces.
+1. **Managed vs standalone.** A workspace created in a desk is managed: it reaches the environment, and the desk starts, stops and deletes it. A standalone workspace never joins a desk. `workspace` with `action: "create"` and a `source` makes a copy that joins the desk the tool acts for, so it is managed; `action: "restore"` and a clone made from the laptop with `workspaces clone` or `devices workspaces clone` make standalone workspaces. To clone into a desk from the laptop, use `kloudlite desks clone-workspace WORKSPACE --to NAME` (a device workspace also needs `--snapshot ID`).
 2. **A capsule ends.** It is for one command; nothing in it survives. A capsule in a desk is a managed member and reaches the environment.
 3. **An intercept is environment-wide.** Every caller of the service, every teammate's desk included, reaches the workspace. One workspace per service.
 
@@ -84,11 +84,11 @@ The example app in every skill: a shop with `web`, `api`, `worker`, `db` (Postgr
 | 1. One standalone workspace | A library, CLI, script, or a fix that needs no running service | `workspace` `create` with packages from the repo; clone through the connector |
 | 2. One managed workspace, desk, environment | One component that needs real services | `env` `create` with the services (or reuse); a desk on it; `workspace` `create` in the desk |
 | 3. One managed workspace per component, one desk | A change across `web`, `api` and `worker` | One environment with every service; one desk; a workspace per component; each intercepts its own service |
-| 4. Copies | Risky data changes, experiments, PR review in a shared environment | `env` `create` with `source` for the environment; `workspace` `create` with `source` for a disposable standalone copy; `worktree` `add` for a second branch in one workspace |
+| 4. Copies | Risky data changes, experiments, PR review in a shared environment | `env` `create` with `source` for the environment; `workspace` `create` with `source` for a disposable copy in the desk; `worktree` `add` for a second branch in one workspace |
 
 Ask in order. Does the work need a running service? No: shape 1. How many components change? One: shape 2; several: shape 3. Would it disturb a shared environment, or try several options? Yes: shape 4. Is it a one-time check? Use a capsule, not a workspace (`kloudlite-verify`).
 
-Parallel work: only a managed workspace reaches the environment, and a clone is standalone. So "two features at once against the services" is two managed workspaces in the desk (each clones the repo) or two worktrees in one managed workspace. A clone keeps or explores a machine's state without services.
+Parallel work: only a managed workspace reaches the environment, and a clone joins no desk unless it is made in one (`workspace` `create` with `source`, or `kloudlite desks clone-workspace`). So "two features at once against the services" is two managed workspaces in the desk (each clones the repo) or two worktrees in one managed workspace. A clone keeps or explores a machine's state without services.
 
 ## Ids and states
 
