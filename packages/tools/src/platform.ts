@@ -290,7 +290,7 @@ async function capsuleWait(path: string, limitMs: number, limit?: () => string):
   const end = Date.now() + limitMs;
   for (;;) {
     const d = JSON.parse(await api("POST", `${path}/wait`, { timeout_ms: Math.max(1, Math.min(20000, Math.round(end - Date.now()))) }));
-    if (d.phase === "terminated" || d.exit_code !== undefined || d.finished_at) return JSON.stringify(d, null, 2);
+    if (d.phase === "terminated" || d.exit_code != null || d.finished_at) return JSON.stringify(d, null, 2);
     if (Date.now() >= end) return limit ? limit() : JSON.stringify({ ...d, timed_out: true }, null, 2);
   }
 }
