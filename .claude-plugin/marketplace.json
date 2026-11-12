@@ -7,7 +7,7 @@
       "name": "kloudlite",
       "source": "./laptop-plugin/plugin",
       "description": "Work on Kloudlite workspaces from Claude Code through the desk's tools and skills.",
-      "version": "0.6.13",
+      "version": "0.6.14",
       "author": { "name": "Kloudlite" },
       "homepage": "https://github.com/kloudlite/harness",
       "repository": "https://github.com/kloudlite/harness",
