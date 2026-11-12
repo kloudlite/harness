@@ -131,7 +131,7 @@ Every scenario ends with its cleanup. To check a result, use `kloudlite-verify`.
 **Shape:** 4.
 **Steps:**
 1. `env` {"action": "create", "env": "env-staging…", "name": "shop-repro"}; add `source` to copy an environment, or a snapshot id to restore it into a new one. `env` action `wait`.
-2. Tell the user the next step moves the whole desk to the copy and stops the desk's intercepts on staging.
+2. Tell the user the next step makes a new desk on the copy; the current desk and its intercepts on staging stay as they are.
 3. `desk` {"action": "create", "name": "repro", "environment": "env-copy…"}, then pass `desk: "repro"` on every call. Reproduce and fix (scenarios 4, 5, 7).
 4. Pass the original desk on later calls; a call without `desk` is refused.
 5. `env` {"action": "delete", "env": "env-copy…"} after the user says yes.
