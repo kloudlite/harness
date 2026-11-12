@@ -212,7 +212,7 @@ Read the `kloudlite` skill first. It holds the definitions and the safety rules.
 **Trigger:** "cancel the run", "delete the old versions".
 **Steps:**
 1. Only on a named request. `run` {"action": "cancel", "owner": "acme", "pipeline": "api-ci", "run": "…"}; a running run stops at its next report, so read it again with `run` action `get`.
-2. Old versions: `pipeline` action `get`, then `pipeline` {"action": "delete", "owner": "acme", "pipeline": "api-ci", "version": 3} for each one the user names (`409` for the latest, or one a live run reads).
+2. Old versions: `pipeline` action `get`, then `pipeline` {"action": "delete", "owner": "acme", "pipeline": "api-ci", "version": 3} for each one the user names (`409` for the latest, or one any run reads: finished runs are kept 90 days, including those of an earlier pipeline of the same name; run numbers continue from them).
 3. The whole pipeline: `pipeline` {"action": "delete", "owner": "acme", "pipeline": "api-ci"} (finished runs stay; `409` while a run is queued or running).
 
 **Done when:** `run` action `get` shows `cancelled`, the named versions are gone from `pipeline` action `get`, or the pipeline is gone.

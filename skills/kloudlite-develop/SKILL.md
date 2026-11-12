@@ -72,10 +72,10 @@ Every scenario ends with its cleanup. To check a result, use `kloudlite-verify`.
 **Trigger:** "intercept api", "send real traffic to my code".
 **Shape:** 2.
 **Steps:**
-1. Start the code (scenario 4). Check it listens: `exec` {"workspace": "ws-…", "cmd": "ss -ltn | grep :3000"}.
+1. Start the code (scenario 4). Check it listens: `exec` {"workspace": "ws-…", "cmd": "bash -c '(echo > /dev/tcp/127.0.0.1/3000) && echo listening'"} (the image has no `ss`).
 2. `env` action `get`. Read the ports of `api`, for example 8080.
-3. `intercept` {"action": "start", "env": "env-…", "service": "api", "workspace": "ws-…", "ports": [{"service": 8080, "workspace": 3000}], "wait": true}. Leave out `ports` when the numbers match. It answers when `api` shows `interceptedBy` and `proxy` `ready`.
-4. `env` action `get`: check `interceptedBy`.
+3. `intercept` {"action": "start", "env": "env-…", "service": "api", "workspace": "ws-…", "ports": [{"service": 8080, "workspace": 3000}], "wait": true}. Leave out `ports` when the numbers match. It answers when `api` shows `interceptedBy` and `proxy` `ready`. `env` `get` has a top-level `intercepts` list too: that is only what was asked for, not what is in force.
+4. `env` action `get`: check `services[].interceptedBy` and `proxy` `ready`.
 5. Work. Then `intercept` {"action": "stop", "env": "env-…", "service": "api"}.
 
 **Done when:** `env` action `get` shows the intercept in force and a request to `api:8080` reaches the process. The intercept is stopped at the end.
@@ -181,7 +181,7 @@ Every scenario ends with its cleanup. To check a result, use `kloudlite-verify`.
 2. `workspace` {"action": "snapshot", "workspace": "ws-…", "volume": "api-base", "message": "before the refactor"}. Give `volume` only on the first snapshot.
 3. `volume` {"action": "get", "volume": "<id from volume list>"}: note `api-base@3`.
 4. Restore: `workspace` {"action": "restore", "name": "api-restored", "snapshot_id": "api-base@3"}; add `team` for a team volume, and `"wait": true` to answer when it is `ready`. Made from a desk, the restored workspace joins the desk and reaches its environment; a restore from the laptop CLI joins none.
-5. Say the result is standalone: it does not reach the environment. A managed one needs a new workspace in the desk and a copy of the files.
+5. Read `desk` from `workspace` `get`: set means it joined the desk and reaches the environment; empty (a restore from the laptop CLI) means standalone, so create a workspace in the desk and copy the files.
 
 **Done when:** the snapshot is `ready` in the history, or the restored workspace is `ready` with the files.
 **If it fails:** `422` asking for `volume`: ask the user for a name. `409` name taken: ask for another.
@@ -192,7 +192,7 @@ Every scenario ends with its cleanup. To check a result, use `kloudlite-verify`.
 **Steps:**
 1. `env` action `get`: read `volume`. `volume` action `get`: find the snapshot the user names. Take one first only if the user asks: `env` action `snapshot`.
 2. Name the environment and the snapshot; data written since is lost, in every service, and the only warning is your own: a `409` comes just for services or folders the snapshot lacks. Wait for a yes.
-3. `env` {"action": "restore", "env": "env-…", "snapshot_id": "…"}.
+3. `env` {"action": "restore", "env": "env-…", "source": "…"}.
 4. On `409` with `lost`: list the services; only after a yes, repeat with "discard": [each name in `lost`].
 5. `env` action `wait`.
 

@@ -8,7 +8,7 @@ For a manual run on the dev region: give the prompt, check the tool sequence. `*
 | kloudlite-develop 2. Environment from the repository | I need Postgres and Redis for this app | env(list), read(docker-compose.yml), secret_set, env(create: db+mount, cache), env(wait) |
 | kloudlite-develop 3. Desk that joins them | connect my workspace to staging | desk(list), desk(connect) or desk(create), workspace(create), exec(getent hosts db) |
 | kloudlite-develop 4. Run a component against real services | run my API against the real database | env(get), exec(detach, DATABASE_URL), process(output), process(kill) |
-| kloudlite-develop 5. Intercept one service | intercept api | exec(detach), exec(ss -ltn), env(get), intercept(start, ports), env(get)*, intercept(stop) |
+| kloudlite-develop 5. Intercept one service | intercept api | exec(detach), exec(/dev/tcp check), env(get), intercept(start, ports), env(get)*, intercept(stop) |
 | kloudlite-develop 6. Change several components together | add shipped-order emails across api, worker and web | env(create), desk(connect), workspace(create) x3, exec(detach) x3, intercept(start) x3, env(get), intercept(stop) x3 |
 | kloudlite-develop 7. Debug a failing request with real traffic | debug this with real traffic | service(logs), grep, edit, exec(detach), intercept(start), process(output), intercept(stop) |
 | kloudlite-develop 8. Parallel work | work on two features at once against the services | workspace(create) (second, in desk) or worktree(add), exec(detach) per tree, intercept(start), intercept(stop), worktree(drop) |

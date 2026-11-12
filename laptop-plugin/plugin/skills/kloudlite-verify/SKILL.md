@@ -78,7 +78,7 @@ A check in a workspace uses the workspace's files and changes nothing. A capsule
 **Trigger:** "test my api change with Priya's web change".
 **Shape:** 3.
 **Steps:**
-1. Both changes run in the same environment. Your desk intercepts `api` from your workspace. Priya's desk intercepts `web` from hers. Check with `env` action `get` that `interceptedBy` shows both. Never take her service: one workspace per service.
+1. Both changes run in the same environment. Your desk intercepts `api` from your workspace. Priya's desk intercepts `web` from hers. Check with `env` action `get` that `services[].interceptedBy` shows both (the top-level `intercepts` list is only what was asked for). Never take her service: one workspace per service.
 2. Drive a request through `web` to `api`: `exec` {"cmd": "curl -fsS http://web:3000/orders"} in your workspace, or `capsule` action `create` in the desk.
 3. Read both processes' output. Stop yours when done (`intercept` action `stop`); she stops hers.
 
