@@ -6,7 +6,7 @@ One tool per resource. `action` picks the verb; the arguments below are the unio
 
 | Tool | Arguments | Answers |
 |---|---|---|
-| `desk` | `action`, `team?`, `name?`, `environment?`, `ttl_secs?`, `desk?`, `wait?`, `soft_ms?`, `clear?` | `current`: the desk, its team, its environment. `use`: picks the desk among yours (laptop door and remote server; not the harness) and connects `environment` (null disconnects). `pick` (laptop door, which also takes `id` and `new_environment`): picks by `id` when several exist. `create`, `start`, `stop`, `delete`, `list`, `ttl` (`ttl_secs` 600..2592000, or `clear`). `queue` (read, owner only): the messages waiting for the desk's agents as `{pending, oldest_age_secs, failed}`; `failed` counts those that were dead-lettered after three failed slices |
+| `desk` | `action`, `team?`, `name?`, `environment?`, `ttl_secs?`, `desk?`, `wait?`, `soft_ms?`, `clear?` | `current`: the desk, its team, its environment. `create` takes `environment` to connect one; a call acts in the desk its `desk` argument names. `create`, `start`, `stop`, `delete`, `list`, `ttl` (`ttl_secs` 600..2592000, or `clear`). `queue` (read, owner only): the messages waiting for the desk's agents as `{pending, oldest_age_secs, failed}`; `failed` counts those that were dead-lettered after three failed slices |
 
 ## Workspaces
 

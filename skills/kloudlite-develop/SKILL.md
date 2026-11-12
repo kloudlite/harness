@@ -46,7 +46,7 @@ Every scenario ends with its cleanup. To check a result, use `kloudlite-verify`.
 **Shape:** 2.
 **Steps:**
 1. `desk` action `current`. If the desk has the environment, go to step 3.
-2. `desk` {"action": "use", "environment": "env-…"}. To make a desk for this work: `desk` {"action": "create", "name": "orders", "environment": "env-…"}, then `desk` {"action": "use", "name": "orders"} to drive it. In the harness (no `desk` action `use`; see Hosts in the `kloudlite` skill) you cannot drive another desk: tell the user to open it, or use `desk` action `use` on the current one after the user agrees.
+2. `desk` {"action": "create", "name": "orders", "environment": "env-…"} makes a desk for this work and connects the environment; it does not move anything. Then pass `desk: "orders"` on every call that works in it. In the harness (no `desk` argument; see Hosts in the `kloudlite` skill) you cannot drive another desk: tell the user to open it.
 3. A workspace joins only by being created in the desk: `workspace` action `create` with the desk picked. A standalone workspace stays out; clone the repo into a new managed one.
 4. `exec` {"workspace": "ws-…", "cmd": "getent hosts db"}.
 
@@ -132,8 +132,8 @@ Every scenario ends with its cleanup. To check a result, use `kloudlite-verify`.
 **Steps:**
 1. `env` {"action": "create", "env": "env-staging…", "name": "shop-repro"}; add `source` to copy an environment, or a snapshot id to restore it into a new one. `env` action `wait`.
 2. Tell the user the next step moves the whole desk to the copy and stops the desk's intercepts on staging.
-3. `desk` {"action": "use", "environment": "env-copy…"}. Reproduce and fix (scenarios 4, 5, 7).
-4. `desk` action `use` back to staging.
+3. `desk` {"action": "create", "name": "repro", "environment": "env-copy…"}, then pass `desk: "repro"` on every call. Reproduce and fix (scenarios 4, 5, 7).
+4. Stop passing `desk: "repro"`; the calls without it still act in the original desk.
 5. `env` {"action": "delete", "env": "env-copy…"} after the user says yes.
 
 **Done when:** the bug is fixed on the copy, the desk is on staging, the copy is deleted or kept by the user's choice.

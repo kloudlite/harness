@@ -65,7 +65,7 @@ A check in a workspace uses the workspace's files and changes nothing. A capsule
 **Shape:** 4.
 **Steps:**
 1. `env` {"action": "create", "source": "env-staging…", "name": "shop-pr-42", "wait": true}.
-2. `desk` {"action": "create", "name": "review-42", "environment": "env-copy…"} so the user's desk does not move, and `desk` {"action": "use", "name": "review-42"} to drive it and back at the end. In the harness (no `desk` action `use`) `workspace` action `create` always lands in the current desk, which may be on staging: do not create the review workspace there. Tell the user to open `review-42`, and stop.
+2. `desk` {"action": "create", "name": "review-42", "environment": "env-copy…"} then pass `desk: "review-42"` on every call that works in it. In the harness (no `desk` argument) `workspace` action `create` always lands in the current desk, which may be on staging: do not create the review workspace there. Tell the user to open `review-42`, and stop.
 3. A review workspace in that desk: `workspace` {"action": "create", "name": "api-pr-42", …}; clone the repo; `exec` {"cmd": "git fetch origin pull/42/head:pr-42 && git switch pr-42"} (GitLab: `merge-requests/42/head`).
 4. Run the tests (scenario 1) or `capsule` action `create` in the review desk (scenario 2, with `git fetch origin pull/42/head:pr-42 && git switch pr-42` after the clone). For a behaviour check, `intercept` the changed service from the review workspace, drive requests, then `intercept` action `stop`.
 5. Tell the user the result. Delete what you made, after the user says yes: `workspace` action `delete`, `desk` {"action": "delete", "desk": "review-42"}, `env` action `delete` of the copy. The user's own workspace and desk stay as they were.

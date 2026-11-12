@@ -62,7 +62,7 @@ Read your row. The task skills never name a host.
 | Remote connector (claude.ai, ChatGPT) | `/mcp` over OAuth | no | no | the one agent |
 | Kloudlite runtime (shared) | split by role: main, workspace, subagent | no | no | the role skills |
 
-`desk` with `action: "use"` exists on the laptop door (`kloudlite mcp`, which also takes `action: "pick"`) and on the remote server (the plugin and a remote connector), where it picks among your desks in the teams you connected (`team` moves between them). Only the harness drives one fixed desk and cannot switch; `workspace` with `action: "create"` always uses the current desk. In the harness, a task that needs another desk is for the user to open.
+A call acts in the desk named by its `desk` argument (id or name, on the laptop door and the remote server, the plugin and a remote connector); without it, in the connection's default desk. `team` names which of the teams you connected. Only the harness drives one fixed desk and cannot switch; `workspace` with `action: "create"` always uses the current desk. In the harness, a task that needs another desk is for the user to open.
 
 Use a tool, not a command. Two things have no tool: connecting a provider (the web console) and `kloudlite env`, the tunnel to the laptop. For those, give the user the exact command, or run it only on a host with a shell.
 
@@ -122,7 +122,7 @@ The tools act on one desk. Most tools are one per resource: `action` picks the v
 
 | Group | Tools | Actions |
 |---|---|---|
-| Desk | `desk` | `desk`: `current`, `list`, `create`, `use`, `pick` on the laptop door, `start`, `stop`, `delete`, `ttl` |
+| Desk | `desk` | `desk`: `current`, `list`, `create`, `start`, `stop`, `delete`, `ttl` |
 | Workspaces | `workspace`, `workspace_vars`, `worktree` | `workspace`: `list`, `get`, `create`, `restore`, `start`, `stop`, `restart`, `delete`, `wait`, `ttl`, `snapshot`; `workspace_vars`: `get`, `set`; `worktree`: `add`, `drop` |
 | Code | `read`, `write`, `edit`, `glob`, `grep` | none |
 | Run | `exec`, `process`, `watch` | `process`: `list`, `output`, `wait`, `write`, `close_stdin`, `kill`; `watch`: `start`, `poll`, `stop` |
@@ -192,4 +192,4 @@ The five steps:
 4. Pick or create a desk: `kloudlite desks use NAME`, or `kloudlite desks use --new-environment NAME`. With no desk, `kloudlite mcp` creates `main`.
 5. Restart the client. It then lists the server `kl`.
 
-After setup, `desk` with `action: "current"` must name the desk the user expects. If not, call `desk` with `action: "use"` and `name` (and `team` for a team desk).
+After setup, `desk` with `action: "current"` must name the desk the user expects. If not, pass `desk` with the name (and `team` for a team desk) on each call.

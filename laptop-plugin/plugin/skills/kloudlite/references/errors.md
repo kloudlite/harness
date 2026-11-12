@@ -16,7 +16,7 @@ The status comes first; the body is one sentence. Report it as it is, then take 
 | `409 a snapshot is already being cut for this workspace` | Wait, read the volume history, do not repeat. |
 | `409 this snapshot is the base of a running worktree` | Keep it; tell the user. |
 | `409 the volume still has a workspace or environment` | Delete the owner first, if the user asked. |
-| `409 this desk has no environment; connect one…` | `desk` action `use`. |
+| `409 this desk has no environment; connect one…` | `desk` action `create` with `environment` makes a desk that has one. |
 | `409 conflict, retry` / `the desk changed; retry` | Read again, repeat once. |
 | `env` action `restore` `409` with `lost` | Name the services; call again with `discard` only after a yes. |
 | `422` for a package; the answer lists versions | Pick a listed version. |
