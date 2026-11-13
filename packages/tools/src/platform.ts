@@ -791,6 +791,13 @@ function mainOnly(tickMs: number): ToolDef[] {
         return JSON.stringify({ ...doc, ...strip({ title: a.title, body: a.body }) }, null, 2);
       },
     ),
+    def(
+      "download",
+      "A link the person opens in a browser to download one file of a workspace (yours alone, at most 200 MB). Give the person the `url`; it works for 15 minutes and needs no login. For reading a file yourself use `read`.",
+      { workspace: WS, path: { type: "string", description: "The file, relative to the workspace." }, tree: { type: "string", description: "Which worktree; omit for the main one." } },
+      ["workspace", "path"],
+      async (a) => api("POST", `/v1/workspaces/${seg(a.workspace)}/download-link`, strip({ path: a.path, tree: a.tree })),
+    ),
     def("regions", "List the regions a team can live in. A team has one region, set when it is made.", {}, [], async () => api("GET", "/v1/regions")),
     def("devices", "List the person's own machines (devices): id (`dev-…`, what `workspace` create takes as `device`), name, os, whether it is online, enabled, the account it serves (a handle or a team) and the workspaces it reports. A device workspace needs a device that is online and active in the team. Read only: starting, connecting or removing a device is the person's, on their machine.", {}, [], async () => api("GET", "/v1/devices")),
   ];

@@ -20,8 +20,9 @@ One tool per resource. `action` picks the verb; the arguments below are the unio
 
 | Tool | Arguments | Answers |
 |---|---|---|
-| `read` | `workspace`, `paths` | Files with line numbers |
-| `write` | `workspace`, `path`, `content` | Creates or overwrites one file |
+| `read` | `workspace`, `paths` | Files with line numbers; a PNG, JPEG, GIF or WebP comes back as an image you see (5 MB at most; a bigger PNG or JPEG is downscaled to fit) |
+| `write` | `workspace`, `path`, `content?`, `content_b64?` | Creates or overwrites one file: `content` text, or `content_b64` base64 for a small binary file (10 MiB). To copy a file between workspaces use `transfer` |
+| `download` | `workspace`, `path`, `tree?` | `{url, expires_in_secs, size, name}`: a 15-minute link that downloads one file (200 MB at most) in the person's browser, no login. Give the person the `url` |
 | `edit` | `workspace`, `files` | Exact text replacements, all or none |
 | `glob`, `grep` | `workspace`, pattern | Matching files, matching lines |
 | `exec` | `workspace`, `cmd`, `cwd?`, `env?`, `soft_ms?`, `detach?`, `head?`, `tail?`, `quiet?`, `notify?` | Output and exit code; past `soft_ms` (a remote door: default 5 s, wait cut at 20 s) `promoted: true`, `kind: "process"`, a process `id` and `poll_after_ms`: call `process` `wait` after it; with `detach`, a process id |
