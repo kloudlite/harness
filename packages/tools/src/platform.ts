@@ -795,10 +795,18 @@ function mainOnly(tickMs: number): ToolDef[] {
     ),
     def(
       "download",
-      "A link the person opens in a browser to download one file of a workspace (yours alone, at most 200 MB). Give the person the `url`; it works for 15 minutes and needs no login. For reading a file yourself use `read`.",
+      "Hands one file of a workspace (yours alone, at most 200 MB) to the person: `url` opens it in the Kloudlite console once they are signed in (images, PDFs and text show in the browser, anything else downloads), and an MCP client gets the file as a resource link it reads with resources/read (at most 7.5 MB that way). Give the person the `url`; it carries no credential. For reading a file yourself use `read`.",
       { workspace: WS, path: { type: "string", description: "The file, relative to the workspace." }, tree: { type: "string", description: "Which worktree; omit for the main one." } },
       ["workspace", "path"],
-      async (a) => api("POST", `/v1/workspaces/${seg(a.workspace)}/download-link`, strip({ path: a.path, tree: a.tree })),
+      async (a) => {
+        const v = await apiJson<{ uri: string; url: string; name: string; size: number; mime: string }>("POST", `/v1/workspaces/${seg(a.workspace)}/file-link`, strip({ path: a.path, tree: a.tree }));
+        // An MCP door lifts `resource_link` into its own content block; the rest stays the text beside it.
+        return JSON.stringify({
+          ...v,
+          note: "Give the person the url: it opens the file once they are signed in. An MCP client reads the uri with resources/read.",
+          resource_link: { type: "resource_link", uri: v.uri, name: v.name, mimeType: v.mime, size: v.size },
+        }, null, 2);
+      },
     ),
     def(
       "transfer",
