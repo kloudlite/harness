@@ -113,6 +113,8 @@ const strip = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(
 type Props = Record<string, unknown>;
 const S = { type: "string" };
 const WS = { type: "string", description: "The workspace id or name." };
+/** One end of a `transfer`. */
+const SPOT = { type: "object", description: "One end: `{workspace, path, tree?}`.", properties: { workspace: WS, path: { type: "string", description: "Relative to the workspace." }, tree: { type: "string", description: "Which worktree; omit for the main one." } }, required: ["workspace", "path"] };
 const ENV = { type: "string", description: "The environment id or name." };
 const N = { type: "number" };
 const I = { type: "integer" };
@@ -797,6 +799,41 @@ function mainOnly(tickMs: number): ToolDef[] {
       { workspace: WS, path: { type: "string", description: "The file, relative to the workspace." }, tree: { type: "string", description: "Which worktree; omit for the main one." } },
       ["workspace", "path"],
       async (a) => api("POST", `/v1/workspaces/${seg(a.workspace)}/download-link`, strip({ path: a.path, tree: a.tree })),
+    ),
+    def(
+      "transfer",
+      "Copy one file (at most 200 MB, any bytes) from a workspace to another of yours, or to another path of the same one. The bytes go between the two workspaces and never through you. The destination is refused when it exists unless `overwrite` is true.",
+      { from: SPOT, to: SPOT, overwrite: { type: "boolean", description: "Replace the destination when it exists." } },
+      ["from", "to"],
+      async (a) => {
+        const end = async (s: any) => {
+          const t = await apiJson<{ address: string; scheme?: string; base_path?: string; token?: string }>("GET", `/v1/workspaces/${seg(s.workspace)}/tools`);
+          const base = `${t.scheme === "https" ? "https://" : "http://"}${t.address.replace(/^https?:\/\//, "")}${t.base_path ?? ""}`;
+          return { base, token: t.token, q: `path=${encodeURIComponent(s.path)}${s.tree ? `&tree=${encodeURIComponent(s.tree)}` : ""}` };
+        };
+        const [src, dst] = [await end(a.from), await end(a.to)];
+        const auth = (t?: string): Record<string, string> => (t ? { authorization: `Bearer ${t}` } : {});
+        const id = crypto.randomUUID().replaceAll("-", "").slice(0, 16);
+        const CHUNK = 4 << 20;
+        for (let off = 0; ; ) {
+          const r = await fetch(`${src.base}/fs/raw?${src.q}&offset=${off}&len=${CHUNK}`, { headers: auth(src.token) });
+          if (!r.ok) return `error: from: ${((await r.json().catch(() => ({}))) as any).error ?? r.status}`;
+          const size = Number(r.headers.get("x-kl-size") ?? 0);
+          if (size > 200_000_000) return `error: from: the file is ${size} bytes, over the 200000000 byte limit`;
+          const chunk = new Uint8Array(await r.arrayBuffer());
+          const last = chunk.length === 0 || off + chunk.length >= size;
+          const w = await fetch(`${dst.base}/fs/upload?${dst.q}&id=${id}&offset=${off}${a.overwrite ? "&overwrite=1" : ""}${last ? "&commit=1" : ""}`, { method: "POST", headers: { "content-type": "application/octet-stream", ...auth(dst.token) }, body: chunk });
+          if (!w.ok) {
+            await fetch(`${dst.base}/fs/upload?${dst.q}&id=${id}&abort=1`, { method: "POST", headers: auth(dst.token) }).catch(() => undefined);
+            return `error: to: ${((await w.json().catch(() => ({}))) as any).error ?? w.status}`;
+          }
+          if (last) {
+            const done = (await w.json()) as any;
+            return JSON.stringify({ from: { workspace: a.from.workspace, path: a.from.path }, to: { workspace: a.to.workspace, path: done.path, created: done.created }, bytes: done.bytes }, null, 2);
+          }
+          off += chunk.length;
+        }
+      },
     ),
     def("regions", "List the regions a team can live in. A team has one region, set when it is made.", {}, [], async () => api("GET", "/v1/regions")),
     def("devices", "List the person's own machines (devices): id (`dev-…`, what `workspace` create takes as `device`), name, os, whether it is online, enabled, the account it serves (a handle or a team) and the workspaces it reports. A device workspace needs a device that is online and active in the team. Read only: starting, connecting or removing a device is the person's, on their machine.", {}, [], async () => api("GET", "/v1/devices")),

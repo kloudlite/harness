@@ -125,7 +125,7 @@ The tools act on one desk. Most tools are one per resource: `action` picks the v
 |---|---|---|
 | Desk | `desk` | `desk`: `list`, `create`, `connect`, `start`, `stop`, `delete`, `ttl` |
 | Workspaces | `workspace`, `workspace_vars`, `worktree` | `workspace`: `list`, `get`, `create`, `restore`, `start`, `stop`, `restart`, `delete`, `wait`, `ttl`, `snapshot`; `workspace_vars`: `get`, `set`; `worktree`: `add`, `drop` |
-| Code | `read`, `write`, `edit`, `glob`, `grep`, `download` | none |
+| Code | `read`, `write`, `edit`, `glob`, `grep`, `download`, `transfer` | none |
 | Run | `exec`, `process`, `watch` | `process`: `list`, `output`, `wait`, `write`, `close_stdin`, `kill`; `watch`: `start`, `poll`, `stop` |
 | Packages | `packages` | `packages`: `list`, `add`, `remove`, `update` |
 | Images | `container_build`, `container_push` | none |
