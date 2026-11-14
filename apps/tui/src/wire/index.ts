@@ -1,6 +1,6 @@
 //! The seam between the TUI and the agent. `LocalBackend` (./local) runs the agent in-process; a
 //! `RemoteBackend` (./remote) reaches the same thing on the bench over a websocket through bench-proxy (./wire). The TUI
-//! imports only this file and ./remote at runtime, so the laptop binary bundles no agent. The agent itself is the Kloudlite
+//! imports only this file and ./remote at runtime, so the laptop binary bundles no agent. The agent itself is the Kode
 //! runtime now (Rust); the pi types here are type-only.
 //! Design: docs/superpowers/specs/2026-10-08-local-tui-design.md.
 import type { AgentSession, AgentSessionEvent } from "@earendil-works/pi-coding-agent";

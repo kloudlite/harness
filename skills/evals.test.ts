@@ -4,8 +4,8 @@ import { join } from "node:path";
 
 const DIR = import.meta.dir;
 const PLUGIN = join(DIR, "../laptop-plugin/plugin/skills");
-const TASK = ["kloudlite-develop", "kloudlite-verify", "kloudlite-automate"];
-const USER = ["kloudlite", ...TASK];
+const TASK = ["kode-develop", "kode-verify", "kode-automate"];
+const USER = ["kode", ...TASK];
 const read = (...p: string[]) => readFileSync(join(DIR, ...p), "utf8");
 const rows = (file: string) => read("evals", file).split("\n").filter((l) => l.startsWith("| ") && !l.startsWith("| ---") && !l.startsWith("|---")).slice(1);
 const cells = (l: string) => l.slice(2, -2).split(" | ");
@@ -52,7 +52,7 @@ test("the first trigger phrase of every task skill scenario is a routing prompt 
 });
 
 test("each user-facing skill has name, a description under 1024 chars with a Not for clause, and the size budget", () => {
-  const budget: Record<string, number> = { kloudlite: 220 };
+  const budget: Record<string, number> = { kode: 220 };
   for (const s of USER) {
     const t = read(s, "SKILL.md");
     const fm = t.match(/^---\nname: (.+)\ndescription: (.+)\n---\n/)!;
@@ -60,7 +60,7 @@ test("each user-facing skill has name, a description under 1024 chars with a Not
     expect(fm[2]!.length).toBeLessThan(1024);
     expect(fm[2]).toContain("Not for");
     expect(t.split("\n").length).toBeLessThanOrEqual(budget[s] ?? 300);
-    if (s !== "kloudlite") expect(t).toContain("Read the `kloudlite` skill first");
+    if (s !== "kode") expect(t).toContain("Read the `kode` skill first");
   }
 });
 

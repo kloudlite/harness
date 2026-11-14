@@ -44,7 +44,7 @@ export const themes: Record<string, Palette> = {
   },
   // default — slate, derived from the reference screenshots with opencode's generator math
   // surfaces follow opencode's step deltas (tokyonight): panel ≈ bg+5, element ≈ bg+10
-  "kloudlite-dark": {
+  "kode-dark": {
     border: "#556074",
     bg: "#262b34",
     fg: "#d5dce6",
@@ -83,7 +83,7 @@ export const themes: Record<string, Palette> = {
     diffAddedBg: "#1e2a1e",
     diffRemovedBg: "#2e1d1f",
   },
-  "kloudlite-light": {
+  "kode-light": {
     border: "#d1d5db",
     bg: "#ffffff",
     fg: "#1f2937",
@@ -109,12 +109,12 @@ export const themeNames = Object.keys(themes);
 import { hello } from "./hello.ts";
 
 function initialName(): string {
-  const env = process.env.KLOUDLITE_THEME ?? "";
+  const env = process.env.KODE_THEME ?? "";
   if (env in themes) return env;
-  if (env === "light") return "kloudlite-light";
+  if (env === "light") return "kode-light";
   const saved = hello().settings.theme;
   if (saved && saved in themes) return saved;
-  return "kloudlite-dark";
+  return "kode-dark";
 }
 
 /**

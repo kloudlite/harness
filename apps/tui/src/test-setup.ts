@@ -1,9 +1,9 @@
-// Tests must never touch the real ~/.config/kloudlite.
+// Tests must never touch the real ~/.config/kode.
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-process.env.KLOUDLITE_CONFIG_DIR = mkdtempSync(join(tmpdir(), "kloudlite-test-"));
+process.env.KODE_CONFIG_DIR = mkdtempSync(join(tmpdir(), "kode-test-"));
 const { boot } = await import("./hello.ts");
 const { fixtureTeam } = await import("./fixtures.ts");
 const { FakeBackend, fakeHello } = await import("./test-backend.ts");

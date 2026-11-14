@@ -5,7 +5,7 @@ import { join } from "node:path";
 const PLUGIN = join(import.meta.dir, "plugin");
 const SOURCES = join(import.meta.dir, "../skills");
 // the skills the plugin ships, copied by laptop-plugin/sync-skills.sh (a symlink out of the plugin root does not load)
-const SHIPPED = ["kloudlite", "kloudlite-automate", "kloudlite-develop", "kloudlite-verify"];
+const SHIPPED = ["kode", "kode-automate", "kode-develop", "kode-verify"];
 
 test("the plugin ships exactly its skills, each equal to its source in skills/ (run laptop-plugin/sync-skills.sh)", () => {
   expect(readdirSync(join(PLUGIN, "skills")).sort()).toEqual(SHIPPED);
@@ -16,7 +16,7 @@ test("the root marketplace names the plugin, its source is the plugin dir, and t
   const root = join(import.meta.dir, "..");
   const market = JSON.parse(readFileSync(join(root, ".claude-plugin/marketplace.json"), "utf8"));
   const manifest = JSON.parse(readFileSync(join(PLUGIN, ".claude-plugin/plugin.json"), "utf8"));
-  expect(market.name).toBe("kloudlite");
+  expect(market.name).toBe("kode");
   expect(market.plugins.length).toBe(1);
   const entry = market.plugins[0];
   expect(entry.source.startsWith("./")).toBe(true);

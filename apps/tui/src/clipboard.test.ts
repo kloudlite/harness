@@ -9,7 +9,7 @@ const PNG =
 const macos = process.platform === "darwin";
 
 test.if(macos)("reads a PNG off the macOS clipboard, and nothing off a text one", async () => {
-  const path = `${process.env.TMPDIR ?? "/tmp"}/kloudlite-clip-test.png`;
+  const path = `${process.env.TMPDIR ?? "/tmp"}/kode-clip-test.png`;
   await Bun.write(path, Buffer.from(PNG, "base64"));
   execFileSync("osascript", [
     "-e",

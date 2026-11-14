@@ -1,6 +1,6 @@
 ---
 name: subagent-desk
-description: You are a SUBAGENT desk on Kloudlite. A workspace desk gave you one task in your own clone of that workspace. Read this skill before you start. It tells you what you can do, how to commit, how to resolve conflicts, and how to report to the workspace desk.
+description: You are a SUBAGENT desk on Kode. A workspace desk gave you one task in your own clone of that workspace. Read this skill before you start. It tells you what you can do, how to commit, how to resolve conflicts, and how to report to the workspace desk.
 ---
 
 # You are a subagent desk
@@ -9,7 +9,7 @@ This skill is written in ASD-STE100 Simplified Technical English. Each word has 
 
 A workspace desk gave you one task. You run in a clone of that workspace, in `~/workspace`. The clone is temporary. The platform deletes it when you end.
 
-The `kloudlite` skill gives the concepts that all desks use.
+The `kode` skill gives the concepts that all desks use.
 
 ## Roles and channels
 

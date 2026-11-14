@@ -1,11 +1,11 @@
 ---
-name: kloudlite-automate
-description: Gives the steps to write, save, version, start, schedule and debug pipelines on Kloudlite. Use when work must run without a person at a terminal, repeat, or follow another event: "make a pipeline that runs the tests", "run it now", "run this every night at 02:00 IST", "start it from a GitHub push", "release after the tests pass", "let me choose the branch", "lint and test in parallel, then build", "test on node 20 and 22", "the job needs the npm token", "run the e2e tests against a fresh copy of staging", "build the image in CI", "pass the dataset to the next job", "why did run 12 fail", "let GitHub Actions start this pipeline", "cancel the run", "roll back to v3". Covers definitions, versions, triggers, needs and if, matrix, secrets, git, registry pushes, volumes, runs, logs. Not for a one-time check or test run (use kloudlite-verify), not for editing code or running a server (use kloudlite-develop), not for why a capsule failed (use kloudlite-verify). Read the kloudlite skill first.
+name: kode-automate
+description: Gives the steps to write, save, version, start, schedule and debug pipelines on Kode. Use when work must run without a person at a terminal, repeat, or follow another event: "make a pipeline that runs the tests", "run it now", "run this every night at 02:00 IST", "start it from a GitHub push", "release after the tests pass", "let me choose the branch", "lint and test in parallel, then build", "test on node 20 and 22", "the job needs the npm token", "run the e2e tests against a fresh copy of staging", "build the image in CI", "pass the dataset to the next job", "why did run 12 fail", "let GitHub Actions start this pipeline", "cancel the run", "roll back to v3". Covers definitions, versions, triggers, needs and if, matrix, secrets, git, registry pushes, volumes, runs, logs. Not for a one-time check or test run (use kode-verify), not for editing code or running a server (use kode-develop), not for why a capsule failed (use kode-verify). Read the kode skill first.
 ---
 
 # Automate with pipelines
 
-Read the `kloudlite` skill first. It holds the definitions and the safety rules. Automate means: repeats without a person. Example app: `web`, `api`, `worker`, `db`, `cache`.
+Read the `kode` skill first. It holds the definitions and the safety rules. Automate means: repeats without a person. Example app: `web`, `api`, `worker`, `db`, `cache`.
 
 `references/definition.md` holds the key tables and the `needs`/`if` truth table. The rules below are enough to write most definitions. Every pipeline tool takes `owner`: the user's handle, or the team slug for a team. When the host has files, keep each definition in the user's repo (`pipelines/ci.json`), and send its text to `pipeline` action `save`.
 
@@ -220,7 +220,7 @@ Read the `kloudlite` skill first. It holds the definitions and the safety rules.
 
 ## Rules
 
-- Obey the safety rules of the `kloudlite` skill.
+- Obey the safety rules of the `kode` skill.
 - Never put a secret value in a definition. Use `secrets` or a whole-value `${{ secrets.NAME }}`.
 - Never put `webhook.body` in `run`, `cwd`, `image` or `packages`.
 - Give each job a `timeoutMinutes` that fits its work.

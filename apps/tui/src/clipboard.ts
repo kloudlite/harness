@@ -25,7 +25,7 @@ function fromXclip(): ClipImage | null {
  * clipboard to PNG and writes it to a temp file we read back and delete.
  */
 function fromPasteboard(): ClipImage | null {
-  const path = join(tmpdir(), `kloudlite-clip-${process.pid}.png`);
+  const path = join(tmpdir(), `kode-clip-${process.pid}.png`);
   try {
     execFileSync(
       "osascript",

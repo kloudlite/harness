@@ -1,13 +1,13 @@
 ---
-name: kloudlite
-description: Gives the Kloudlite definitions, the rules for picking and building workspaces, environments and desks, the tool groups, the safety rules and the setup steps. Load first when the Kloudlite tools are present (`desk`, `workspace`) and the task is to run, test, build or change code; when a request names a workspace (or a sandbox), environment, desk, intercept, capsule, volume, snapshot, pipeline, secret, variable or connector; for status, logs, stop, start, delete and quota questions ("what do I have", "logs of db", "delete the review workspace"); and when a tool answers "not logged in", "403 ... paused", or the server lists only the `desk` tool. Not for steps of a task - use kloudlite-develop (set up, run against real services, intercept), kloudlite-verify (one-time checks in capsules) or kloudlite-automate (pipelines).
+name: kode
+description: Gives the Kode definitions, the rules for picking and building workspaces, environments and desks, the tool groups, the safety rules and the setup steps. Load first when the Kode tools are present (`desk`, `workspace`) and the task is to run, test, build or change code; when a request names a workspace (or a sandbox), environment, desk, intercept, capsule, volume, snapshot, pipeline, secret, variable or connector; for status, logs, stop, start, delete and quota questions ("what do I have", "logs of db", "delete the review workspace"); and when a tool answers "not logged in", "403 ... paused", or the server lists only the `desk` tool. Not for steps of a task - use kode-develop (set up, run against real services, intercept), kode-verify (one-time checks in capsules) or kode-automate (pipelines).
 ---
 
-# Kloudlite
+# Kode
 
-This skill gives the definitions and the rules. The task skills give the steps: `kloudlite-develop`, `kloudlite-verify`, `kloudlite-automate`. They do not repeat the definitions. Read this skill first.
+This skill gives the definitions and the rules. The task skills give the steps: `kode-develop`, `kode-verify`, `kode-automate`. They do not repeat the definitions. Read this skill first.
 
-The words workspace, environment, desk, service, intercept, capsule, volume, snapshot, pipeline, secret and connector mean Kloudlite objects. When the Kloudlite tools are present, code runs in a workspace, not on the user's computer, whatever the request says.
+The words workspace, environment, desk, service, intercept, capsule, volume, snapshot, pipeline, secret and connector mean Kode objects. When the Kode tools are present, code runs in a workspace, not on the user's computer, whatever the request says.
 
 ## Components
 
@@ -23,11 +23,11 @@ All work runs in the context of one team: a person's own team or a shared team. 
 8. **Secrets and variables.** A variable is `NAME=value` in the `env` of a workspace, service, capsule or job. A secret is a named value of an owner; a variable refers to it as the whole value `${{ secrets.NAME }}`. No one reads a value back.
 9. **Connector.** A link from an owner to a code host (GitHub, GitLab) or a container registry: read-only clone over HTTPS; image push and private pull. Connected in the web console.
 
-**"Sandbox" means a workspace.** Other platforms call the agent's machine a sandbox; in Kloudlite that machine is a workspace. When the user asks for a sandbox, give a workspace, unless they ask for one command or a throwaway run, which is a capsule.
+**"Sandbox" means a workspace.** Other platforms call the agent's machine a sandbox; in Kode that machine is a workspace. When the user asks for a sandbox, give a workspace, unless they ask for one command or a throwaway run, which is a capsule.
 
 Three facts decide every topology choice:
 
-1. **Managed vs standalone.** A workspace created in a desk is managed: it reaches the environment, and the desk starts, stops and deletes it. A standalone workspace never joins a desk. `workspace` with `action: "create"` and a `source` makes a copy that joins the desk the tool acts for, so it is managed; `action: "restore"` from a desk joins the desk the same way, while a restore or clone made from the laptop CLI (`workspaces clone`, `workspaces restore`, `devices workspaces clone`) is standalone. To clone into a desk from the laptop, use `kloudlite desks clone-workspace WORKSPACE --to NAME` (a device workspace also needs `--snapshot ID`).
+1. **Managed vs standalone.** A workspace created in a desk is managed: it reaches the environment, and the desk starts, stops and deletes it. A standalone workspace never joins a desk. `workspace` with `action: "create"` and a `source` makes a copy that joins the desk the tool acts for, so it is managed; `action: "restore"` from a desk joins the desk the same way, while a restore or clone made from the laptop CLI (`workspaces clone`, `workspaces restore`, `devices workspaces clone`) is standalone. To clone into a desk from the laptop, use `kode desks clone-workspace WORKSPACE --to NAME` (a device workspace also needs `--snapshot ID`).
 2. **A capsule ends.** It is for one command; nothing in it survives. A capsule in a desk is a managed member and reaches the environment.
 3. **An intercept is environment-wide.** Every caller of the service, every teammate's desk included, reaches the workspace. One workspace per service.
 
@@ -45,12 +45,12 @@ team ─┬─ desk ── joins ──> workspaces, capsules ──> environmen
 
 A device workspace runs on the person's own Mac, in an operating system sandbox, and its folder is an ordinary folder there. `workspace` with `action: "create"` and `device` (an id `dev-…` from the `devices` tool) makes one in the desk. Without `device` the workspace is a cloud one, whatever else the call says.
 
-1. The device must be online and active in the team that owns the desk. If it is offline or active elsewhere, the create is refused with a sentence that says which; the person runs `kloudlite start` or `kloudlite devices connect TEAM`.
-2. A device workspace has no ssh. Its tools (`read`, `write`, `exec`) reach it through the gateway. `exec` runs in the sandbox: it writes only the workspace folder, and the network reaches every host except the Kloudlite API and any the person denied (an `allow` list from the person narrows it to that list). It never reaches the Mac itself: loopback, the Mac's other local services and the names `kloudlite` writes into `/etc/hosts` are refused, by address or by name.
+1. The device must be online and active in the team that owns the desk. If it is offline or active elsewhere, the create is refused with a sentence that says which; the person runs `kode start` or `kode devices connect TEAM`.
+2. A device workspace has no ssh. Its tools (`read`, `write`, `exec`) reach it through the gateway. `exec` runs in the sandbox: it writes only the workspace folder, and the network reaches every host except the Kode API and any the person denied (an `allow` list from the person narrows it to that list). It never reaches the Mac itself: loopback, the Mac's other local services and the names `kode` writes into `/etc/hosts` are refused, by address or by name.
 3. `workspace` `snapshot` takes a copy-on-write snapshot on the Mac (the workspace restarts while it is made). `create` with `source` and `snapshot` (a `dsnap-…` id) clones it, and the copy joins the desk. `restore` with a `dsnap-…` id as `snapshot_id` makes a new workspace the same way.
 4. A device workspace reaches the desk's environment only through `KL_ENV_{SERVICE}_{PORT}` (and `KL_ENV_{SERVICE}` for a service's first port), set to `127.0.0.1:{port}`. Read them with `exec` `env | grep ^KL_ENV` and connect to that address, for any protocol. Names such as `db`, `db.main` or `notes.mac-test` do not resolve in the sandbox, and the proxy refuses them with `403 not in the allowlist`; do not try them, and do not try another workspace's name either. A service added after the workspace started gets its variable after `workspace` `restart`. The forward uses the workspace's own desk, whichever desk the laptop is on. A workspace reaches only the services of its own desk, never another desk's, and never another workspace's forward.
 5. `devices` lists the machines with `online`, `enabled` and `account`: pick one that is online and whose `account` is the desk's team. An agent cannot start the Mac's service or connect a device to a team; hand the person the command. A name is unique within its account, and these names are reserved in every account: `ws`, `env`, `api`, `admin`, `system`, `kl`, `bld-…`, and anything that looks like an id.
-6. `exec` in a device workspace writes only inside its folder and its own `TMPDIR` (a tool that ignores `TMPDIR` and writes the per-user temp or cache dir is refused) and reads only its folder plus the system tool folders (`/Library/Developer`, `/opt/homebrew`, `/usr/local`) unless `create` names extra access in `access` (for example `["xcode", "user-temp"]` for an iOS build). The person defines the names on their Mac (`kloudlite devices access list` shows them); an undefined name keeps the workspace from starting with `AccessUndefined` and a sentence naming the command that defines it. Hand that command to the person. Built-in names: `xcode` (Xcode and its build output), `user-temp` (the per-user temp and cache folders), `android` (the SDK) and `pty` (a pseudo-terminal, which `xcodebuild test` needs). Simulator tests need `["xcode", "user-temp", "pty"]`, and the simulator must be booted BEFORE the workspace starts, because its test socket is granted at start. A name the Mac refuses (`AccessRefused`, for example a keychain or home folder) is final: do not look for a way around it. Signing and running on a device are not supported; build for the simulator. Package caches need no access, since `~` is the workspace folder. A binary file you want to see or give the person: `read` an image, or `download` for a console link the person opens signed in (and a resource link an MCP client reads); `transfer` moves a file between your workspaces.
+6. `exec` in a device workspace writes only inside its folder and its own `TMPDIR` (a tool that ignores `TMPDIR` and writes the per-user temp or cache dir is refused) and reads only its folder plus the system tool folders (`/Library/Developer`, `/opt/homebrew`, `/usr/local`) unless `create` names extra access in `access` (for example `["xcode", "user-temp"]` for an iOS build). The person defines the names on their Mac (`kode devices access list` shows them); an undefined name keeps the workspace from starting with `AccessUndefined` and a sentence naming the command that defines it. Hand that command to the person. Built-in names: `xcode` (Xcode and its build output), `user-temp` (the per-user temp and cache folders), `android` (the SDK) and `pty` (a pseudo-terminal, which `xcodebuild test` needs). Simulator tests need `["xcode", "user-temp", "pty"]`, and the simulator must be booted BEFORE the workspace starts, because its test socket is granted at start. A name the Mac refuses (`AccessRefused`, for example a keychain or home folder) is final: do not look for a way around it. Signing and running on a device are not supported; build for the simulator. Package caches need no access, since `~` is the workspace folder. A binary file you want to see or give the person: `read` an image, or `download` for a console link the person opens signed in (and a resource link an MCP client reads); `transfer` moves a file between your workspaces.
 
 ## Hosts
 
@@ -58,14 +58,14 @@ Read your row. The task skills never name a host.
 
 | Host | Tools | Local commands | Local files | Who works |
 |---|---|---|---|---|
-| Claude Code with the plugin (remote server) | `mcp__plugin_kloudlite_kl__*`, without `web_fetch`, `web_search` and `scratch_*` | yes | yes | the one agent |
-| MCP client with `kloudlite mcp` | server `kl`, all scopes in one list | only with a shell tool | only with file tools | the one agent |
+| Claude Code with the plugin (remote server) | `mcp__plugin_kode_kl__*`, without `web_fetch`, `web_search` and `scratch_*` | yes | yes | the one agent |
+| MCP client with `kode mcp` | server `kl`, all scopes in one list | only with a shell tool | only with file tools | the one agent |
 | Remote connector (claude.ai, ChatGPT) | `/mcp` over OAuth | no | no | the one agent |
-| Kloudlite runtime (shared) | split by role: main, workspace, subagent | no | no | the role skills |
+| Kode runtime (shared) | split by role: main, workspace, subagent | no | no | the role skills |
 
 A call acts in the desk named by its `desk` argument (id or name, on the laptop door and the remote server, the plugin and a remote connector); a door refuses a call without it. `team` names which of the teams you connected. Only the harness drives one fixed desk, which it supplies itself: its agents pass no `desk`, and `workspace` with `action: "create"` always lands in that desk. In the harness, a task that needs another desk is for the user to open.
 
-Use a tool, not a command. Two things have no tool: connecting a provider (the web console) and `kloudlite env`, the tunnel to the laptop. For those, give the user the exact command, or run it only on a host with a shell.
+Use a tool, not a command. Two things have no tool: connecting a provider (the web console) and `kode env`, the tunnel to the laptop. For those, give the user the exact command, or run it only on a host with a shell.
 
 ## How to work
 
@@ -87,7 +87,7 @@ Use a tool, not a command. Two things have no tool: connecting a provider (the w
 15. **Answer shape.** Result first, then the objects created and removed, then the next step. Never a dump of tool output.
 16. **Argument errors.** A call with an argument the action does not take is refused with `unknown argument` and the list the action takes. Read the list, fix the call, and call once more. Do not retry the same call, and do not drop the argument and carry on: the object you get would not be the one you asked for.
 17. **No probe objects.** Do not create a workspace, environment or capsule only to learn what a tool does, and do not delete what the user made. This skill says what each tool does; if it does not say, ask.
-18. **Do not search for a shell on the person's machine.** You have no ssh to a device workspace and no shell on the person's Mac. Work in the workspace with `exec`, `read`, `write`, `edit` and the other tools; they are all it exposes. Anything that needs the Mac itself (`kloudlite login`, `start`, `devices …`) is a command to hand to the person, exactly written.
+18. **Do not search for a shell on the person's machine.** You have no ssh to a device workspace and no shell on the person's Mac. Work in the workspace with `exec`, `read`, `write`, `edit` and the other tools; they are all it exposes. Anything that needs the Mac itself (`kode login`, `start`, `devices …`) is a command to hand to the person, exactly written.
 
 ## Pick the shape
 
@@ -100,9 +100,9 @@ The example app in every skill: a shop with `web`, `api`, `worker`, `db` (Postgr
 | 3. One managed workspace per component, one desk | A change across `web`, `api` and `worker` | One environment with every service; one desk; a workspace per component; each intercepts its own service |
 | 4. Copies | Risky data changes, experiments, PR review in a shared environment | `env` `create` with `source` for the environment; `workspace` `create` with `source` for a disposable copy in the desk; `worktree` `add` for a second branch in one workspace |
 
-Ask in order. Does the work need a running service? No: shape 1. How many components change? One: shape 2; several: shape 3. Would it disturb a shared environment, or try several options? Yes: shape 4. Is it a one-time check? Use a capsule, not a workspace (`kloudlite-verify`).
+Ask in order. Does the work need a running service? No: shape 1. How many components change? One: shape 2; several: shape 3. Would it disturb a shared environment, or try several options? Yes: shape 4. Is it a one-time check? Use a capsule, not a workspace (`kode-verify`).
 
-Parallel work: only a managed workspace reaches the environment, and a clone joins no desk unless it is made in one (`workspace` `create` with `source`, or `kloudlite desks clone-workspace`). So "two features at once against the services" is two managed workspaces in the desk (each clones the repo) or two worktrees in one managed workspace. A clone keeps or explores a machine's state without services.
+Parallel work: only a managed workspace reaches the environment, and a clone joins no desk unless it is made in one (`workspace` `create` with `source`, or `kode desks clone-workspace`). So "two features at once against the services" is two managed workspaces in the desk (each clones the repo) or two worktrees in one managed workspace. A clone keeps or explores a machine's state without services.
 
 ## Ids and states
 
@@ -166,13 +166,13 @@ These need no scenario.
 
 | Phrase | Skill | Rule |
 |---|---|---|
-| "run the tests", "check it works", "try it" | `kloudlite-verify` | Once, now, isolated, a result to read |
-| "run the tests every night / on every push / after the build" | `kloudlite-automate` | Repeats without a person |
-| "run my server", "hit it with real traffic", "fix the bug" | `kloudlite-develop` | Edits code or keeps a process running |
+| "run the tests", "check it works", "try it" | `kode-verify` | Once, now, isolated, a result to read |
+| "run the tests every night / on every push / after the build" | `kode-automate` | Repeats without a person |
+| "run my server", "hit it with real traffic", "fix the bug" | `kode-develop` | Edits code or keeps a process running |
 | "why did it fail" | verify for a capsule, automate for a pipeline run | Which record it is |
-| "set up", "give me a workspace with Postgres" | `kloudlite-develop` | Creates the shape |
+| "set up", "give me a workspace with Postgres" | `kode-develop` | Creates the shape |
 | "what do I have", "status of X", "logs of db", "delete X", "stop my desk" | this skill alone | Reads, lifecycle and deletes need no scenario |
-| A change, then "and check it" | develop, then verify | Every develop scenario ends with "to check the result, use `kloudlite-verify`" |
+| A change, then "and check it" | develop, then verify | Every develop scenario ends with "to check the result, use `kode-verify`" |
 
 ## Setup and recovery
 
@@ -180,17 +180,17 @@ Act on the symptom you see.
 
 | Symptom | What to do |
 |---|---|
-| No Kloudlite tool at all (no `desk` or `workspace` under any prefix) | Do not guess and do not call an API. Tell the user the five steps below. Never run the installer or the login yourself unless told. |
-| A tool answers ``not logged in — run `kloudlite login` `` | Tell the user that command, then to restart the client. |
+| No Kode tool at all (no `desk` or `workspace` under any prefix) | Do not guess and do not call an API. Tell the user the five steps below. Never run the installer or the login yourself unless told. |
+| A tool answers ``not logged in — run `kode login` `` | Tell the user that command, then to restart the client. |
 | ``pass `desk` (id or name)`` | Call `desk` `list`, pass `desk` on every call. |
 | `403 your access to TEAM is paused` | A team admin must restore access. Stop. |
 
 The five steps:
 
-1. Install `kloudlite` (macOS, Linux; WSL on Windows): `curl -fsSL https://dev.kloudlite.io/install.sh | sh`
-2. Sign in (opens the browser): `kloudlite login`
-3. Connect the agent. Claude Code with the plugin (tools and skills; needs no `kloudlite` binary): `/plugin marketplace add kloudlite/harness`, then `/plugin install kloudlite@kloudlite`; the first tool call opens the browser sign-in, and the consent page picks the teams; the agent lists or creates the desk. Another MCP client: `claude mcp add kl -- kloudlite mcp`, or the JSON `{"mcpServers": {"kl": {"command": "kloudlite", "args": ["mcp"]}}}`; for another team or desk, `["mcp", "TEAM", "--desk", "DESK"]`. A client that cannot start a program uses the remote URL `https://dev.kloudlite.io/mcp` with OAuth.
-4. Make a desk: `desk` `create` (with `environment` to connect one), or open one once with `kloudlite -s NAME`. Every call then names it in `desk`.
+1. Install `kode` (macOS, Linux; WSL on Windows): `curl -fsSL https://dev.kloudlite.io/install.sh | sh`
+2. Sign in (opens the browser): `kode login`
+3. Connect the agent. Claude Code with the plugin (tools and skills; needs no `kode` binary): `/plugin marketplace add kloudlite/harness`, then `/plugin install kode@kloudlite`; the first tool call opens the browser sign-in, and the consent page picks the teams; the agent lists or creates the desk. Another MCP client: `claude mcp add kl -- kode mcp`, or the JSON `{"mcpServers": {"kl": {"command": "kode", "args": ["mcp"]}}}`; for another team or desk, `["mcp", "TEAM", "--desk", "DESK"]`. A client that cannot start a program uses the remote URL `https://dev.kloudlite.io/mcp` with OAuth.
+4. Make a desk: `desk` `create` (with `environment` to connect one), or open one once with `kode -s NAME`. Every call then names it in `desk`.
 5. Restart the client. It then lists the server `kl`.
 
 After setup, `desk` with `action: "list"` must show the desk the user expects. Pass `desk` with its name (and `team` for a team desk) on each call.

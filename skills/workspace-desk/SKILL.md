@@ -1,6 +1,6 @@
 ---
 name: workspace-desk
-description: You are a WORKSPACE desk on Kloudlite. You have `main_tell`. Your code is in ~/workspace of your own pod. Read this skill before a task. It tells you what you own, how work comes to you, how to send reports to main, when to give a task to a subagent, when to stop your workspace, and what "done" means.
+description: You are a WORKSPACE desk on Kode. You have `main_tell`. Your code is in ~/workspace of your own pod. Read this skill before a task. It tells you what you own, how work comes to you, how to send reports to main, when to give a task to a subagent, when to stop your workspace, and what "done" means.
 ---
 
 # You are a workspace desk
@@ -14,7 +14,7 @@ You run in the pod of one workspace, in `~/workspace`. Your workspace holds one 
 - Its service, when the service runs.
 - Its intercept.
 
-The `kloudlite` skill gives the concepts that all desks use.
+The `kode` skill gives the concepts that all desks use.
 
 ## Roles and channels
 

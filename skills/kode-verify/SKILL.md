@@ -1,11 +1,11 @@
 ---
-name: kloudlite-verify
-description: Gives the steps to check code once on Kloudlite: quick checks in a workspace, clean runs in a capsule against the desk's environment, one-off scripts, reading what a capsule printed, reviewing a pull request in a real environment, testing two changes together, and cleaning up capsules. Use when the user says "run the unit tests", "check it works", "try it", "run the integration tests against staging", "run this once in a throwaway sandbox", "run this migration once and show me the output", "what did that capsule print", "did it pass", "review PR 42 against a copy of staging", "test my api change with Priya's web change", "clean up my capsules", or "why did the capsule fail". Not for editing code or keeping a server running (use kloudlite-develop), not for tests that repeat nightly, on a push or after a build (use kloudlite-automate), not for why a pipeline run failed (use kloudlite-automate). Read the kloudlite skill first.
+name: kode-verify
+description: Gives the steps to check code once on Kode: quick checks in a workspace, clean runs in a capsule against the desk's environment, one-off scripts, reading what a capsule printed, reviewing a pull request in a real environment, testing two changes together, and cleaning up capsules. Use when the user says "run the unit tests", "check it works", "try it", "run the integration tests against staging", "run this once in a throwaway sandbox", "run this migration once and show me the output", "what did that capsule print", "did it pass", "review PR 42 against a copy of staging", "test my api change with Priya's web change", "clean up my capsules", or "why did the capsule fail". Not for editing code or keeping a server running (use kode-develop), not for tests that repeat nightly, on a push or after a build (use kode-automate), not for why a pipeline run failed (use kode-automate). Read the kode skill first.
 ---
 
-# Verify on Kloudlite
+# Verify on Kode
 
-Read the `kloudlite` skill first. It holds the definitions and the safety rules. Verify means: once, now, isolated, a result to read. Example app: `web`, `api`, `worker`, `db`, `cache`.
+Read the `kode` skill first. It holds the definitions and the safety rules. Verify means: once, now, isolated, a result to read. Example app: `web`, `api`, `worker`, `db`, `cache`.
 
 A check in a workspace uses the workspace's files and changes nothing. A capsule is for a run that must be clean or must not touch a workspace.
 
@@ -17,7 +17,7 @@ A check in a workspace uses the workspace's files and changes nothing. A capsule
 **Steps:**
 1. Orient. Find the workspace that holds the code (`workspace` action `list`); it must be `ready`.
 2. `exec` {"workspace": "ws-…", "cmd": "npm test", "cwd": "api", "tail": 60, "quiet": true}. The call waits and answers the exit code.
-3. If the tests need a service (`db`), the workspace must be managed in a desk with the environment (`kloudlite-develop`, scenario 3), or use scenario 2.
+3. If the tests need a service (`db`), the workspace must be managed in a desk with the environment (`kode-develop`, scenario 3), or use scenario 2.
 
 **Done when:** the exit code is 0, or you told the user which tests failed with the lines that show it.
 **If it fails:** a command still running past `soft_ms` answers `promoted: true` with a process `id` and `poll_after_ms`: after that many ms call `process` action `wait` with that `id` (and `since`/`since_err` = `next`/`next_err`) until `state` is `exited`; `exit_code` is the result. A name that does not resolve: the workspace is not in the desk. The loop applies when a `promoted` answer arrives; a client that waits on MCP tasks waits on its own and never sees one.
@@ -34,7 +34,7 @@ A check in a workspace uses the workspace's files and changes nothing. A capsule
 5. `capsule` {"action": "logs", "capsule": "cap-…"}, then `capsule` action `get`: read `exit_code`.
 
 **Done when:** `phase` is `terminated`, `reason` is `Exited`, and `exit_code` is 0, or you told the user what failed.
-**If it fails:** `reason` `Timeout`: raise `lifetime_s`. `reason` `Failed`: read `message`. `no git connector of OWNER covers HOST/REPO`: the user connects the host in the web console. `409` with a limit: running capsules count against the quota (rule 13 of the `kloudlite` skill).
+**If it fails:** `reason` `Timeout`: raise `lifetime_s`. `reason` `Failed`: read `message`. `no git connector of OWNER covers HOST/REPO`: the user connects the host in the web console. `409` with a limit: running capsules count against the quota (rule 13 of the `kode` skill).
 **Cleanup:** the capsule ends with its command; the record stays 90 days.
 
 ### 3. One-off script
@@ -98,9 +98,9 @@ A check in a workspace uses the workspace's files and changes nothing. A capsule
 
 ## Rules
 
-- Obey the safety rules of the `kloudlite` skill.
+- Obey the safety rules of the `kode` skill.
 - Give `lifetime_s` always. A capsule that never ends holds quota to its limit.
 - Create capsules in the desk when the command needs services. A standalone one reaches no environment.
 - Give tools with `packages`. Never run a server in a capsule to stand in for a service.
-- A capsule cannot intercept. To receive a service's traffic, use a workspace (`kloudlite-develop`).
+- A capsule cannot intercept. To receive a service's traffic, use a workspace (`kode-develop`).
 - Delete a copy of an environment or a review desk only when the user says so.

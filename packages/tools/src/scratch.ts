@@ -48,12 +48,12 @@ const lexists = (p: string) => {
 // Only $R survives from the real filesystem view; /tmp, the home and the keys dir are blanked.
 // The INNER `unshare -Um --map-user` is LOAD-BEARING: as namespace root the script could
 // `umount /home/kl` and see the real home again; as uid 1000 it cannot (proven).
-// /home/kl and /etc/kloudlite are hidden only where they exist, so a laptop or CI Linux works.
+// /home/kl and /etc/kode are hidden only where they exist, so a laptop or CI Linux works.
 const OUTER = `set -e
 mount -n -t tmpfs t /mnt; mkdir /mnt/s; mount -n --bind "$R" /mnt/s
 mount -n -t tmpfs t /tmp; mkdir -p "$R"; mount -n --move /mnt/s "$R"; umount -n /mnt
 [ -d /home/kl ] && mount -n -t tmpfs t /home/kl
-[ -d /etc/kloudlite ] && mount -n -t tmpfs t /etc/kloudlite
+[ -d /etc/kode ] && mount -n -t tmpfs t /etc/kode
 cd "$R"
 exec unshare -Um --map-user=1000 --map-group=1000 sh -c "$1"`;
 

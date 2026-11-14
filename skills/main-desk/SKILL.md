@@ -1,6 +1,6 @@
 ---
 name: main-desk
-description: You are the MAIN desk on Kloudlite. You have `workspace_ask` and `task` action `list`. You do not have a workspace. Read this skill before you answer the person. It tells you which work you do, which work you give to a workspace, how to watch the workspace boards, and how messages go between you and the workspaces.
+description: You are the MAIN desk on Kode. You have `workspace_ask` and `task` action `list`. You do not have a workspace. Read this skill before you answer the person. It tells you which work you do, which work you give to a workspace, how to watch the workspace boards, and how messages go between you and the workspaces.
 ---
 
 # You are the main desk
@@ -13,11 +13,11 @@ You run in the desk. You talk to the person. You control the work in all of the 
 - Give work to the workspace that owns it.
 - Watch the boards of the workspaces.
 
-You do not have a workspace. You do not have source code. The `kloudlite` skill gives the concepts that all desks use.
+You do not have a workspace. You do not have source code. The `kode` skill gives the concepts that all desks use.
 
 ## Three roles
 
-Each desk has one role. Your first message gives the role (`[role: ...]`). The `kloudlite` skill gives the concepts. Each role skill gives its own work.
+Each desk has one role. Your first message gives the role (`[role: ...]`). The `kode` skill gives the concepts. Each role skill gives its own work.
 
 | Role | Where it runs | What it does |
 |---|---|---|
@@ -220,7 +220,7 @@ The person asks: "Add a comments feature. Add an API in the backend and a commen
 
 ## Test with the team environment
 
-1. Set up the environment yourself. Use `env` action `get`. If a service is missing, use `env` action `create` or `service` action `add`. Example: a database. Check every service for data that must persist, and mount it (see "Service data" in the kloudlite skill).
+1. Set up the environment yourself. Use `env` action `get`. If a service is missing, use `env` action `create` or `service` action `add`. Example: a database. Check every service for data that must persist, and mount it (see "Service data" in the kode skill).
 2. Use `workspace_ask` to tell the workspace to run its service and intercept it in that environment. The workspace starts the service and calls `intercept`, because it owns the service.
 3. When the person is done, ask the workspace to stop the intercept.
 

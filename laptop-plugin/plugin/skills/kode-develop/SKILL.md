@@ -1,13 +1,13 @@
 ---
-name: kloudlite-develop
-description: Gives the steps to set up a project on Kloudlite, run code against real services, intercept a service, work on several components or branches at once, and keep state. Use when the user says "set up this repo", "give me a workspace with Postgres", "I need Postgres and Redis", "run my API against the real database", "intercept api", "send real traffic to my code", "debug this with real traffic", "add a feature across api, worker and web", "fix the bug", "try two approaches", "reproduce it without breaking staging", "bump Postgres to 16", "set DATABASE_URL on api", "rotate the DB password", "checkpoint before the refactor", "reset the data", "build and push the image", "stop everything"; or when the Kloudlite tools are present and the task edits code or keeps a process running. Not for a one-time test or check (use kloudlite-verify), not for repeating or triggered work (use kloudlite-automate), not for status, logs or deletes (the kloudlite skill alone). Read the kloudlite skill first.
+name: kode-develop
+description: Gives the steps to set up a project on Kode, run code against real services, intercept a service, work on several components or branches at once, and keep state. Use when the user says "set up this repo", "give me a workspace with Postgres", "I need Postgres and Redis", "run my API against the real database", "intercept api", "send real traffic to my code", "debug this with real traffic", "add a feature across api, worker and web", "fix the bug", "try two approaches", "reproduce it without breaking staging", "bump Postgres to 16", "set DATABASE_URL on api", "rotate the DB password", "checkpoint before the refactor", "reset the data", "build and push the image", "stop everything"; or when the Kode tools are present and the task edits code or keeps a process running. Not for a one-time test or check (use kode-verify), not for repeating or triggered work (use kode-automate), not for status, logs or deletes (the kode skill alone). Read the kode skill first.
 ---
 
-# Develop on Kloudlite
+# Develop on Kode
 
-Read the `kloudlite` skill first. It holds the definitions, the shapes and the safety rules; this skill does not repeat them.
+Read the `kode` skill first. It holds the definitions, the shapes and the safety rules; this skill does not repeat them.
 
-Every scenario ends with its cleanup. To check a result, use `kloudlite-verify`. Example app: `web`, `api`, `worker`, `db` (Postgres), `cache` (Redis).
+Every scenario ends with its cleanup. To check a result, use `kode-verify`. Example app: `web`, `api`, `worker`, `db` (Postgres), `cache` (Redis).
 
 ## Scenarios
 
@@ -22,7 +22,7 @@ Every scenario ends with its cleanup. To check a result, use `kloudlite-verify`.
 5. `read` {"workspace": "ws-…", "paths": ["AGENTS.md"]}. Add packages it names with `packages` action `add`: top-level nixpkgs names (`python3`, `nodejs_22`, optional `@version`), never `python3Packages.x`; install Python libraries with pip.
 
 **Done when:** the workspace is `ready` and the code is in `~/workspace`.
-**If it fails:** `no git connector of OWNER covers HOST/REPO`: the user connects the host in the web console; only `github.com` and the configured GitLab answer. `422` for a package: pick a listed version. `409` with a limit: the `kloudlite` skill, rule 13.
+**If it fails:** `no git connector of OWNER covers HOST/REPO`: the user connects the host in the web console; only `github.com` and the configured GitLab answer. `422` for a package: pick a listed version. `409` with a limit: the `kode` skill, rule 13.
 **Then:** scenario 2 if the code needs services.
 
 ### 2. Environment from the repository
@@ -31,7 +31,7 @@ Every scenario ends with its cleanup. To check a result, use `kloudlite-verify`.
 **Shape:** 2.
 **Steps:**
 1. `env` action `list`. Reuse an environment that already runs the app.
-2. Read `docker-compose.yml`, `.env.example` and the README. List each service, its image, ports and variables. Take mounts from `references/services.md` of the `kloudlite` skill; every service that writes data gets one.
+2. Read `docker-compose.yml`, `.env.example` and the README. List each service, its image, ports and variables. Take mounts from `references/services.md` of the `kode` skill; every service that writes data gets one.
 3. A password is a secret. `secret_set` {"owner": "acme", "name": "DB_PASSWORD", "value": "…"} with a value the user gives or approves, never printed, and `owner` the team: an environment reads only the team's secrets.
 4. `env` {"action": "create", "name": "shop-dev", "services": [{"name": "db", "image": "postgres:16", "ports": [5432], "env": {"POSTGRES_PASSWORD": "${{ secrets.DB_PASSWORD }}"}, "mounts": [{"folder": "pg-data", "path": "/var/lib/postgresql/data"}]}, {"name": "cache", "image": "redis:7", "ports": [6379]}]}.
 5. `env` {"action": "wait", "env": "env-…"}.
@@ -46,7 +46,7 @@ Every scenario ends with its cleanup. To check a result, use `kloudlite-verify`.
 **Shape:** 2.
 **Steps:**
 1. `desk` action `list`: the desk's `environment`. If it is the one wanted, go to step 3. To connect or change it on a desk you hold: `desk` {"action": "connect", "desk": "orders", "environment": "env-…"} (`environment: null` disconnects; the harness leaves `desk` out and connects its own desk), then go to step 3.
-2. Or `desk` {"action": "create", "name": "orders", "environment": "env-…"} makes a desk for this work and connects the environment; it does not move anything. Then pass `desk: "orders"` on every call that works in it. In the harness (no `desk` argument; see Hosts in the `kloudlite` skill) you cannot drive another desk: tell the user to open it.
+2. Or `desk` {"action": "create", "name": "orders", "environment": "env-…"} makes a desk for this work and connects the environment; it does not move anything. Then pass `desk: "orders"` on every call that works in it. In the harness (no `desk` argument; see Hosts in the `kode` skill) you cannot drive another desk: tell the user to open it.
 3. A workspace joins only by being created in the desk: `workspace` action `create` with `desk` naming it. A standalone workspace stays out; clone the repo into a new managed one.
 4. `exec` {"workspace": "ws-…", "cmd": "getent hosts db"}.
 
@@ -95,7 +95,7 @@ Every scenario ends with its cleanup. To check a result, use `kloudlite-verify`.
 
 **Done when:** a request through `web` reaches `api` and `worker` in their workspaces. Every intercept is stopped.
 **If it fails:** as scenario 5. Two components in one workspace is fine when one process serves both.
-**Then:** `kloudlite-verify` scenario 6 to test the changes together.
+**Then:** `kode-verify` scenario 6 to test the changes together.
 
 ### 7. Debug a failing request with real traffic
 
@@ -222,7 +222,7 @@ Every scenario ends with its cleanup. To check a result, use `kloudlite-verify`.
 
 ### 17. Stop for the day
 
-**Trigger:** "stop everything for today", "stop for the day". "Stop my desk" alone is the `kloudlite` skill's lifecycle row.
+**Trigger:** "stop everything for today", "stop for the day". "Stop my desk" alone is the `kode` skill's lifecycle row.
 **Steps:**
 1. `env` action `get`: `intercept` action `stop` each intercept you made, one by one. A stopped workspace keeps its intercept wish and it takes hold again on the next start, so stop it first.
 2. `process` action `list` per workspace; `process` action `kill` what you started. Report what is left to the user.
@@ -237,15 +237,15 @@ Every scenario ends with its cleanup. To check a result, use `kloudlite-verify`.
 
 **Trigger:** "I want to run psql from my terminal".
 **Steps:**
-1. The user runs `kloudlite env` (the tunnel to the desk's environment); you do not. Give the command and the service name and port from `env` action `get`, for example `psql -h db -p 5432`.
+1. The user runs `kode env` (the tunnel to the desk's environment); you do not. Give the command and the service name and port from `env` action `get`, for example `psql -h db -p 5432`.
 2. On a host with a shell, you may run it for the user.
 
 **Done when:** the user connects.
-**If it fails:** the tunnel needs the environment daemon: `kloudlite doctor`.
+**If it fails:** the tunnel needs the environment daemon: `kode doctor`.
 
 ## Rules
 
-- Obey the safety rules of the `kloudlite` skill.
+- Obey the safety rules of the `kode` skill.
 - Use the desk's environment. Copy it only for scenario 9, or when the user asks.
 - Run servers as environment services; run only the user's own code in a workspace.
 - Stop every intercept you made. Delete what you created for the task; keep what the user had.

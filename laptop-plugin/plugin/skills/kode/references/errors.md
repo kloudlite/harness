@@ -33,4 +33,4 @@ The status comes first; the body is one sentence. Report it as it is, then take 
 | `409 this run has already finished` | Nothing to cancel. |
 | `403 only a team admin can change team pipelines` | Tell the user. |
 | `429 this token has {n} runs in flight` | Wait for a run to end. |
-| `not logged in — run kloudlite login` | The user runs it, then restarts the client. |
+| `not logged in — run kode login` | The user runs it, then restarts the client. |

@@ -22,7 +22,7 @@ One tool per resource. `action` picks the verb; the arguments below are the unio
 |---|---|---|
 | `read` | `workspace`, `paths` | Files with line numbers; a PNG, JPEG, GIF or WebP comes back as an image you see (5 MB at most; a bigger PNG or JPEG is downscaled to fit) |
 | `write` | `workspace`, `path`, `content?`, `content_b64?` | Creates or overwrites one file: `content` text, or `content_b64` base64 for a small binary file (10 MiB). To copy a file between workspaces use `transfer` |
-| `download` | `workspace`, `path`, `tree?` | `{url, uri, name, size, mime}` and a `resource_link`: `url` opens one file (200 MB at most) in the Kloudlite console once the person is signed in, and carries no credential; an MCP client reads `uri` with `resources/read` (7.5 MB at most). Give the person the `url` |
+| `download` | `workspace`, `path`, `tree?` | `{url, uri, name, size, mime}` and a `resource_link`: `url` opens one file (200 MB at most) in the Kode console once the person is signed in, and carries no credential; an MCP client reads `uri` with `resources/read` (7.5 MB at most). Give the person the `url` |
 | `transfer` | `from`, `to`, `overwrite?` | Copies one file (200 MB at most, any bytes) from `{workspace, path, tree?}` to `{workspace, path, tree?}`, both yours, possibly the same workspace; the bytes go between the tool servers, never through you. An existing destination is refused unless `overwrite`. Answers `{from, to, bytes}` |
 | `edit` | `workspace`, `files` | Exact text replacements, all or none |
 | `glob`, `grep` | `workspace`, pattern | Matching files, matching lines |

@@ -617,7 +617,7 @@ export function Transcript({
           <ascii-font font="tiny" text="kloud" color={theme.muted} />
           <ascii-font font="tiny" text="lite" color={theme.accent} />
         </box>
-        <text fg={theme.muted}>Orchestrate agents across your kloudlite workspaces.</text>
+        <text fg={theme.muted}>Orchestrate agents across your kode workspaces.</text>
         <box flexDirection="column" marginTop={1}>
           {(
             [

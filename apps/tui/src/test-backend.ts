@@ -1,4 +1,4 @@
-//! A stand-in Backend for the UI tests: the agent runs in the Kloudlite runtime now, so the tests drive the App against
+//! A stand-in Backend for the UI tests: the agent runs in the Kode runtime now, so the tests drive the App against
 //! canned answers. Anything not named here is an inert async call resolving `undefined`.
 import type { Backend, Hello, DeskHandle } from "./wire/index.ts";
 

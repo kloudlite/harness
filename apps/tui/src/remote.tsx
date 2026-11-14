@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 // kl-tui: the TUI on the laptop, the agent on the bench. `kl-tui --pipe <command...>`
-// (kloudlite's wss pipe to the bench daemon); kloudlite builds the argv and reports exit 3
-// (protocol mismatch) as "update kloudlite and kl-tui".
+// (kode's wss pipe to the bench daemon); kode builds the argv and reports exit 3
+// (protocol mismatch) as "update kode and kl-tui".
 import { writeSync } from "node:fs";
 import { connect } from "./wire/index.ts";
 import { boot } from "./hello.ts";
@@ -23,7 +23,7 @@ try {
 boot(c.backend, c.hello);
 let lost = false;
 const done = () => {
-  // Leave the alternate screen first or the reason goes with it; kloudlite then skips its own
+  // Leave the alternate screen first or the reason goes with it; kode then skips its own
   // `?1049l`, which would put the cursor back over this line. writeSync because an async write in
   // an exit handler can be dropped.
   if (process.stderr.isTTY) writeSync(2, "\x1b[?1049l");
