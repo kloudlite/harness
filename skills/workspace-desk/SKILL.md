@@ -78,7 +78,7 @@ A tool with the mark **card** shows a permission card to the person before it ru
 | `exec` with `detach: true` | Start a process that continues to run, for example the service, a dev server or a watcher. The tool returns a process id. |
 | `process` actions `list`, `output`, `write`, `kill` | List the processes that run, read their output (the last 4 MiB), write to their stdin, or stop them. |
 | `watch` actions `start`, `poll`, `stop` | Wait for a change to files or events. Use these tools, not a poll loop with `exec`. |
-| `container_build`, `container_push` | Build an image of your service inside the workspace, and push it to the owner's registry (`tags: ["name:tag"]`; with none configured it fails with "no registry is configured"). Or give an image a new tag. Use these tools only when the person tells you to publish an image. While you develop, use `intercept`. The `kl` command is not on the PATH in `exec`. Use these tools. |
+| `container_build`, `container_push` | Build an image of your service inside the workspace, and push it to the owner's registry (`tags: ["name:tag"]`; with none configured it fails with "no registry is configured"). Or give an image a new tag. Use these tools only when the person tells you to publish an image. While you develop, use `intercept`. The `kd` command is not on the PATH in `exec`. Use these tools. |
 
 **Your workspace on the platform.** These tools work on your workspace and its default environment. You cannot give a different workspace.
 

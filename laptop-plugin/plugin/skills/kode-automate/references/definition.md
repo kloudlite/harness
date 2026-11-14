@@ -87,4 +87,4 @@ After a cancel the platform starts no more jobs and evaluates no `if`: a cleanup
 
 ## Variables the platform sets
 
-`CI=true`, `KL_CI=1`, `KL_PIPELINE`, `KL_RUN_ID`, `KL_RUN_NUMBER`, `KL_JOB`. With `permissions.registry`: `KL_REGISTRY`, `KL_REGISTRY_USER`. With `permissions.git`: `KL_GIT_TOKEN` (logged as `***`) and the `GIT_CONFIG_*` variables of the credential helper; a job `env` that sets `GIT_CONFIG_COUNT` replaces them.
+`CI=true`, `KD_CI=1`, `KD_PIPELINE`, `KD_RUN_ID`, `KD_RUN_NUMBER`, `KD_JOB`. With `permissions.registry`: `KD_REGISTRY`, `KD_REGISTRY_USER`. With `permissions.git`: `KD_GIT_TOKEN` (logged as `***`) and the `GIT_CONFIG_*` variables of the credential helper; a job `env` that sets `GIT_CONFIG_COUNT` replaces them.

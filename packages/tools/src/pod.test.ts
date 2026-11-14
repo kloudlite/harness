@@ -12,8 +12,8 @@ beforeEach(() => {
   log = [];
   const f = join(mkdtempSync(join(tmpdir(), "kl-tok-")), "t");
   writeFileSync(f, "bench");
-  process.env.KL_API_URL = "http://api.test";
-  process.env.KL_TOOL_KEY_FILE = f;
+  process.env.KD_API_URL = "http://api.test";
+  process.env.KD_TOOL_KEY_FILE = f;
   globalThis.fetch = (async (url: string, init: any = {}) => {
     log.push({ url: String(url), auth: init.headers?.authorization ?? null });
     return handler(String(url), init);
@@ -161,7 +161,7 @@ test("podFetch marks itself a watcher", async () => {
     return j({ ok: 1 });
   };
   await podGet("w1", "/healthz");
-  expect(seen["x-kl-watch"]).toBe("1");
+  expect(seen["x-kd-watch"]).toBe("1");
 });
 
 test("a tool call that hits NotReady wakes and retries once", async () => {
@@ -214,7 +214,7 @@ test("an ensure failure surfaces instead of the NotReady", async () => {
   await expect(t[0]!.run({})).rejects.toThrow("action start");
 });
 
-test("call() is activity: no x-kl-watch header, and inflight returns to empty", async () => {
+test("call() is activity: no x-kd-watch header, and inflight returns to empty", async () => {
   let seen: any;
   handler = (u, init) => {
     if (u.endsWith("/v1/workspaces/w1/tools")) return j({ address: "10.0.0.5:7788" });
@@ -223,7 +223,7 @@ test("call() is activity: no x-kl-watch header, and inflight returns to empty", 
   };
   const t = await podTools("w1");
   await t[0]!.run({});
-  expect(seen["x-kl-watch"]).toBeUndefined();
+  expect(seen["x-kd-watch"]).toBeUndefined();
   expect(inflight.has("w1")).toBe(false);
 });
 

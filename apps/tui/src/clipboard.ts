@@ -61,7 +61,7 @@ export function readClipboardImage(): ClipImage | null {
 }
 
 /**
- * Put text on the clipboard. Order matters: kl-tui runs on the laptop, where
+ * Put text on the clipboard. Order matters: kd-tui runs on the laptop, where
  * Terminal.app has no OSC 52, so pbcopy goes first; the fallback TUI runs on
  * the bench (no pbcopy) inside the bench-proxy or ttyd terminal, where OSC 52 travels back to the
  * user's terminal; xclip is the last resort.

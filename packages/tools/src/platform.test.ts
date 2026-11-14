@@ -15,9 +15,9 @@ beforeEach(() => {
   routes = {};
   tokenFile = join(mkdtempSync(join(tmpdir(), "kl-tok-")), "token");
   writeFileSync(tokenFile, "tok1\n");
-  process.env.KL_API_URL = "http://api.test";
-  process.env.KL_TOOL_KEY_FILE = tokenFile;
-  delete process.env.KL_DESK;
+  process.env.KD_API_URL = "http://api.test";
+  process.env.KD_TOOL_KEY_FILE = tokenFile;
+  delete process.env.KD_DESK;
   globalThis.fetch = (async (url: string, init: any = {}) => {
     const u = String(url).replace("http://api.test", "");
     calls.push({ method: init.method ?? "GET", url: u, auth: init.headers?.authorization ?? null, body: init.body ? JSON.parse(init.body) : undefined });
@@ -27,9 +27,9 @@ beforeEach(() => {
 });
 afterEach(() => {
   globalThis.fetch = realFetch;
-  delete process.env.KL_API_URL;
-  delete process.env.KL_TOOL_KEY_FILE;
-  delete process.env.KL_DESK;
+  delete process.env.KD_API_URL;
+  delete process.env.KD_TOOL_KEY_FILE;
+  delete process.env.KD_DESK;
 });
 
 const json = (v: unknown, status = 200) => () => new Response(JSON.stringify(v), { status });
@@ -68,7 +68,7 @@ test("api reads the token file on every call, reports unavailable, 204 and error
   expect(calls.map((c) => c.auth)).toEqual(["Bearer tok1", "Bearer tok2"]);
   expect(await api("DELETE", "/x")).toBe("ok");
   await expect(api("POST", "/x", {})).rejects.toThrow('409: {"error":"busy"}');
-  delete process.env.KL_API_URL;
+  delete process.env.KD_API_URL;
   await expect(api("GET", "/x")).rejects.toThrow("platform tools unavailable");
 });
 
@@ -170,9 +170,9 @@ test("desk_list in a workspace shows its own desk and environment", async () => 
 
 test("desk connect sets or clears an environment (null disconnects); desk defaults to the thread's own", async () => {
   const t = platformTools("main");
-  delete process.env.KL_DESK;
+  delete process.env.KD_DESK;
   expect(await tool(t, "desk_connect").run({ environment: "e2" })).toContain("no desk");
-  process.env.KL_DESK = "desk-1";
+  process.env.KD_DESK = "desk-1";
   routes["GET /v1/desks/desk-1"] = json({ id: "desk-1", name: "main", environment: "e2" });
   routes["PUT /v1/desks/desk-1/environment"] = json({ id: "desk-1", name: "main", environment: "e2" });
   expect(JSON.parse(await tool(t, "desk_connect").run({ environment: "e2" }))).toEqual({ id: "desk-1", name: "main", environment: "e2" });
@@ -181,7 +181,7 @@ test("desk connect sets or clears an environment (null disconnects); desk defaul
   routes["GET /v1/desks/desk-1"] = json({ id: "desk-1", name: "main", environment: null });
   expect(JSON.parse(await tool(t, "desk_connect").run({ environment: null }))).toEqual({ id: "desk-1", name: "main", environment: null });
   expect(calls.filter((c) => c.method === "PUT").at(-1)!.body).toEqual({ environment: null });
-  // an explicit desk wins over KL_DESK
+  // an explicit desk wins over KD_DESK
   routes["PUT /v1/desks/other/environment"] = json({});
   routes["GET /v1/desks/other"] = json({ id: "other", name: "other", environment: "e3" });
   expect(JSON.parse(await tool(t, "desk").run({ action: "connect", desk: "other", environment: "e3" })).id).toBe("other");
@@ -292,7 +292,7 @@ test("env_wait returns once every service is ready, at once on failing, and mark
   }
 });
 
-test("workspace_list keeps only the bench's desk when KL_DESK is set", async () => {
+test("workspace_list keeps only the bench's desk when KD_DESK is set", async () => {
   const t = platformTools("main");
   routes["GET /v1/workspaces"] = json([
     { id: "a", desk: "desk-1" },
@@ -301,13 +301,13 @@ test("workspace_list keeps only the bench's desk when KL_DESK is set", async () 
     { id: "bench-x", desk: "desk-1" },
   ]);
   expect(JSON.parse(await tool(t, "workspace_list").run({}))).toHaveLength(4);
-  process.env.KL_DESK = "desk-1";
-  process.env.KL_BENCH = "bench-x";
+  process.env.KD_DESK = "desk-1";
+  process.env.KD_BENCH = "bench-x";
   try {
     expect(JSON.parse(await tool(t, "workspace_list").run({})).map((w: any) => w.id)).toEqual(["a"]);
   } finally {
-    delete process.env.KL_DESK;
-    delete process.env.KL_BENCH;
+    delete process.env.KD_DESK;
+    delete process.env.KD_BENCH;
   }
 });
 
@@ -320,12 +320,12 @@ test("in a desk, workspace_create and workspace_delete go through the desk; with
   routes["DELETE /v1/desks/desk-1/workspaces/w1"] = () => new Response(null, { status: 204 });
   await tool(t, "workspace_create").run({ name: "backend", team: "acme" });
   await tool(t, "workspace_delete").run({ workspace: "w1" });
-  process.env.KL_DESK = "desk-1";
+  process.env.KD_DESK = "desk-1";
   try {
     await tool(t, "workspace_create").run({ name: "backend", team: "acme" });
     await tool(t, "workspace_delete").run({ workspace: "w1" });
   } finally {
-    delete process.env.KL_DESK;
+    delete process.env.KD_DESK;
   }
   expect(calls.map((c) => `${c.method} ${c.url}`)).toEqual([
     "POST /v1/workspaces",
@@ -493,11 +493,11 @@ test("workspace create sends `device` to make a device workspace, and `snapshot`
   routes["POST /v1/workspaces"] = json({}, 202);
   await tool(t, "workspace_create").run({ name: "d1", device: "dev-1" });
   expect(calls.at(-1)).toMatchObject({ url: "/v1/workspaces", body: { name: "d1", device: "dev-1" } });
-  process.env.KL_DESK = "s1";
+  process.env.KD_DESK = "s1";
   routes["POST /v1/desks/s1/workspaces"] = json({}, 202);
   await tool(t, "workspace_create").run({ name: "d2", device: "dev-1" });
   expect(calls.at(-1)).toMatchObject({ url: "/v1/desks/s1/workspaces", body: { name: "d2", device: "dev-1" } });
-  delete process.env.KL_DESK;
+  delete process.env.KD_DESK;
   routes["POST /v1/workspaces/w1/clone"] = json({}, 202);
   await tool(t, "workspace_create").run({ name: "d3", source: "w1", snapshot: "dsnap-1" });
   expect(calls.at(-1)).toMatchObject({ url: "/v1/workspaces/w1/clone", body: { name: "d3", snapshot: "dsnap-1" } });
@@ -518,7 +518,7 @@ test("workspace create with source clones; env create with an environment source
 });
 
 test("capsule_create goes through the desk when there is one, with its argv array as given", async () => {
-  process.env.KL_DESK = "desk-1";
+  process.env.KD_DESK = "desk-1";
   routes["POST /v1/desks/desk-1/capsules"] = json({ id: "cap-1" }, 202);
   await tool(platformTools("main"), "capsule_create").run({ command: ["echo", "hi"], team: "acme" });
   expect(calls.at(-1)!.body).toEqual({ cmd: ["echo", "hi"] });
@@ -761,7 +761,7 @@ test("volume get resolves a given name to the volume id", async () => {
   expect(JSON.parse(await tool(platformTools("main"), "volume_get").run({ volume: "pg" })).history).toEqual([{ id: "s1" }]);
 });
 
-test("worktree add waits for the row and says how to reach it; request_create echoes the title; quota defaults to KL_TEAM", async () => {
+test("worktree add waits for the row and says how to reach it; request_create echoes the title; quota defaults to KD_TEAM", async () => {
   const t = platformTools("main", undefined, 1);
   routes["POST /v1/workspaces/w1/trees"] = json({ name: "fix", path: "/home/kl/.agents/fix/workspace" }, 202);
   let n = 0;
@@ -770,10 +770,10 @@ test("worktree add waits for the row and says how to reach it; request_create ec
   expect(w).toEqual({ name: "fix", path: "/home/kl/.agents/fix/workspace", note: 'pass tree: "fix" to exec, read and write; the path is not visible from the main tree' });
   routes["POST /v1/requests"] = json({ id: "r1", kind: "other" }, 201);
   expect(JSON.parse(await tool(t, "request_create").run({ kind: "other", reason: "x", title: "T", body: "B" }))).toMatchObject({ id: "r1", title: "T", body: "B" });
-  process.env.KL_TEAM = "acme";
+  process.env.KD_TEAM = "acme";
   routes["GET /v1/quota?owner=acme"] = json({ owner: "acme" });
   expect(JSON.parse(await tool(t, "quota").run({})).owner).toBe("acme");
-  delete process.env.KL_TEAM;
+  delete process.env.KD_TEAM;
 });
 
 test("a snapshot whose re-read fails still answers success with its id", async () => {

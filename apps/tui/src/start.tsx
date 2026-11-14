@@ -2,7 +2,7 @@ import { writeSync } from "node:fs";
 import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
 
-/** Terminal setup shared by the pod's TUI and the laptop's kl-tui. Call after boot(). */
+/** Terminal setup shared by the pod's TUI and the laptop's kd-tui. Call after boot(). */
 export async function start(onExit?: () => void) {
   // xterm modifyOtherKeys: terminals without kitty-protocol support enabled
   // (WezTerm default config) otherwise send ctrl+h as a bare backspace byte,

@@ -68,7 +68,7 @@ export type TeamView = {
   user: string;
   workspaces: TeamWorkspace[];
   environments: TeamEnvironment[];
-  /** The desk's environment (`KL_ENVIRONMENT`). */
+  /** The desk's environment (`KD_ENVIRONMENT`). */
   connected?: string;
   /** Every desk's own board, main first; only the local backend fills it. */
   boards?: { desk: string; tasks: BoardTask[] }[];

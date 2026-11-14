@@ -167,7 +167,7 @@ Read the `kode` skill first. It holds the definitions and the safety rules. Auto
 **Trigger:** "build the image in CI".
 **Steps:**
 1. `registry` connector needed: `connector_list`.
-2. A job with `"image": "docker:27-cli"` (the job image needs `docker`), `"permissions": {"registry": "push"}` and `docker buildx build --push -t "$KL_REGISTRY/api:$KL_RUN_NUMBER" .`. `KL_REGISTRY` is the first registry and its namespace.
+2. A job with `"image": "docker:27-cli"` (the job image needs `docker`), `"permissions": {"registry": "push"}` and `docker buildx build --push -t "$KD_REGISTRY/api:$KD_RUN_NUMBER" .`. `KD_REGISTRY` is the first registry and its namespace.
 3. `needs` the tests. Save, run.
 
 **Done when:** the registry lists the new tag.

@@ -2,14 +2,14 @@
 //! between this process's stdio and the bench daemon's socket (./daemon). A relay and not the
 //! backend itself because the daemon outlives every connection: one agent per desk key, so one
 //! writer per desk file, and a turn keeps running when this pipe goes away. The daemon may still
-//! be booting after a pod restart, so connecting retries for KL_HOST_WAIT_MS (default 15 s).
+//! be booting after a pod restart, so connecting retries for KD_HOST_WAIT_MS (default 15 s).
 import { connect } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-const sockPath = () => process.env.KL_HOST_SOCK ?? join(homedir(), ".kl", "host.sock");
+const sockPath = () => process.env.KD_HOST_SOCK ?? join(homedir(), ".kd", "host.sock");
 
-const wait = Number(process.env.KL_HOST_WAIT_MS ?? 15000);
+const wait = Number(process.env.KD_HOST_WAIT_MS ?? 15000);
 const sock = sockPath();
 const start = Date.now();
 

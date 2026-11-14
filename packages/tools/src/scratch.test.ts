@@ -59,14 +59,14 @@ test.skipIf(capsule)("bash without a capsule says so and does not run the comman
 
 test.skipIf(!capsule)("bash runs confined, env-clean, propagates exit and times out", async () => {
   const { root, t } = setup();
-  process.env.KL_API_URL = "http://secret";
+  process.env.KD_API_URL = "http://secret";
   const run = async (a: any) => JSON.parse((await t.bash!.run(a)) as string);
   const w = await run({ command: "echo hi > f && cat f" });
   expect(w).toEqual({ output: "hi\n", exit_code: 0 });
   expect(readFileSync(join(root, "f"), "utf8")).toBe("hi\n");
-  expect((await run({ command: "env" })).output).not.toContain("KL_");
+  expect((await run({ command: "env" })).output).not.toContain("KD_");
   expect((await run({ command: "exit 3" })).exit_code).toBe(3);
   const to = await run({ command: "sleep 30", timeout_ms: 1000 });
   expect(to.exit_code).toBe(124);
-  delete process.env.KL_API_URL;
+  delete process.env.KD_API_URL;
 });

@@ -8,22 +8,22 @@ Needs no `kode` binary: the MCP server is `https://dev.kloudlite.io/mcp`. The fi
 
 ```sh
 claude plugin marketplace add kloudlite/harness
-claude plugin install kode@kloudlite
+claude plugin install kode@kode
 ```
 
-Inside Claude Code: `/plugin marketplace add kloudlite/harness`, then `/plugin install kode@kloudlite`.
+Inside Claude Code: `/plugin marketplace add kloudlite/harness`, then `/plugin install kode@kode`.
 
 ## Update
 
 ```sh
 claude plugin marketplace update kode
-claude plugin update kode@kloudlite
+claude plugin update kode@kode
 ```
 
 ## Uninstall
 
 ```sh
-claude plugin uninstall kode@kloudlite
+claude plugin uninstall kode@kode
 claude plugin marketplace remove kode
 ```
 

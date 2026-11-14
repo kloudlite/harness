@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
-// kl-tui: the TUI on the laptop, the agent on the bench. `kl-tui --pipe <command...>`
+// kd-tui: the TUI on the laptop, the agent on the bench. `kd-tui --pipe <command...>`
 // (kode's wss pipe to the bench daemon); kode builds the argv and reports exit 3
-// (protocol mismatch) as "update kode and kl-tui".
+// (protocol mismatch) as "update kode and kd-tui".
 import { writeSync } from "node:fs";
 import { connect } from "./wire/index.ts";
 import { boot } from "./hello.ts";
@@ -10,14 +10,14 @@ import { start } from "./start.tsx";
 
 const cmd = pipeArgv(process.argv);
 if (!cmd) {
-  process.stderr.write("usage: kl-tui --pipe <command...>\n");
+  process.stderr.write("usage: kd-tui --pipe <command...>\n");
   process.exit(2);
 }
 let c: Awaited<ReturnType<typeof connect>>;
 try {
   c = await connect(cmd);
 } catch (e: any) {
-  process.stderr.write(`kl-tui: ${e.message}\n`);
+  process.stderr.write(`kd-tui: ${e.message}\n`);
   process.exit(e.code ?? 1);
 }
 boot(c.backend, c.hello);
@@ -30,7 +30,7 @@ const done = () => {
   const tail = c.stderr();
   if (tail) writeSync(2, tail);
   // the pipe says nothing when the bench goes away, so a bare exit 1 would explain nothing
-  else if (lost) writeSync(2, "kl-tui: lost the desk connection\n");
+  else if (lost) writeSync(2, "kd-tui: lost the desk connection\n");
 };
 process.on("exit", done);
 // The bench went away under us: leave rather than render a dead desk.

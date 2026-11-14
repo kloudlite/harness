@@ -62,7 +62,7 @@ const unavailable = (why: string): Bash => ({ output: `error: bash capsule unava
 
 function runBash(root: string, command: string, seconds: number): Promise<Bash> {
   return new Promise((done) => {
-    // Nothing else: no KL_*, no tokens, no provider keys.
+    // Nothing else: no KD_*, no tokens, no provider keys.
     const env = { PATH: process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin", HOME: root, LANG: "C.UTF-8", R: root };
     const child = spawn("unshare", ["-Urmpf", "--mount-proc", "sh", "-c", OUTER, "kl-scratch", command], { env, detached: true });
     let buf = Buffer.alloc(0);

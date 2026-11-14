@@ -12,13 +12,13 @@ import { checkArgs } from "./args.ts";
 import { resource, type Action } from "./actions.ts";
 import type { ToolDef } from "./index.ts";
 
-const UNAVAILABLE = "platform tools unavailable: KL_API_URL / KL_TOOL_KEY_FILE not set";
+const UNAVAILABLE = "platform tools unavailable: KD_API_URL / KD_TOOL_KEY_FILE not set";
 
 type Raw = { unavailable: true } | { unavailable?: false; status: number; text: string; data: any };
 
 async function raw(method: string, path: string, body?: unknown, asText = false): Promise<Raw> {
-  const base = process.env.KL_API_URL;
-  const file = process.env.KL_TOOL_KEY_FILE;
+  const base = process.env.KD_API_URL;
+  const file = process.env.KD_TOOL_KEY_FILE;
   if (!base || !file) return { unavailable: true };
   const token = readFileSync(file, "utf8").trim();
   const res = await fetch(base.replace(/\/$/, "") + path, {
@@ -69,20 +69,20 @@ export async function apiJson<T>(method: string, path: string, body?: unknown): 
 
 export const seg = encodeURIComponent;
 
-/** The workspaces `workspace list` shows: a desk (KL_DESK) serves its own members only, as the sidebar does
+/** The workspaces `workspace list` shows: a desk (KD_DESK) serves its own members only, as the sidebar does
  * (backend/src/desk.ts); without it a second desk saw the first one's. `status` reads the same rows. */
 export async function deskWorkspaces(team?: string): Promise<any[]> {
   const all = await apiJson<any[]>("GET", `/v1/workspaces${qs({ team })}`);
-  const desk = process.env.KL_DESK;
-  return desk ? all.filter((w) => w.desk === desk && w.id !== process.env.KL_BENCH) : all;
+  const desk = process.env.KD_DESK;
+  return desk ? all.filter((w) => w.desk === desk && w.id !== process.env.KD_BENCH) : all;
 }
 
-const NO_DESK = "no desk is set (KL_DESK is not set)";
+const NO_DESK = "no desk is set (KD_DESK is not set)";
 
-/** A desk's `{id, name, environment}`: the thread's own (KL_DESK) unless `desk` names another. A
+/** A desk's `{id, name, environment}`: the thread's own (KD_DESK) unless `desk` names another. A
  * bench belongs to one desk, and `desk connect` here only moves a desk's environment. */
 async function currentDesk(desk?: string): Promise<string> {
-  const id = desk ?? process.env.KL_DESK;
+  const id = desk ?? process.env.KD_DESK;
   if (!id) return NO_DESK;
   const r = await raw("GET", `/v1/desks/${seg(id)}`);
   if (r.unavailable) throw new Error(UNAVAILABLE);
@@ -415,13 +415,13 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
         : {
             list: act({ team: S }, [], async (a) => JSON.stringify(await deskWorkspaces(a.team), null, 2)),
             get: mact({}, [], async (a) => api("GET", `/v1/workspaces/${seg(a.workspace)}`)),
-            // In a desk (KL_DESK) a workspace is created and deleted THROUGH it, so it is managed: a
+            // In a desk (KD_DESK) a workspace is created and deleted THROUGH it, so it is managed: a
             // direct create would be standalone and then refused by this desk's own tools, and a direct
             // delete of a managed one is a 409. The desk already names the owner, so `team` is dropped.
             create: act({ name: S, image: S, packages: SL, team: S, source: { type: "string", description: "A workspace (id or name) to clone instead of creating an empty one." }, task: { type: "string", description: "What the clone is for (at most 200 characters)." }, device: { type: "string", description: "A device id (dev-…, from `kode devices list`): make a device workspace, whose folder is on that machine and whose tools run there. The device must be online and active in this team." }, snapshot: { type: "string", description: "With `source` a device workspace: the id (dsnap-…) of the snapshot of it to clone." }, access: { type: "array", items: { type: "string" }, description: "Device workspaces only: names of extra sandbox access (`xcode`, `user-temp`, `android`, `pty`), defined on the person's own machine (built in, or added with `kode devices access add`). A name the machine does not define keeps the workspace from starting (`AccessUndefined`)." }, ...WAITING }, ["name"], async (a) => {
               if (a.source) return thenWaitWs(await api("POST", `/v1/workspaces/${seg(a.source)}/clone`, strip({ name: a.name, task: a.task, snapshot: a.snapshot })), a);
               const body = { name: a.name, image: a.image, packages: a.packages, device: a.device, access: a.access };
-              const ses = process.env.KL_DESK;
+              const ses = process.env.KD_DESK;
               return thenWaitWs(ses ? await api("POST", `/v1/desks/${seg(ses)}/workspaces`, strip(body)) : await api("POST", "/v1/workspaces", strip({ team: a.team, ...body })), a);
             }),
             restore: act({ name: S, snapshot_id: { type: "string", description: "A volume name, `name@N` or a snapshot id." }, team: S, image: S, packages: SL, ...WAITING }, ["name", "snapshot_id"], async (a) =>
@@ -448,7 +448,7 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
               return JSON.stringify(recorded ? { ...d, restart: lastAt(d), hint: "restarted; restart_required is still set" } : { ...d, restart: null, hint: "the restart was accepted; its record follows on the next get" });
             }),
             delete: mact({}, [], async (a) => {
-              const ses = process.env.KL_DESK;
+              const ses = process.env.KD_DESK;
               return deleting(`/v1/workspaces/${seg(a.workspace)}`, () => api("DELETE", ses ? `/v1/desks/${seg(ses)}/workspaces/${seg(a.workspace)}` : `/v1/workspaces/${seg(a.workspace)}`));
             }),
             wait: mact({ timeout_ms: TIMEOUT }, [], async (a) => pollUntil(() => api("GET", `/v1/workspaces/${seg(a.workspace)}`), wsAny, timeoutMs(a), tickMs)),
@@ -513,7 +513,7 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
             create: act({ name: S, team: TEAM, environment: ENVREF, ttl_secs: TTL }, ["name"], async (a) =>
               api("POST", "/v1/desks", strip({ name: a.name, team: a.team, environment: a.environment, ttl_secs: a.ttl_secs }))),
             connect: act({ desk: SES, environment: ENVREF }, [], async (a) => {
-              const id = a.desk ?? process.env.KL_DESK;
+              const id = a.desk ?? process.env.KD_DESK;
               if (!id) return NO_DESK;
               if (a.environment === undefined) return "error: `environment` is required (an id or name, or null to disconnect)";
               const r = await raw("PUT", `/v1/desks/${seg(id)}/environment`, { environment: a.environment });
@@ -610,10 +610,10 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
 /** Everything a workspace token does not reach: capsules, pipelines and runs, volumes, requests, secrets. */
 function mainOnly(tickMs: number): ToolDef[] {
   const sbx = (a: any) => `/v1/capsules/${seg(a.capsule)}`;
-  const own = (a: any) => a.owner || process.env.KL_TEAM;
+  const own = (a: any) => a.owner || process.env.KD_TEAM;
   const pipe = (a: any) => `/v1/pipelines/${seg(own(a))}/${seg(a.pipeline)}`;
   const run = (a: any) => `${pipe(a)}/runs/${seg(a.run)}`;
-  const secret = (a: any) => `/v1/secrets/${seg(a.owner ?? process.env.KL_TEAM)}${a.mine ? "/mine" : ""}`;
+  const secret = (a: any) => `/v1/secrets/${seg(a.owner ?? process.env.KD_TEAM)}${a.mine ? "/mine" : ""}`;
   const RUNREF = { owner: OWNER_DEFAULT, pipeline: PIPE, run: RUN };
   const RUNREQ = ["pipeline", "run"];
   /** `run wait` and a waiting `run start`: the run without its definition, plus the log page at `offset` when one is given. */
@@ -630,7 +630,7 @@ function mainOnly(tickMs: number): ToolDef[] {
       create: act({ command: { oneOf: [S, SL], description: "A shell string (run with `sh -c`), or an argv array." }, image: S, packages: SL, variables: { type: "object", additionalProperties: S, description: "Environment variables for the command. A value of exactly `${{ secrets.NAME }}` reads a secret." }, lifetime_s: { ...I, description: "The capsule's hard lifetime in seconds, 10 to 86400 (default 300). It ends when the command exits or this runs out." }, team: TEAMSLUG, from_workspace: { type: "string", description: "A workspace of yours (id, name or `team/name`) whose current files the capsule starts as, uncommitted work included." }, from_snapshot: { type: "string", description: "A snapshot id or `name@N` reference whose files the capsule starts as." }, ...WAITING }, ["command"], async (a) => {
         const cmd = Array.isArray(a.command) ? a.command : ["sh", "-c", String(a.command)];
         const body = { cmd, image: a.image, packages: a.packages, env: a.variables, timeout_secs: a.lifetime_s ?? a.timeout_s, from_workspace: a.from_workspace, from_snapshot: a.from_snapshot };
-        const ses = process.env.KL_DESK;
+        const ses = process.env.KD_DESK;
         const out = ses ? await api("POST", `/v1/desks/${seg(ses)}/capsules`, strip(body)) : await api("POST", "/v1/capsules", strip({ team: a.team, ...body }));
         if (!a.wait) return out;
         const id = JSON.parse(out).id;
@@ -764,7 +764,7 @@ function mainOnly(tickMs: number): ToolDef[] {
     def("secret_list", "List the names of an owner's secrets with when and by whom each was last set. Never a value.", { owner: OWNER_DEFAULT, mine: MINE }, [], async (a) => api("GET", secret(a))),
     def("secret_delete", "Delete one secret. 409 while a workspace, capsule, service or pipeline references it; the answer names the referrers.", { owner: OWNER_DEFAULT, name: S, mine: MINE }, ["name"], async (a) => api("DELETE", `${secret(a)}/${seg(a.name)}`)),
     def("connector_list", "List the git, registry and model-hub connectors of an owner: name, provider, kind, account and state. Read only: connecting happens in the web console.", { owner: { ...OWNER, description: "Your handle or a team slug. Default: your own." } }, [], async (a) => api("GET", `/v1/connectors${qs({ owner: a.owner })}`)),
-    def("quota", "Show the limits and the current use of an owner (workspaces, environments, snapshots, diskGb, cpu, memoryGb). To ask for more, use request_create with kind `quota`.", { owner: S }, [], async (a) => api("GET", `/v1/quota${qs({ owner: a.owner ?? process.env.KL_TEAM })}`)),
+    def("quota", "Show the limits and the current use of an owner (workspaces, environments, snapshots, diskGb, cpu, memoryGb). To ask for more, use request_create with kind `quota`.", { owner: S }, [], async (a) => api("GET", `/v1/quota${qs({ owner: a.owner ?? process.env.KD_TEAM })}`)),
     def("requests_list", "List the requests of the person and of their teams (quota, access, region, other) with their state and decision note.", { owner: S }, [], async (a) => api("GET", `/v1/requests${qs({ owner: a.owner })}`)),
     def("request_get", "Show one request and its decision.", { id: S }, ["id"], async (a) => api("GET", `/v1/requests/${seg(a.id)}`)),
     def(

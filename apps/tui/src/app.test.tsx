@@ -566,7 +566,7 @@ async function sidebarWith(view: Record<string, unknown>) {
 }
 
 test("sidebar: an unreachable platform shows the reason, not demo rows", async () => {
-  const f = await sidebarWith({ available: false, error: "unavailable: no KL_API_URL", user: "", workspaces: [], environments: [] });
+  const f = await sidebarWith({ available: false, error: "unavailable: no KD_API_URL", user: "", workspaces: [], environments: [] });
   expect(f).toContain("platform not reachable");
   expect(f).not.toContain("api-gateway");
 });

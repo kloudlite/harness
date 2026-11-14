@@ -1,4 +1,4 @@
-//! The workspace pod's code tools (crates/ide `kl ide serve`, port 7788), reached through the
+//! The workspace pod's code tools (crates/ide `kd ide serve`, port 7788), reached through the
 //! platform: GET /v1/workspaces/{id}/tools gives {address, token?}, then plain HTTP to the pod.
 //! The names are a FIXED list so the tools exist even while the pod is not Ready; the pod's own
 //! description/schema replace the permissive fallback when it answers at construction.
@@ -30,7 +30,7 @@ async function registryNames(): Promise<string[]> {
   }
 }
 
-/** `kl` prints these two sentences (bins/kl/src/registries.rs); the model gets a shape it can act on. */
+/** `kd` prints these two sentences (bins/kd/src/registries.rs); the model gets a shape it can act on. */
 export async function mapBuild(j: any): Promise<void> {
   const err = String(j?.stderr ?? "");
   const unknown = /no registry named (\S+?);/.exec(err);
@@ -98,7 +98,7 @@ async function lookup(ws: string): Promise<Addr> {
 async function podFetch<T>(ws: string, path: string, init: RequestInit, ms: number, text = false): Promise<T> {
   const a = await apiJson<Addr>("GET", `/v1/workspaces/${encodeURIComponent(ws)}/tools`);
   if (!a?.address) throw new Error("no address");
-  const res = await fetch(`http://${a.address}${path}`, { ...init, headers: { ...(init.headers as object), ...headers(a), "x-kl-watch": "1" }, signal: AbortSignal.timeout(ms) });
+  const res = await fetch(`http://${a.address}${path}`, { ...init, headers: { ...(init.headers as object), ...headers(a), "x-kd-watch": "1" }, signal: AbortSignal.timeout(ms) });
   if (!res.ok) throw new Error(`error ${res.status}`); // body withheld: it may echo the token
   return (text ? await res.text() : await res.json()) as T;
 }
@@ -262,8 +262,8 @@ export async function podHold(ws: string): Promise<void> {
 /** Somebody is using this bench's desk (a turn runs, a client is connected): hold it. The API
  * stamps `held-at` on the Desk and wakes it if it idled; an awake desk keeps its environment
  * up and its members running (owner ruling 2026-10-16: a bench never idles, its desk does).
- * Best effort, errors dropped; no `KL_DESK` means not a bench, nothing to hold. */
-export async function deskHold(id = process.env.KL_DESK): Promise<void> {
+ * Best effort, errors dropped; no `KD_DESK` means not a bench, nothing to hold. */
+export async function deskHold(id = process.env.KD_DESK): Promise<void> {
   if (!id) return;
   try {
     await apiJson("POST", `/v1/desks/${seg(id)}/hold`);

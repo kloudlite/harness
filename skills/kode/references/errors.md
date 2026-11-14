@@ -8,7 +8,7 @@ The status comes first; the body is one sentence. Report it as it is, then take 
 | `403 your access to {team} is paused` | A team admin must unpause. Stop. |
 | `403 you are no longer a member of {team}` | Stop. The user cannot act there. |
 | `404 not found` | The object does not exist or is not the user's. Check the id with the list tool. |
-| `422` name rule (`name must be 1-40 lowercase letters, digits or '-'…`) | Rename: lowercase, hyphens, starts with a letter, no `--`, not `ws`, `env`, `api`, `admin`, `system`, `kl`. |
+| `422` name rule (`name must be 1-40 lowercase letters, digits or '-'…`) | Rename: lowercase, hyphens, starts with a letter, no `--`, not `ws`, `env`, `api`, `admin`, `system`, `kd`. |
 | `409 a workspace named "x" already exists here` (also environment, desk) | Reuse it, or pick another name. |
 | `409` `"x" is ambiguous; qualify it as owner/name` | Use the id or `team/name`. |
 | `409 workspace is interrupted: its storage is moving; it resumes in seconds` | Wait, then read the object again. |
