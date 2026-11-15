@@ -12,7 +12,7 @@
       "name": "@kloudlite-tui/tui",
       "version": "0.0.0",
       "bin": {
-        "kloudlite": "src/cli.tsx",
+        "kode": "src/cli.tsx",
       },
       "dependencies": {
         "@earendil-works/pi-ai": "1.4.0",

@@ -5,9 +5,10 @@
   "plugins": [
     {
       "name": "kode",
+      "displayName": ">_ Kode",
       "source": "./laptop-plugin/plugin",
       "description": "Work on Kode workspaces from Claude Code through the desk's tools and skills.",
-      "version": "0.6.18",
+      "version": "0.7.0",
       "author": { "name": "Kloudlite" },
       "homepage": "https://github.com/kloudlite/harness",
       "repository": "https://github.com/kloudlite/harness",

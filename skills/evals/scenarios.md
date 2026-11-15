@@ -11,7 +11,7 @@ For a manual run on the dev region: give the prompt, check the tool sequence. `*
 | kode-develop 5. Intercept one service | intercept api | exec(detach), exec(/dev/tcp check), env(get), intercept(start, ports), env(get)*, intercept(stop) |
 | kode-develop 6. Change several components together | add shipped-order emails across api, worker and web | env(create), desk(connect), workspace(create) x3, exec(detach) x3, intercept(start) x3, env(get), intercept(stop) x3 |
 | kode-develop 7. Debug a failing request with real traffic | debug this with real traffic | service(logs), grep, edit, exec(detach), intercept(start), process(output), intercept(stop) |
-| kode-develop 8. Parallel work | work on two features at once against the services | workspace(create) (second, in desk) or worktree(add), exec(detach) per tree, intercept(start), intercept(stop), worktree(drop) |
+| kode-develop 8. Parallel work | work on two features at once against the services | quota, workspace(create, source) for each approach, workspace(ttl), exec(detach) in each, intercept(start), intercept(stop), workspace(delete) |
 | kode-develop 9. Reproduce a bug on a copy | reproduce it without breaking staging | env(create), env(wait), desk(connect: copy), intercept(start), intercept(stop), desk(connect: staging), env(delete) (after yes) |
 | kode-develop 10. Change a service | bump Postgres to 16 | env(get), service(update: full service, mounts kept), env(wait), service(logs) on failing |
 | kode-develop 11. Variables and secrets | set DATABASE_URL on api; give the worker the SMTP password | service(update: env) or workspace(get), workspace_vars(set); secret_set, service(update)(${{ secrets.X }}) |
@@ -51,6 +51,6 @@ For a manual run on the dev region: give the prompt, check the tool sequence. `*
 | base Service logs | why is worker crashing | service(logs: tail, previous) |
 | base Intercepts in force | who intercepts api | env(get: services[].interceptedBy) |
 | base Lifecycle | stop my desk; set the TTL | desk(stop), desk(ttl) or env(stop), env(start) |
-| base Delete | delete the review workspace | (list by name, ask), workspace(delete) |
-| base Quota | why can't I create | quota, then request_create only when asked |
+| base Delete | delete the review workspace | own: (persist), workspace(delete), say what was removed; not own: list by name, ask, then workspace(delete) |
+| base Quota | why can't I create | quota; free what is yours, or request_create with a reason from the Coordinator |
 | base Setup and recovery | tools are missing | no tool call: give the five steps |

@@ -5,7 +5,7 @@ description: Gives the steps to check code once on Kode: quick checks in a works
 
 # Verify on Kode
 
-Read the `kode` skill first. It holds the definitions and the safety rules. Verify means: once, now, isolated, a result to read. Example app: `web`, `api`, `worker`, `db`, `cache`.
+Read the `kode` skill first. It holds the definitions, the invariants and the agent types. Verify means: once, now, isolated, a result to read. Example app: `web`, `api`, `worker`, `db`, `cache`.
 
 A check in a workspace uses the workspace's files and changes nothing. A capsule is for a run that must be clean or must not touch a workspace.
 
@@ -98,9 +98,9 @@ A check in a workspace uses the workspace's files and changes nothing. A capsule
 
 ## Rules
 
-- Obey the safety rules of the `kode` skill.
+- Obey the invariants of the `kode` skill. What you created is yours to delete; what you did not create follows invariant 4.
 - Give `lifetime_s` always. A capsule that never ends holds quota to its limit.
 - Create capsules in the desk when the command needs services. A standalone one reaches no environment.
 - Give tools with `packages`. Never run a server in a capsule to stand in for a service.
 - A capsule cannot intercept. To receive a service's traffic, use a workspace (`kode-develop`).
-- Delete a copy of an environment or a review desk only when the user says so.
+- Delete the copy of an environment and the review desk that you made when the check ends. One that the user made stays until the user names it.

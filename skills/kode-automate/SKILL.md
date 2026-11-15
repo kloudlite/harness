@@ -5,7 +5,7 @@ description: Gives the steps to write, save, version, start, schedule and debug 
 
 # Automate with pipelines
 
-Read the `kode` skill first. It holds the definitions and the safety rules. Automate means: repeats without a person. Example app: `web`, `api`, `worker`, `db`, `cache`.
+Read the `kode` skill first. It holds the definitions, the invariants and the agent types. Automate means: repeats without a person. Example app: `web`, `api`, `worker`, `db`, `cache`.
 
 `references/definition.md` holds the key tables and the `needs`/`if` truth table. The rules below are enough to write most definitions. Every pipeline tool takes `owner`: the user's handle, or the team slug for a team. When the host has files, keep each definition in the user's repo (`pipelines/ci.json`), and send its text to `pipeline` action `save`.
 
@@ -220,9 +220,9 @@ Read the `kode` skill first. It holds the definitions and the safety rules. Auto
 
 ## Rules
 
-- Obey the safety rules of the `kode` skill.
+- Obey the invariants of the `kode` skill. A saved pipeline is a declared artifact: a schedule or a webhook comes from the Coordinator.
 - Never put a secret value in a definition. Use `secrets` or a whole-value `${{ secrets.NAME }}`.
 - Never put `webhook.body` in `run`, `cwd`, `image` or `packages`.
 - Give each job a `timeoutMinutes` that fits its work.
-- Delete a pipeline or cancel a run only when the user names it.
+- Cancel a run that you started freely. Delete a pipeline, or cancel a run that you did not start, only when the user names it.
 - Show the webhook URL once, in the answer to the save.

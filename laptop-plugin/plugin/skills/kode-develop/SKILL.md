@@ -5,7 +5,7 @@ description: Gives the steps to set up a project on Kode, run code against real 
 
 # Develop on Kode
 
-Read the `kode` skill first. It holds the definitions, the shapes and the safety rules; this skill does not repeat them.
+Read the `kode` skill first. It holds the definitions, the shapes, the invariants and the agent types; this skill does not repeat them.
 
 Every scenario ends with its cleanup. To check a result, use `kode-verify`. Example app: `web`, `api`, `worker`, `db` (Postgres), `cache` (Redis).
 
@@ -116,13 +116,13 @@ Every scenario ends with its cleanup. To check a result, use `kode-verify`. Exam
 **Trigger:** "try two approaches", "work on two features at once".
 **Shape:** 3 or 4.
 **Steps:**
-1. Against the services: a second managed workspace in the desk, which clones the repo, or `worktree` {"action": "add", "workspace": "ws-…", "name": "export"} in the same managed workspace; run each tree's process on its own port.
-2. Only one tree's process can hold the intercept of a service. Intercept one, stop it, intercept the other.
-3. A copy of the state: `workspace` {"action": "create", "source": "ws-…", "name": "api-try", "task": "approach B"}. The copy joins the desk, so it reaches the environment. For a standalone copy that does not, clone from the laptop with `workspaces clone`.
+1. Read `quota`: each copy is one workspace slot while it exists.
+2. One workspace for each branch or approach: `workspace` {"action": "create", "source": "ws-…", "name": "api-try", "task": "approach B"}, then `workspace` {"action": "ttl", "workspace": "api-try", "ttl_secs": 14400}. The copy is copy-on-write, joins the desk and reaches the environment. A workspace has no second tree inside it. For a standalone copy, clone from the laptop with `workspaces clone`.
+3. Only one workspace can hold the intercept of a service. Intercept one, stop it, intercept the other.
 4. Commit each part on its own branch: `exec` `git switch -c export && git commit …`. Merge in the original workspace with `git fetch` and `git merge`.
-5. Tear down: `worktree` action `drop` and `workspace` action `delete` for what you made, never one that holds unmerged work.
+5. Tear down: `workspace` action `delete` for each copy that you made, after its branch is pushed or merged. Stop a copy that holds unfinished work; do not delete it.
 
-**Done when:** each part is on its branch and merged, and the extra trees and clones are gone.
+**Done when:** each part is on its branch and merged, and the copies are gone.
 **If it fails:** the clone cannot reach `db`: use a second managed workspace.
 
 ### 9. Reproduce a bug on a copy
@@ -177,20 +177,20 @@ Every scenario ends with its cleanup. To check a result, use `kode-verify`. Exam
 
 **Trigger:** "checkpoint before the refactor", "go back to this morning".
 **Steps:**
-1. Only on request. `workspace` action `get`: read `volume`.
+1. On request, or by yourself before a change that is hard to undo. `workspace` action `get`: read `volume`.
 2. `workspace` {"action": "snapshot", "workspace": "ws-…", "volume": "api-base", "message": "before the refactor"}. Give `volume` only on the first snapshot.
 3. `volume` {"action": "get", "volume": "<id from volume list>"}: note `api-base@3`.
 4. Restore: `workspace` {"action": "restore", "name": "api-restored", "snapshot_id": "api-base@3"}; add `team` for a team volume, and `"wait": true` to answer when it is `ready`. Made from a desk, the restored workspace joins the desk and reaches its environment; a restore from the laptop CLI joins none.
 5. Read `desk` from `workspace` `get`: set means it joined the desk and reaches the environment; empty (a restore from the laptop CLI) means standalone, so create a workspace in the desk and copy the files.
 
 **Done when:** the snapshot is `ready` in the history, or the restored workspace is `ready` with the files.
-**If it fails:** `422` asking for `volume`: ask the user for a name. `409` name taken: ask for another.
+**If it fails:** `422` asking for `volume`: give a name that says what is inside (`api-checkpoint`) and say it in the answer; a new named base volume for the team is the Coordinator's to name. `409` name taken: pick another.
 
 ### 14. Reset environment data
 
 **Trigger:** "reset the data to last night's snapshot".
 **Steps:**
-1. `env` action `get`: read `volume`. `volume` action `get`: find the snapshot the user names. Take one first only if the user asks: `env` action `snapshot`.
+1. `env` action `get`: read `volume`. `volume` action `get`: find the snapshot the user names. Take one of the current state first (`env` action `snapshot`, with a `message`) unless the user says not to: it is the only way back.
 2. Name the environment and the snapshot; data written since is lost, in every service, and the only warning is your own: a `409` comes just for services or folders the snapshot lacks. Wait for a yes.
 3. `env` {"action": "restore", "env": "env-…", "source": "…"}.
 4. On `409` with `lost`: list the services; only after a yes, repeat with "discard": [each name in `lost`].
@@ -245,8 +245,8 @@ Every scenario ends with its cleanup. To check a result, use `kode-verify`. Exam
 
 ## Rules
 
-- Obey the safety rules of the `kode` skill.
-- Use the desk's environment. Copy it only for scenario 9, or when the user asks.
+- Obey the invariants of the `kode` skill. What you created is yours to stop, snapshot and delete; what you did not create follows invariant 4.
+- Use the desk's environment. Copy it when the work can break its data (scenario 9); a copy is a full environment slot, so delete it after.
 - Run servers as environment services; run only the user's own code in a workspace.
-- Stop every intercept you made. Delete what you created for the task; keep what the user had.
+- Stop every intercept you made. Persist, then delete what you created for the task; stop what holds unfinished work; keep what the user had.
 - Never handle a secret value in output. A restart after a new variable is the user's choice.

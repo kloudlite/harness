@@ -16,10 +16,10 @@ Tie-breaker for "stop": one lifecycle verb on a named object (stop, start, delet
 | stop my desk | base | Lifecycle verb on one named object goes to base, even though develop 17 also stops things |
 | start the environment | base | Lifecycle |
 | set the desk TTL to a day | base | Lifecycle |
-| delete the review workspace | base | Delete: name the target, rule 1 |
+| delete the review workspace | base | Delete: invariant 4 (own: persist, delete, say so; not own: name the target) |
 | delete all stopped workspaces | base | Delete: list by name first |
 | why can't I create a workspace | base | Quota |
-| ask for more quota | base | Quota: request_create when asked |
+| ask for more quota | base | Quota: request_create with a reason, from the Coordinator |
 | tools say not logged in | base | Setup and recovery symptom |
 | a call refused for no `desk` | base | Setup and recovery symptom |
 | 403 your access to acme is paused | base | Setup and recovery symptom |
@@ -38,7 +38,7 @@ Tie-breaker for "stop": one lifecycle verb on a named object (stop, start, delet
 | fix the bug in the checkout flow | kode-develop | Edits code (situation: tools present, code task) |
 | add shipped-order emails across api, worker and web | kode-develop | Several components: shape 3 |
 | debug this with real traffic | kode-develop | Intercept and logs |
-| try two approaches | kode-develop | Parallel work: managed workspaces or worktrees |
+| try two approaches | kode-develop | Parallel work: one managed workspace for each approach, cloned |
 | work on two features at once | kode-develop | Parallel work |
 | reproduce it without breaking staging | kode-develop | Copy of the environment: shape 4 |
 | bump Postgres to 16 | kode-develop | Service change |
