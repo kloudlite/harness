@@ -1,13 +1,13 @@
 ---
 name: kode
-description: Gives the Kode definitions, the invariants, the cost of each action, the two agent types (Coordinator and Worker), the topologies, the tool groups and the setup steps. Load first when the Kode tools are present (`desk`, `workspace`) and the task is to run, test, build or change code; when a request names a workspace (or a sandbox), environment, desk, intercept, capsule, volume, snapshot, pipeline, secret, variable or connector; when work is split between agents or handed off; for status, logs, stop, start, delete and quota questions ("what do I have", "logs of db", "delete the review workspace"); and when a tool answers "not logged in", "403 ... paused", or the server lists only the `desk` tool. Not for steps of a task - use kode-develop (set up, run against real services, intercept), kode-verify (one-time checks in capsules) or kode-automate (pipelines).
+description: Gives the Kode definitions, the invariants, the cost of each action, the two agent types (Coordinator and Worker), the topologies, the tool groups and the setup steps. Load first when the Kode tools are present (`desk`, `workspace`) and the task is to run, test, build or change code; when a request names a workspace (or a sandbox), environment, desk, intercept, capsule, volume, snapshot, pipeline, secret, variable or connector; when work is split between agents or handed off; for status, logs, stop, start, delete and quota questions ("what do I have", "logs of db", "delete the review workspace"); and when a tool answers "not logged in", "403 ... paused", or the server lists only the `desk` tool. Not for work that touches no Kode object, and not for code that must run on the user's own computer.
 ---
 
 # Kode
 
 Kode (Kernel for Orchestrated Development and Execution) is the infrastructure that an agent owns for development and execution. You are not a process in one folder. You make isolated machines, compose services, send real traffic to your code, save state and remove all of it. Compute is the cheapest thing you have. Idle compute, stored data that nobody reads and used quota are the expensive things.
 
-This skill gives the definitions and the rules. The task skills give the steps: `kode-develop`, `kode-verify`, `kode-automate`. They do not repeat the definitions. Read this skill first. The `references/` folder holds the depth: `tools.md` (every tool and argument), `permissions.md` (who may call each action), `worker-templates.md` (the briefs and the hand-off report), `use-cases.md` (14 worked cases and how to compose a new one), `services.md`, `errors.md` and `setup.md`. When the Kode tools are present, code runs in a workspace, not on the user's computer, whatever the request says.
+This is the one Kode skill: the definitions, the rules and the way to choose. It gives no fixed steps for a task; you compose them. The `references/` folder holds the depth: `tools.md` (every tool and argument), `permissions.md` (who may call each action), `worker-templates.md` (the briefs and the hand-off report), `use-cases.md` (14 worked cases and how to compose a new one), `pipelines.md` (the definition format), `services.md` (common services with ports and mounts), `errors.md` and `setup.md`. When the Kode tools are present, code runs in a workspace, not on the user's computer, whatever the request says.
 
 ## Glossary
 
@@ -76,7 +76,7 @@ team ─┬─ desk ── joins ──> workspaces, capsules ──> environmen
 | Break data or services freely | `env` `create` with `source`, then `desk` `connect` to the copy | A full environment slot (2 by default); delete the copy after |
 | Keep a ready toolchain | `workspace` `snapshot` with a `volume` name and a `message`; later `workspace` `restore` | 1 snapshot slot and the storage of the difference |
 | Pause unfinished work | `workspace` `stop`, or `desk` `stop` | Storage only |
-| Repeat work without a person | `pipeline` `save`, with a schedule or a webhook (`kode-automate`) | The capsules of each job of each run |
+| Repeat work without a person | `pipeline` `save`, with a schedule or a webhook (`references/pipelines.md`) | The capsules of each job of each run |
 | Hand work to another agent | Commit, or write `REPORT.md` in the workspace, then stop it | The context to read the report; no live context is shared |
 
 ## Agent types and topologies
@@ -103,7 +103,7 @@ A device workspace runs on the person's own Mac, in an operating system sandbox,
 
 ## Hosts
 
-Read your row. The task skills never name a host.
+Read your row.
 
 | Host | Tools | Local commands | Local files | Who works |
 |---|---|---|---|---|
@@ -144,7 +144,7 @@ Use a tool, not a command. Two things have no tool: connecting a provider (the w
 | 3. One managed workspace per component, one desk | A change across `web`, `api` and `worker` | One environment with every service; one desk; a workspace per component; each intercepts its own service |
 | 4. Copies | Data changes that can break things, experiments, a second branch, PR review in a shared environment | `env` `create` with `source` for the environment; `workspace` `create` with `source` for a copy in the desk, one per branch or approach |
 
-The example app in every skill: a shop with `web`, `api`, `worker`, `db` (Postgres) and `cache` (Redis). Ask in order. Does the work need a running service? No: shape 1. How many components change? One: shape 2; several: shape 3. Would it disturb a shared environment, or try several options? Yes: shape 4. Is it a one-time check? Use a capsule, not a workspace (`kode-verify`). Only a managed workspace reaches the environment, and a clone made in the desk is managed: "two features at once against the services" is two managed workspaces in the desk, the second a clone of the first.
+The example app: a shop with `web`, `api`, `worker`, `db` (Postgres) and `cache` (Redis). Ask in order. Does the work need a running service? No: shape 1. How many components change? One: shape 2; several: shape 3. Would it disturb a shared environment, or try several options? Yes: shape 4. Is it a one-time check? Use a capsule, not a workspace. Only a managed workspace reaches the environment, and a clone made in the desk is managed: "two features at once against the services" is two managed workspaces in the desk, the second a clone of the first.
 
 ## Ids and states
 
@@ -190,18 +190,6 @@ A call without `desk` is refused with ``pass `desk` (id or name); `desk` `list` 
 - **Start and stop:** `workspace` and `env` with `action: "start"` or `"stop"`. Before restarting a stopped `workspace` or `env`, read `stopped_reason`, `stopped_at` and `hint` from `get`: an `idle` stop starts again on use, an explicit stop stays stopped. A `snapshot` answers ready only when restorable, else `promoted`; a restore or create from one not ready yet answers 409 `not ready yet`: retry after a few seconds. `desk` `stop` also stops the bench, which serves your own tools: say so first and make it your last call.
 - **Delete:** invariant 4 decides. What you created: persist it if it has value, then the `delete` action of `workspace`, `env`, `capsule`, `volume` or `snapshot`, and say what you removed. What you did not create: list the targets by name and call only when the user named them, or after a yes. A refusal is final.
 - **Quota:** `quota` shows the ceilings and the use. Read it before each fan-out.
-
-## Tie-breakers
-
-| Phrase | Skill | Rule |
-|---|---|---|
-| "run the tests", "check it works", "try it" | `kode-verify` | Once, now, isolated, a result to read |
-| "run the tests every night / on every push / after the build" | `kode-automate` | Repeats without a person |
-| "run my server", "hit it with real traffic", "fix the bug" | `kode-develop` | Edits code or keeps a process running |
-| "why did it fail" | verify for a capsule, automate for a pipeline run | Which record it is |
-| "set up", "give me a workspace with Postgres" | `kode-develop` | Creates the shape |
-| "what do I have", "status of X", "logs of db", "delete X", "stop my desk" | this skill alone | Reads, lifecycle and deletes need no scenario |
-| A change, then "and check it" | develop, then verify | Every develop scenario ends with "to check the result, use `kode-verify`" |
 
 ## Setup and recovery
 

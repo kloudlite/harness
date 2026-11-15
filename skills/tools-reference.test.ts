@@ -32,7 +32,7 @@ test("references/tools.md lists exactly the served tools, and no other", async (
 
 test("every tool a skill names in backticks with an underscore is in tools.md", () => {
   const doc = readFileSync(join(import.meta.dir, "kode/references/tools.md"), "utf8");
-  for (const s of ["kode", "kode-develop", "kode-verify", "kode-automate"]) {
+  for (const s of ["kode"]) {
     const t = readFileSync(join(import.meta.dir, s, "SKILL.md"), "utf8");
     for (const m of t.matchAll(/`((?:workspace|env|service|capsule|pipeline|run|secret|desk|volume|snapshot|process|packages|container|worktree|connector|webhook|request)_[a-z_]+)`/g))
       if (!/^(env_var|run_number)/.test(m[1]!)) expect(doc.includes(`\`${m[1]}\``) ? m[1] : `${s}: ${m[1]} not in tools.md`).toBe(m[1]!);

@@ -5,7 +5,7 @@ import { join } from "node:path";
 const PLUGIN = join(import.meta.dir, "plugin");
 const SOURCES = join(import.meta.dir, "../skills");
 // the skills the plugin ships, copied by laptop-plugin/sync-skills.sh (a symlink out of the plugin root does not load)
-const SHIPPED = ["kode", "kode-automate", "kode-develop", "kode-verify"];
+const SHIPPED = ["kode"];
 
 test("the plugin ships exactly its skills, each equal to its source in skills/ (run laptop-plugin/sync-skills.sh)", () => {
   expect(readdirSync(join(PLUGIN, "skills")).sort()).toEqual(SHIPPED);

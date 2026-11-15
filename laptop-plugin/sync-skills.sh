@@ -4,7 +4,7 @@
 # when a copy differs from its source. Run after editing any of these skills.
 set -eu
 cd "$(dirname "$0")"
-SKILLS="kode kode-develop kode-verify kode-automate"
+SKILLS="kode"
 rm -rf plugin/skills
 for s in $SKILLS; do
   mkdir -p "plugin/skills/$s"

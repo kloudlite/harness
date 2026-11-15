@@ -1,6 +1,36 @@
-# Pipeline definition
+# Pipelines
 
-Source: `docs/product/reference/pipeline-definition.md` (product reference). camelCase JSON; every object refuses an unknown key.
+A pipeline is a versioned JSON definition of jobs in a graph. Each job runs its steps in its own capsule. A run starts one version by hand, on a schedule, from a webhook, or after another pipeline. A saved pipeline is a declared artifact: a Worker with the pipeline authoring brief (`worker-templates.md`) writes and saves it, and the Coordinator adds the schedule or the webhook after it reads the definition.
+
+Every pipeline tool takes `owner`: the user's handle, or the team slug for a team. When the host has files, keep each definition in the user's repository (`pipelines/ci.json`) and send its text to `pipeline` action `save`.
+
+## Rules
+
+- camelCase JSON. Every object refuses an unknown key: `need`, `timeout` or `uses` is an error that names the key. A save reports every problem at once.
+- Pipeline keys: `name` (required, `[a-z0-9-]`, at most 63 characters), `environment`, `triggers`, `inputs`, `jobs` (required). Job keys: `needs`, `if`, `packages`, `image`, `fromSnapshot`, `saveTo`, `environment`, `matrix`, `timeoutMinutes` (default 60, 1 to 1440), `permissions`, `env`, `secrets`, `steps` (required). Step keys: `name`, `run` (required), `env`, `cwd`.
+- Each `run` runs with `sh -e -c`: the first failing command fails the step, and the first failing step stops the job. A step has no `if`.
+- `packages` and `image` are exclusive. With neither, the job gets the base image with `git`. With `packages`, list `git` when a step clones.
+- `${{ inputs.X }}`, `${{ matrix.X }}`, `${{ needs.JOB.result }}`, `${{ event }}`, `${{ run.number }}` interpolate. A `${{ secrets.NAME }}` must be the whole value of an `env` entry.
+- `webhook.body.*` is readable only in `env` and `if`. Read it into `env`; use `"$NAME"` in `run`.
+- Limits: 50 jobs, 100 steps per job, 64 KiB, 50 pipelines per owner, 100 versions.
+- A job with no `if` runs only when every job in `needs` succeeded. Jobs with no `needs` run in parallel, up to 8 at a time. A failed job fails the run. A job beyond quota waits up to 30 minutes before it fails.
+- Never put a secret value in a definition. Use `secrets`, or a whole-value `${{ secrets.NAME }}` in `env`.
+- Give each job a `timeoutMinutes` that fits its work.
+- Show the webhook URL one time, in the answer to the save. `webhook_rotate` makes a new one, and the old URL stops at once.
+
+## Example
+
+```json
+{"name": "api-ci", "jobs": {"test": {"packages": ["git", "nodejs@22"], "permissions": {"git": "read"}, "timeoutMinutes": 30,
+  "steps": [{"run": "git clone https://github.com/acme/api api"},
+            {"name": "install", "run": "npm ci", "cwd": "api"},
+            {"name": "test", "run": "npm test", "cwd": "api"}]}}}
+```
+
+1. `connector_list` shows that a git connector covers the repository. `pipeline` {"action": "list", "owner": "acme"} shows a pipeline that already does the job.
+2. `pipeline` {"action": "save", "owner": "acme", "definition": {…}}. A `422` lists every problem with its job and step: correct all of them, then save again. A definition equal to the newest version saves nothing.
+3. `run` {"action": "start", "owner": "acme", "pipeline": "api-ci", "wait": true}, then `run` `wait` and `run` `logs` (`job` is the index of the job). `run` `get` gives `failedStep` and `exitCode` of a failed run.
+4. To go back, `pipeline` `get` an old `version` and save its definition again as the newest. `run` `cancel` stops a run that you started.
 
 ## Pipeline
 
