@@ -2,7 +2,7 @@
 
 Gives Claude Code the Kode skill and the desk's tools.
 
-Needs no `kode` binary: the MCP server is `https://dev.kloudlite.io/mcp`. The first tool call opens the browser sign-in, and the consent page picks the teams; the agent picks or creates the desk.
+Needs no `kode` binary: the MCP server is `https://dev.kodespace.io/mcp`. The first tool call opens the browser sign-in, and the consent page picks the teams; the agent picks or creates the desk.
 
 ## Install
 
