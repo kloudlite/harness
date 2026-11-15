@@ -837,3 +837,12 @@ test("capsule wait on a pending view with exit_code null keeps waiting to the bo
   routes["POST /v1/capsules/c1/wait"] = json({ phase: "terminated", exit_code: 0 });
   expect(JSON.parse(await tool(t, "capsule_wait").run({ capsule: "c1" })).exit_code).toBe(0);
 });
+
+test("memory write is a patch and refuses anything but one of edits, content, delete", async () => {
+  const t = platformTools("main").find((x) => x.name === "memory")!;
+  routes["PUT /v1/memory/acme/run"] = json({ version: 2 });
+  await t.run({ action: "write", owner: "acme", section: "run", if_version: 1, edits: [{ find: "a", replace: "b" }] });
+  expect(calls.at(-1)).toMatchObject({ method: "PUT", url: "/v1/memory/acme/run", body: { if_version: 1, edits: [{ find: "a", replace: "b" }] } });
+  await expect(t.run({ action: "write", owner: "acme", section: "run", if_version: 1 })).rejects.toThrow("exactly one");
+  await expect(t.run({ action: "read", project: "a", owner: "b" })).rejects.toThrow("same thing");
+});

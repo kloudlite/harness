@@ -614,6 +614,12 @@ function mainOnly(tickMs: number): ToolDef[] {
   const pipe = (a: any) => `/v1/pipelines/${seg(own(a))}/${seg(a.pipeline)}`;
   const run = (a: any) => `${pipe(a)}/runs/${seg(a.run)}`;
   const secret = (a: any) => `/v1/secrets/${seg(a.owner ?? process.env.KD_TEAM)}${a.mine ? "/mine" : ""}`;
+  const PROJECT = { type: "string", description: "The project: its owner (a team slug or your handle). Same as `owner`. Default: this desk's team." };
+  const MEM_SECTION = { type: "string", enum: ["environments", "volumes", "desks", "run", "conventions", "open-work"], description: "One section. Default (read): all." };
+  const memOwner = (a: any) => {
+    if (a.project && a.owner && a.project !== a.owner) throw new Error("`project` and `owner` name the same thing; give one, or the same value");
+    return a.project || a.owner || process.env.KD_TEAM;
+  };
   const RUNREF = { owner: OWNER_DEFAULT, pipeline: PIPE, run: RUN };
   const RUNREQ = ["pipeline", "run"];
   /** `run wait` and a waiting `run start`: the run without its definition, plus the log page at `offset` when one is given. */
@@ -752,6 +758,20 @@ function mainOnly(tickMs: number): ToolDef[] {
         try { body = JSON.parse(out); } catch {}
         return JSON.stringify({ ...(body && typeof body === "object" ? body : {}), note: "takes effect after restart" }, null, 2);
       }),
+    }),
+    resource("memory", "Project memory: the CURRENT structure of a project (its environments, base volumes, desks, how to run it, conventions), written for a cold start. A project is its owner: a team, or your own account. Actions: read (a section, or the whole document merged with your own `open-work`), write (a PATCH: `edits` of find/replace like the edit tool; full `content` only to create a new section with if_version 0; `delete: true` removes it; `if_version` is the version you read; a 409 answers the current content, merge and write again), list (projects with memory and their sections). Sections: environments, volumes, desks, run, conventions (the team's) and open-work (yours). Content is markdown of at most 16 KiB. It describes what is, never what happened. Only a Coordinator writes.", {
+      read: act({ project: PROJECT, owner: OWNER_DEFAULT, section: MEM_SECTION, scope: { type: "string", enum: ["team", "user", "merged"], description: "Default: merged." } }, [], async (a) => {
+        const r = JSON.parse(await api("GET", `/v1/memory/${seg(memOwner(a))}${qs({ section: a.section, scope: a.scope })}`));
+        const sections: any[] = r.sections ?? [];
+        if (a.section) return JSON.stringify({ owner: r.owner, section: a.section, version: sections[0]?.version ?? 0, markdown: sections[0]?.content ?? "" }, null, 2);
+        return JSON.stringify({ owner: r.owner, markdown: r.markdown ?? "", versions: Object.fromEntries(sections.map((s) => [s.name, s.version])) }, null, 2);
+      }),
+      write: act({ project: PROJECT, owner: OWNER_DEFAULT, section: MEM_SECTION, if_version: { ...I, description: "The version from your read of this section; 0 when it does not exist yet." }, edits: { type: "array", items: { type: "object", properties: { find: S, replace: S }, required: ["find", "replace"], additionalProperties: false }, description: "Patch an existing section like the edit tool: each `find` must match the section's text exactly once; applied in order." }, content: { type: "string", description: "The whole text of a NEW section (if_version 0). Refused for an existing section: patch it with `edits`." }, delete: { type: "boolean", description: "Remove the section." } }, ["section", "if_version"], async (a) => {
+        const n = [a.edits !== undefined, a.content !== undefined, a.delete === true].filter(Boolean).length;
+        if (n !== 1) throw new Error("memory write takes exactly one of `edits`, `content` (a new section only) or `delete: true`");
+        return api("PUT", `/v1/memory/${seg(memOwner(a))}/${seg(a.section)}`, strip({ if_version: a.if_version, edits: a.edits, content: a.content, delete: a.delete }));
+      }),
+      list: act({ owner: OWNER_DEFAULT }, [], async (a) => api("GET", `/v1/memory${qs({ owner: a.owner })}`)),
     }),
     def("webhook_rotate", "Make a new webhook secret for a pipeline; the old URL stops at once. The answer holds the new `webhookUrl` once: keep it secret. 409 when the webhook trigger is off.", { owner: OWNER_DEFAULT, pipeline: PIPE }, ["pipeline"], async (a) => api("POST", `${pipe(a)}/webhook/rotate`)),
     def("secret_set", "Store a secret under a name (`A-Z`, `0-9`, `_`), replacing one. The value is never read back; a pod reads it as an env value that is exactly `${{ secrets.NAME }}`. A team's shared secret needs a team admin; `mine` sets your own.", { owner: OWNER_DEFAULT, name: S, value: S, mine: MINE }, ["name", "value"], async (a) => {
