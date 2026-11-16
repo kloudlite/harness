@@ -13,8 +13,8 @@ The status comes first; the body is one sentence. Report it as it is, then take 
 | `409` `"x" is ambiguous; qualify it as owner/name` | Use the id or `team/name`. |
 | `409 the storage pool is full; retry later or ask an operator` | Tell the user. |
 | `409 a snapshot is already being cut for this workspace` | Wait, read the volume history, do not repeat. |
-| `409 this snapshot is the base of …` / `… is where … stands now (its latest push)` | A live workspace or environment was built from it or last pushed it. Delete that workspace first (after its own snapshot), or keep the version. |
-| `409 version {N} carries the tag {tag}; move or remove the tag first` | The version is protected. Move the tag to a newer version with `volume` `tag`, or keep the version. |
+| `409 this snapshot is the base of …` / `… is where … stands now (its latest push)` | A live workspace or environment was built from it or last pushed it. Delete that workspace first (after its own snapshot), or keep the commit. |
+| `409 commit {N} is the head of branch {b}; move or delete the branch first` | The commit is protected. Move the branch to another commit with `volume` `branch`, or keep the commit. |
 | `409 the volume still has a workspace or environment` | Delete the owner first, if the user asked. |
 | `409 this desk has no environment; connect one…` | `desk` `connect` with `environment`. |
 | `409 conflict, retry` / `the desk changed; retry` / `volume {name} is being changed; retry` | Read again, repeat once. |
@@ -24,9 +24,10 @@ The status comes first; the body is one sentence. Report it as it is, then take 
 | `409 this volume is named X, not Y (this workspace is a clone of that volume…)` | Drop `volume` or pass X: a clone or a restore saves into its source's volume. |
 | `409 volume {name} already exists; delete it first` | Ask for another name. |
 | `409 volume {name} is used by {readers}` | A pipeline reads it. Tell the user. |
-| `404 volume {name} has no version {n}` / `has no tag {tag}` / `has no ready version` | Read `volume` `get`: it lists the versions and the tags. A `base` tag that is gone means that nobody tagged a good version: ask which version is good. |
-| `422 tag: "X" must be lowercase letters, digits and hyphens (at most 32), and not a number or "latest"` | Pick another tag name. |
-| `422 labels: …` / `tags: at most 16 on one volume` | Fix the list; remove a tag that nobody uses with `volume` `untag`. |
+| `404 volume {name} has no commit {n}` / `has no branch {b}` / `has no ready version` | Read `volume` `get`: it lists the commits and the branches. A `base` that is gone means that nobody put a good commit on it: ask which commit is good. |
+| `422 branch: "X" must be lowercase letters, digits and hyphens (at most 32), and not a number or "latest"` | Pick another branch name. |
+| `422 labels: …` / `branches: at most 16 on one volume` | Fix the list; delete a branch that nobody uses with `volume` `delete_branch`. |
+| A snapshot answers `detached: "branch {B} moved …"` | Another session committed on that branch since you checked it out; your commit is on no branch. Say so, then put it on its own branch with `volume` `branch`, or move `B` to it when yours is the one to keep (convention 9). |
 | `no git connector of {owner} covers {host}/{repo}` | The user connects the code host in the web console. |
 | `link your GitHub account to push: …` / `your GitHub link has expired; link it again` | The person links GitHub in the web console (Settings, Connectors). Until then the work is an unfinished snapshot, not a push. |
 | `connector {name} can only read` | The connector's GitHub App has no write on contents. Tell the user; leave the work as an unfinished snapshot. |

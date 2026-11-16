@@ -2,7 +2,7 @@
 
 Each case names the topology, the Worker template (`worker-templates.md`), the steps as tool calls and the end state. Find the nearest case, then adapt it. The last section shows how to compose a new one. The examples use the team `acme`, the environment `shop` with the services `web`, `api`, `worker` and `db`, the workspace volume `shop-base` and the environment volume `shop-env`.
 
-Every case starts and ends the same way, so the cases do not repeat it. **Start** (convention 14 of the skill): read the memory, find the volume by its label, `workspace` `restore` from `shop-base@base`, then `ttl`, then pull. **End** (convention 15): stop each intercept, push, snapshot the main workspace as the next version of its volume (with `tags: ["base"]` when the state is good), `memory` `write`, delete each workspace and each environment copy. "Main workspace" is the one restored from the project volume; a clone, a capsule and a copy of an environment are deleted without a snapshot.
+Every case starts and ends the same way, so the cases do not repeat it. **Start** (convention 15 of the skill): read the memory, find the volume by its label, `workspace` `restore` from `shop-base@base` (a checkout of `base`), then `ttl`, then pull. **End** (convention 16): stop each intercept, push, snapshot the main workspace as the next storage commit of its volume (plain when the state is good, so `base` advances; with `branch: "wip-<topic>"` when it is not), `memory` `write`, delete each workspace and each environment copy. "Main workspace" is the one restored from the project volume; a clone, a capsule and a copy of an environment are deleted without a snapshot.
 
 | # | Use case | Topology | Template | Environment slots | Workspace slots |
 |---|---|---|---|---|---|
@@ -24,18 +24,18 @@ Every case starts and ends the same way, so the cases do not repeat it. **Start*
 ## 1. Build a multi-service system from zero
 
 **Situation.** A new product needs `api`, `worker`, `web` and a `db`.
-**Steps.** Coordinator: `quota`. `env` `create` with the services as data, `db` with a mount for its data, then `ttl`. `desk` `create` connected to it. `workspace` `create`, one for each service, each with its packages, then `ttl`. One Solo brief for each workspace, each with the intercept of its own service granted. Workers: write, run the code as a detached process, verify through the intercept, commit, push, `REPORT.md`. Coordinator: read the reports, then brief one Desk verification Worker for the end-to-end run.
-**End.** Coordinator: `env` `snapshot` with `volume: "shop-env"`, a `description`, `labels: ["shop"]`, `tags: ["base"]` and a `message`. One workspace that holds the repositories is snapshotted the same way as `shop-base`. `memory` `write`: the two volumes and `@base`, the repositories, how to run. The workspaces and the environment deleted. A later `env` `create` with `source: "shop-env@base"` starts from it.
+**Steps.** Coordinator: `quota`. `env` `create` with the services as data, `db` with a mount for its data, and `ttl_secs`. `desk` `create` connected to it. `workspace` `create`, one for each service, each with its packages, then `ttl`. One Solo brief for each workspace, each with the intercept of its own service granted. Workers: write, run the code as a detached process, verify through the intercept, commit, push, `REPORT.md`. Coordinator: read the reports, then brief one Desk verification Worker for the end-to-end run.
+**End.** Coordinator: `env` `snapshot` with `volume: "shop-env"`, a `description`, `labels: ["shop"]` and a `message`: the first commit of a volume makes `base`. One workspace that holds the repositories is snapshotted the same way as `shop-base`. `memory` `write`: the two volumes and `@base`, the repositories, how to run. The workspaces and the environment deleted. A later `env` `create` with `source: "shop-env@base"` starts from it.
 
 ## 2. Repair one bug against real data
 
 **Steps.** Coordinator: `workspace` `restore` from `shop-base@base`, then `ttl`. Solo Worker: pull. Reproduce in a capsule with `from_workspace`. Repair. Run the test in a capsule again. Commit and push. `REPORT.md`.
-**End.** The standard end. The pushed fix is in the new version, so `base` moves to it. If the repair is not finished and cannot go to git, the snapshot takes no tag and `open-work` names its version (case 12).
+**End.** The standard end. The pushed fix is in the new commit, so `base` advances to it. If the repair is not finished and cannot go to git, snapshot with `branch: "wip-<bug>"` and `open-work` names that branch (case 12).
 
 ## 3. Try N approaches, keep the best
 
 **Steps.** Coordinator: `quota` gives N. `workspace` `create` with `source`, N clones of the main workspace, each with a `task` that names its approach and a short TTL. N Throwaway briefs with the same success command. Each Worker runs, writes `REPORT.md`, hands it back and deletes its workspace. The Coordinator compares the reports, picks one and briefs a Solo Worker to do the winner correctly in the main workspace.
-**End.** No clone stays and none is snapshotted: a snapshot of a clone would be a version of the base volume. The standard end for the main workspace.
+**End.** No clone stays and none is snapshotted: a clone is detached, so its commit would sit on the base volume with no branch. The standard end for the main workspace.
 
 ## 4. Change frontend and backend together
 
@@ -49,24 +49,24 @@ Every case starts and ends the same way, so the cases do not repeat it. **Start*
 
 ## 6. Review a pull request by running it
 
-**Steps.** Coordinator: `env` `create` with `source` `shop` (a live copy), then `ttl`; `desk` `connect` to the copy; `workspace` `restore` from `shop-base@base`, then `ttl`. Desk verification Worker: check out the branch of the pull request. Intercept the changed service in the copy. Run the suite in a capsule; call the service directly. `REPORT.md` with the end of the log and a verdict.
+**Steps.** Coordinator: `env` `create` with `source` `shop` (a live copy) and `ttl_secs`; `desk` `connect` to the copy; `workspace` `restore` from `shop-base@base`, then `ttl`. Desk verification Worker: check out the branch of the pull request. Intercept the changed service in the copy. Run the suite in a capsule; call the service directly. `REPORT.md` with the end of the log and a verdict.
 **End.** The intercept stopped, the environment copy deleted. The workspace holds a branch that is not merged, so it is deleted without moving `base`; take a snapshot only when the review left work to continue.
 
 ## 7. Reproduce a data-dependent bug safely
 
-**Steps.** Coordinator: `env` `create` with `source` `shop`, then `ttl`; `desk` `connect` to the copy. Now change data, drop tables and stop services freely. Repair as in case 2.
-**End.** `desk` `connect` back to `shop`; the copy deleted. If other people need the broken state, `env` `snapshot` the copy first: it becomes the next version of the `shop-env` volume, because a copy shares its source's volume. Give it its own tag (`tags: ["bug-1432"]`) and never `base`, say in the `message` that the data is broken, and remove the tag when the bug is closed.
+**Steps.** Coordinator: `env` `create` with `source` `shop` and `ttl_secs`; `desk` `connect` to the copy. Now change data, drop tables and stop services freely. Repair as in case 2.
+**End.** `desk` `connect` back to `shop`; the copy deleted. If other people need the broken state, `env` `snapshot` the copy first: it becomes a commit of the `shop-env` volume, because a copy shares its source's volume. The copy is detached, so put the commit on its own branch (`branch: "bug-1432"`), never `base`, say in the `message` that the data is broken, and delete the branch when the bug is closed.
 
 ## 8. Verify a release end to end
 
-**Steps.** The Coordinator clones `shop` one time, then `ttl`. One Desk verification brief for each subsystem, each with its own intercepts in the copy. The Workers run in parallel, and each leaves `REPORT.md`. The Coordinator merges the verdicts.
-**End.** The copy deleted, each clone deleted, one combined report. A release that passed is a good moment for a tag of its own: `volume` `tag` with `tag: "release-12"` on the version that was tested.
+**Steps.** The Coordinator clones `shop` one time, with `ttl_secs`. One Desk verification brief for each subsystem, each with its own intercepts in the copy. The Workers run in parallel, and each leaves `REPORT.md`. The Coordinator merges the verdicts.
+**End.** The copy deleted, each clone deleted, one combined report. A release that passed is a good moment for a branch of its own: `volume` `branch` with `branch: "release-12"` on the commit that was tested.
 
 ## 9. Bake a golden toolchain, and refresh it
 
-**Steps, first time.** Coordinator: `workspace` `create` with the full package list, then `ttl`. Solo Worker: clone the repositories, install what nixpkgs lacks into the home folder, fill the caches, run one build. Coordinator: `workspace` `snapshot` with `volume: "acme-node-base"`, a `description` that says what is inside and what it is for, `labels` with the project name, `tags: ["base"]` and a `message`.
-**Steps, refresh.** A base is refreshed, never edited in place. `workspace` `restore` from `acme-node-base@base`, then `ttl`. Pull the latest code. `packages` `update`. Run one build or one test: a state that does not build never gets `base`. `workspace` `snapshot` with `tags: ["base"]`, a `message` that says what changed, and a new `description` when the contents changed. `base` moves to the new version. Refresh when the pull or the package update costs each session more than a few minutes.
-**End.** The workspace deleted, each time. `memory` `write`: the volume, what is inside, `@base`. The version that `base` left is untagged: it expires 30 days after its last use, or delete it now with `snapshot` `delete` when nothing needs it.
+**Steps, first time.** Coordinator: `workspace` `create` with the full package list and `ttl_secs`. Solo Worker: clone the repositories, install what nixpkgs lacks into the home folder, fill the caches, run one build. Coordinator: `workspace` `snapshot` with `volume: "acme-node-base"`, a `description` that says what is inside and what it is for, `labels` with the project name and a `message`; the first commit makes `base`.
+**Steps, refresh.** A base is refreshed, never edited in place. `workspace` `restore` from `acme-node-base@base`, then `ttl`. Pull the latest code. `packages` `update`. Run one build or one test: a state that does not build never goes on `base`. `workspace` `snapshot` with a `message` that says what changed, and a new `description` when the contents changed: `base` advances to the new commit. A build that fails goes on `branch: "wip-refresh"` instead. Refresh when the pull or the package update costs each session more than a few minutes.
+**End.** The workspace deleted, each time. `memory` `write`: the volume, what is inside, `@base`. The commit that `base` left is on no branch: it expires 30 days after its last use, or delete it now with `snapshot` `delete` when nothing needs it.
 
 ## 10. Make a repeated check automatic
 
@@ -76,19 +76,19 @@ Every case starts and ends the same way, so the cases do not repeat it. **Start*
 ## 11. Scheduled integration test
 
 **Steps.** No session. A saved pipeline with a schedule. Each job runs in a capsule against the environment, reaches the services by name and ends. A failed run is what calls a Coordinator.
-**End.** Nothing to remove: the capsules end by themselves. A version that a job saves with `saveTo` carries no tag and expires after 30 days like any other; a job that reads `name@base` keeps using the tagged one.
+**End.** Nothing to remove: the capsules end by themselves. A commit that a job saves with `saveTo` is on no branch and expires after 30 days like any other; a job that reads `name@base` keeps using the commit that `base` points at.
 
 ## 12. Continue the unfinished work of yesterday
 
-**Steps.** Yesterday's session ended with `workspace` `snapshot` without `tags` (the `message` says what is left), a line in `open-work` of the memory with the version (`shop-base@7`) and what is left, and `workspace` `delete`. `base` still points at the last good version. Coordinator today: `status`, `memory` `read`, `volume` `get` of `shop-base` to see that version 7 is there, `workspace` `restore` from `shop-base@7`, then `ttl`. A Solo brief that names the workspace. Worker: read `REPORT.md` in the home, pull, continue.
-**End.** Finished: push, snapshot with `tags: ["base"]` (the next version, now the good one), delete the workspace, `snapshot` `delete` of version 7, remove the line from `open-work`. Not finished: snapshot again without `tags`, update the version in `open-work`, delete the older unfinished version, delete the workspace. No workspace stays stopped overnight.
-**Which volume.** A workspace saves into the volume that it came from: restored from `shop-base`, its snapshot is the next version of `shop-base`, and another `volume` name is refused with a `409`. That is why unfinished work is a version without a tag and not a second volume, and why a session restores `@base` and never the bare name. An unfinished version expires 30 days after its last use: finish it, or snapshot again, before that.
+**Steps.** Yesterday's session ended with `workspace` `snapshot` with `branch: "wip-auth"` (the `message` says what is left), a line in `open-work` of the memory with `shop-base@wip-auth` and what is left, and `workspace` `delete`. `base` still points at the last good commit. Coordinator today: `status`, `memory` `read`, `volume` `get` of `shop-base` to see that `wip-auth` is there, `workspace` `restore` from `shop-base@wip-auth` (a checkout of `wip-auth`), then `ttl`. A Solo brief that names the workspace. Worker: read `REPORT.md` in the home, pull, continue.
+**End.** Finished: push, snapshot (`wip-auth` advances to the good commit), then `volume` `branch` with `branch: "base"` and that commit's `version`, `volume` `delete_branch` of `wip-auth`, remove the line from `open-work`, delete the workspace. Not finished: snapshot again (`wip-auth` advances), update `open-work`, delete the workspace. No workspace stays stopped overnight.
+**Which volume.** A workspace saves into the volume that it came from: restored from `shop-base`, its snapshot is the next commit of `shop-base`, and another `volume` name is refused with a `409`. That is why unfinished work is a `wip-` branch and not a second volume. A `wip-` branch keeps its commit; delete the branch when the work is done or dropped.
 
 ## 13. Bring a new repository into Kode (the first session)
 
 **Situation.** The memory is empty and `volume` `list` with the project label finds nothing.
-**Steps.** Coordinator: read the compose file or the manifests of the repository. `env` `create` with them as services, a mount for each service that keeps data, then `ttl`. `desk` `create` connected to it. `workspace` `create` with the packages that the repository needs, then `ttl`. Solo Worker: clone, run the app as a detached process, call it, close the gaps. Write `KODE.md` at the root of the repository: the environment, the packages and the run command, for the next agent. Push.
-**End.** Coordinator: `env` `snapshot` with `volume: "shop-env"` and `workspace` `snapshot` with `volume: "shop-base"`, each with a `description`, `labels` with the project name, `tags: ["base"]` and a `message`. `memory` `write`: `volumes` and `environments` (each volume with `@base`), `run` (the repository and the commands), `conventions`. The workspace and the environment deleted.
+**Steps.** Coordinator: read the compose file or the manifests of the repository. `env` `create` with them as services, a mount for each service that keeps data, and `ttl_secs`. `desk` `create` connected to it. `workspace` `create` with the packages that the repository needs, then `ttl`. Solo Worker: clone, run the app as a detached process, call it, close the gaps. Write `KODE.md` at the root of the repository: the environment, the packages and the run command, for the next agent. Push.
+**End.** Coordinator: `env` `snapshot` with `volume: "shop-env"` and `workspace` `snapshot` with `volume: "shop-base"`, each with a `description`, `labels` with the project name and a `message`; each first commit makes `base`. `memory` `write`: `volumes` and `environments` (each volume with `@base`), `run` (the repository and the commands), `conventions`. The workspace and the environment deleted.
 
 ## 14. Two agents test their changes against each other
 
@@ -101,7 +101,7 @@ Answer four questions in order.
 
 1. What is the unit of isolation: a capsule (one command), a workspace (one change), a desk (a piece of work with many workspaces) or a copy of an environment (data that you will break)?
 2. Who does the work: one session, one session over many machines, or many Workers?
-3. Which artifact outlives the session (a branch, a volume version and the tag on it, a saved pipeline), and who names it?
+3. Which artifact outlives the session (a git branch, a storage commit and the branch on it, a saved pipeline), and who names it?
 4. What is the end state of everything else: snapshotted then deleted, or deleted?
 
 Write the four answers as the brief, read `quota`, and start.

@@ -19,10 +19,10 @@ The branch or commit, or "nothing persisted". The files touched, one per line.
 The command, its exit code and the last 20 lines of its output. "Not verified" is an allowed answer. A claim without this section is not.
 
 ## Resources left
-Each volume version or pipeline saved: its name, its number (`name@N`), whether it is good or what is left, and what is inside. Each workspace or environment that still runs, only when the brief says that the Coordinator removes it. A stopped workspace is never left. Empty means that everything was deleted.
+Each storage commit or pipeline saved: the volume, the branch it is on (`name@wip-auth`) and its number, whether it is good or what is left, and what is inside. Each workspace or environment that still runs, only when the brief says that the Coordinator removes it. A stopped workspace is never left. Empty means that everything was deleted.
 
 ## Budget spent
-The slots used at the peak, the snapshots taken, the context used (approximately).
+The model that ran (its class), the slots used at the peak, the snapshots taken, the context used (approximately).
 
 ## Open questions
 What the Coordinator must decide. Empty is correct.
@@ -30,7 +30,7 @@ What the Coordinator must decide. Empty is correct.
 
 A Worker that deletes its workspace copies `REPORT.md` first, with `transfer`, to the workspace that the brief names. When the brief names none, the report is its last message.
 
-Commits go back the same way when the Worker does not push: `git format-patch` or `git bundle create <stream>.bundle <base>..<branch>` in its workspace, `transfer` of that file to the workspace that the brief names, and the Coordinator applies it there (`git am`, or `git fetch <file> <branch>`). A Worker in a clone does not snapshot to hand work back: a snapshot of a clone is a version of the base volume.
+Commits go back the same way when the Worker does not push: `git format-patch` or `git bundle create <stream>.bundle <base>..<branch>` in its workspace, `transfer` of that file to the workspace that the brief names, and the Coordinator applies it there (`git am`, or `git fetch <file> <branch>`). A Worker in a clone does not snapshot to hand work back: a clone is detached, so its commit would sit on the base volume with no branch.
 
 ## 1. Solo (the default)
 
@@ -40,8 +40,8 @@ Commits go back the same way when the Worker does not push: `git format-patch` o
 | Scope | One workspace, created or handed over. The desk's environment is read-only unless the brief grants an intercept |
 | Tools | Each Worker tool of `permissions.md` |
 | Sub-Workers | In clones of its own workspace, one level, for independent and verifiable parts |
-| End state | Commit and push, or hand the commits back as a file. Unfinished work that cannot go to git, when the workspace is not a clone: `workspace` `snapshot` without `tags`, a `message` that says what is left, and the version (`name@N`) in the report. Then delete the workspace, unless the brief says that the Coordinator ends it. `REPORT.md` |
-| Must not | Touch the resources of another desk; create or clone an environment or a desk; name a volume; move a tag; leave a stopped workspace |
+| End state | Commit and push, or hand the commits back as a file. Unfinished work that cannot go to git, when the workspace is not a clone: `workspace` `snapshot` onto the branch that the brief names (`branch: "wip-<topic>"`), a `message` that says what is left, and `name@wip-<topic>` in the report. Then delete the workspace, unless the brief says that the Coordinator ends it. `REPORT.md` |
+| Must not | Touch the resources of another desk; create or clone an environment or a desk; name a volume; move `base` or a branch the brief does not name; leave a stopped workspace |
 
 ## 2. Throwaway experiment
 
@@ -88,7 +88,8 @@ One short block, in this order:
 4. What "done" means: a command that passes, a merged branch, an answered question.
 5. The budget: slots and a time limit.
 6. What is granted beyond the template, such as one named intercept.
-7. Where the work goes at the end: "push the branch", "hand the commits back as a file", "an untagged snapshot, its version in the report", or "leave the workspace, the Coordinator ends it".
+7. The model class (`models.md`): standard for a clear brief, light for mechanical work, one class up after a failed attempt.
+8. Where the work goes at the end: "push the branch", "hand the commits back as a file", "a snapshot onto `wip-<topic>`, named in the report", or "leave the workspace, the Coordinator ends it".
 8. When the work is split under a plan file (`planning.md`): the path of the plan, the files that this Worker owns, and its branch.
 
 A brief that does not say what "done" means goes back to the Coordinator.

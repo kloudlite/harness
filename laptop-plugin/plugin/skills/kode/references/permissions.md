@@ -3,7 +3,7 @@
 Who may call each tool action. **C** is the Coordinator, **W** is a Worker (the `kode` skill, "Agent types and topologies"). One session that works alone holds both roles.
 
 - **Own:** a resource that this session created, or that its brief names, in this desk.
-- **Shared:** a team environment, a named volume and its tags, a saved pipeline, or an object that another desk uses.
+- **Shared:** a team environment, a named volume and its branches, a saved pipeline, or an object that another desk uses.
 
 The platform refuses only what its errors say. The Worker column is practice: it keeps what many sessions start from in one pair of hands.
 
@@ -19,7 +19,7 @@ The one rule behind every row: a Worker may do anything to what it made, and not
 | `workspace`, `env` | `list`, `get`, `wait` | |
 | `capsule`, `run` | `list`, `get`, `wait`, `logs` | |
 | `volume`, `pipeline` | `list`, `get` | |
-| `memory` | `read`, `list` | Read it first in a new session: it names the volumes and the tag to start from |
+| `memory` | `read`, `list` | Read it first in a new session: it names the volumes and the branch to start from |
 | `service` | `logs` | |
 | `workspace_vars` | `get` | A secret shows as its reference, never as its value |
 | `packages` | `list` | |
@@ -38,10 +38,10 @@ The one rule behind every row: a Worker may do anything to what it made, and not
 
 | Action | C | W | Rule |
 |---|---|---|---|
-| `create` (empty, or a clone with `source`) | Yes | A clone of its own only | Give a name that a person can read and a `task` that says why; call `ttl` in the same turn. An empty workspace is for the first session of a project |
-| `restore` | Yes | Yes | It makes a new workspace from `name@base`, or from the version that the brief names; `name` is required; call `ttl` in the same turn |
+| `create` (empty, or a clone with `source`) | Yes | A clone of its own only | Give a name that a person can read, a `task` that says why and `ttl_secs`. An empty workspace is for the first session of a project |
+| `restore` | Yes | Yes | It makes a new workspace from `name@base`, or from the branch that the brief names, and checks it out; `name` is required; call `ttl` in the same turn |
 | `start`, `stop`, `restart`, `ttl` | Yes | Own | A stop is a pause inside a session. Before the session ends, snapshot unfinished work, then delete |
-| `snapshot` | Yes | Own, without `tags`, `labels` and a new `volume` name | The `message` says what changed, or what is left. Naming a new volume, its `labels` and the `base` tag are the Coordinator's. A Worker in a clone under a plan file does not snapshot: the snapshot would be a version of the base volume |
+| `snapshot` | Yes | Own, onto the branch that the brief names; without `labels` and a new `volume` name | The `message` says what changed, or what is left. Naming a new volume, its `labels` and moving `base` are the Coordinator's. A Worker in a clone under a plan file does not snapshot: the clone is detached, and its commit would sit on the base volume with no branch |
 | `delete` | Yes | Own | Persist first: push, snapshot or report. The main workspace is snapshotted before its delete. No workspace stays between sessions |
 | `exec`, `process` | Not after it delegates | Own | The Coordinator asks a Worker or a capsule for the exit code and the end of the log |
 | `read`, `glob`, `grep`, `watch` | Yes | Own | The Coordinator reads the artifact first (report, diff, test output), then one file for one claim. It does not browse the tree |
@@ -49,7 +49,6 @@ The one rule behind every row: a Worker may do anything to what it made, and not
 | `transfer`, `download` | Yes | Own | |
 | `workspace_vars` `set` | Yes | Own | A secret by reference only |
 | `packages` `add`, `remove`, `update` | Yes | Own | nixpkgs first; the home folder only for what nixpkgs lacks |
-| `worktree` | No | No | Not used: a second branch is a clone of the workspace |
 
 ## Capsules
 
@@ -73,11 +72,11 @@ The one rule behind every row: a Worker may do anything to what it made, and not
 
 | Action | C | W | Rule |
 |---|---|---|---|
-| `snapshot` `delete` | Yes | No | Only an untagged version that is no longer needed. Refused for a version that carries a tag and for the one a live workspace was built from. Never the last version: the volume goes with it |
+| `snapshot` `delete` | Yes | No | Only a commit that no branch points at and nothing needs. Refused for a branch head and for the commit a live workspace was built from. Never the last commit: the volume goes with it |
 | `volume` `describe` | Yes | No | It sets the `description` and the `labels` of a named volume. A given value replaces the stored one |
-| `volume` `tag`, `untag` | Yes | Only when the brief says so | `tag` creates a tag or moves it to another version. `base` goes only onto a state where a build or a test passed |
+| `volume` `branch`, `delete_branch` | Yes | Only when the brief says so | `branch` creates a branch or moves it to another commit. `base` goes only onto a state where a build or a test passed |
 | `volume` `delete` | Yes, after a yes from the person | No | It removes each snapshot of a detached volume for good. Never a way to end a session: a volume stays |
-| `memory` `write` | Yes | No | It names only what lasts: volumes (name, contents, labels, the tag to start from), repositories, how to run, conventions, open work with its version. Never a workspace, a desk or a running environment |
+| `memory` `write` | Yes | No | It names only what lasts: volumes (name, contents, labels, the branch to start from), repositories, how to run, conventions, open work with its branch. Never a workspace, a desk or a running environment |
 
 ## Pipelines and runs
 
