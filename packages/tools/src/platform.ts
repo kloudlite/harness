@@ -618,7 +618,7 @@ function mainOnly(tickMs: number): ToolDef[] {
   const run = (a: any) => `${pipe(a)}/runs/${seg(a.run)}`;
   const secret = (a: any) => `/v1/secrets/${seg(a.owner ?? process.env.KD_TEAM)}${a.mine ? "/mine" : ""}`;
   const PROJECT = { type: "string", description: "The project: its owner (a team slug or your handle). Same as `owner`. Default: this desk's team." };
-  const MEM_SECTION = { type: "string", enum: ["environments", "volumes", "desks", "run", "conventions", "open-work"], description: "One section. Default (read): all." };
+  const MEM_SECTION = { type: "string", enum: ["environments", "volumes", "run", "conventions", "open-work"], description: "One section. Default (read): all." };
   const memOwner = (a: any) => {
     if (a.project && a.owner && a.project !== a.owner) throw new Error("`project` and `owner` name the same thing; give one, or the same value");
     return a.project || a.owner || process.env.KD_TEAM;
@@ -772,7 +772,7 @@ function mainOnly(tickMs: number): ToolDef[] {
         return JSON.stringify({ ...(body && typeof body === "object" ? body : {}), note: "takes effect after restart" }, null, 2);
       }),
     }),
-    resource("memory", "Project memory: the CURRENT structure of a project (its environments, base volumes, desks, how to run it, conventions), written for a cold start. A project is its owner: a team, or your own account. Actions: read (a section, or the whole document merged with your own `open-work`), write (a PATCH: `edits` of find/replace like the edit tool; full `content` only to create a new section with if_version 0; `delete: true` removes it; `if_version` is the version you read; a 409 answers the current content, merge and write again), list (projects with memory and their sections). Sections: environments, volumes, desks, run, conventions (the team's) and open-work (yours). Content is markdown of at most 16 KiB. It describes what is, never what happened. Only a Coordinator writes.", {
+    resource("memory", "Project memory: the CURRENT structure of a project (its environments, base volumes, how to run it, conventions), written for a cold start. A project is its owner: a team, or your own account. Actions: read (a section, or the whole document merged with your own `open-work`), write (a PATCH: `edits` of find/replace like the edit tool; full `content` only to create a new section with if_version 0; `delete: true` removes it; `if_version` is the version you read; a 409 answers the current content, merge and write again), list (projects with memory and their sections). Sections: environments, volumes, run, conventions (the team's) and open-work (yours). Content is markdown of at most 16 KiB. It describes what is, never what happened. Only a Coordinator writes.", {
       read: act({ project: PROJECT, owner: OWNER_DEFAULT, section: MEM_SECTION, scope: { type: "string", enum: ["team", "user", "merged"], description: "Default: merged." } }, [], async (a) => {
         const r = JSON.parse(await api("GET", `/v1/memory/${seg(memOwner(a))}${qs({ section: a.section, scope: a.scope })}`));
         const sections: any[] = r.sections ?? [];
