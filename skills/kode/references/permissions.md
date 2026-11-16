@@ -72,6 +72,7 @@ The one rule behind every row: a Worker may do anything to what it made, and not
 | Action | C | W | Rule |
 |---|---|---|---|
 | `snapshot` `delete` | Yes | Own | Refused for the base of a running workspace |
+| `volume` `describe` | Yes | No | It sets the `description` and the `tags` of a named volume: the project name, and `base`, `wip` or `test`. A given value replaces the stored one |
 | `volume` `delete` | Yes | No | It removes each snapshot of a detached volume for good |
 | `memory` `write` | Yes | No | It names only what lasts: volumes (name, version, contents), repositories, how to run, conventions, open work. Never a workspace, a desk or a running environment |
 

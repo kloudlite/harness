@@ -16,7 +16,7 @@ Write one when two or more Workers change things that must fit together: an API 
 6. **Give each Worker a brief.** The brief names the workspace, the plan file, the stream, the files that the Worker owns, its branch and what "done" means (a command that exits 0). `worker-templates.md` gives the order of a brief.
 7. **Workers never negotiate with each other.** A Worker that finds a gap or an error in a contract stops that part, says so in `REPORT.md` and goes on with what the gap does not touch. The Coordinator corrects the plan file and tells each Worker that the change touches. A contract changes in one place only.
 8. **Integrate in a fixed order.** The plan names the order: the stream that others build on goes first. The Coordinator reads each `REPORT.md`, takes the branches in that order into one workspace, and runs the whole test set once. A failure goes back to the Worker that owns the file, with the end of the log.
-9. **End the session.** Push the result. Save the base as the next version of its volume when the work changed what a session starts from. `memory` `write`: the volume version and the open work. Delete every workspace, the clones and the base included.
+9. **End the session.** Push the result. Save the base as the next version of its volume when the work changed what a session starts from, with a `description` that still says what is inside and its `tags`. `memory` `write`: the volume version and the open work. Delete every workspace, the clones and the base included.
 
 ## What makes a contract good
 
