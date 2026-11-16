@@ -24,7 +24,8 @@ One word, one meaning. All work runs in the context of one team: a person's own 
 9. **Pipeline.** A versioned JSON definition of jobs in a graph; each job runs its steps in its own capsule; a run starts one version by hand, on a schedule, from a webhook, or after another pipeline.
 10. **Secrets and variables.** A variable is `NAME=value` in the `env` of a workspace, service, capsule or job. A secret is a named value of an owner; a variable refers to it as the whole value `${{ secrets.NAME }}`. No one reads a value back.
 11. **Connector.** A link from an owner to a code host (GitHub, GitLab) or a container registry: read-only clone over HTTPS; image push and private pull. Connected in the web console.
-12. **TTL and quota.** A TTL (`ttl_secs`, 10 minutes to 30 days) deletes a workspace, environment or desk that stays unused past it. Quota is the owner's ceiling on workspaces, environments, snapshots, capsules, disk, cpu and memory; the `quota` tool reads it.
+12. **Memory.** The current structure of a project, kept by the `memory` tool for a cold start: its environments, named volumes, desks and their purpose, how to run and test it, the team's conventions, and your own open work. One document for one project, owned by the team; only a Coordinator writes it, and it says what is, never what happened.
+13. **TTL and quota.** A TTL (`ttl_secs`, 10 minutes to 30 days) deletes a workspace, environment or desk that stays unused past it. Quota is the owner's ceiling on workspaces, environments, snapshots, capsules, disk, cpu and memory; the `quota` tool reads it.
 
 **"Sandbox" is not a Kode object.** It is the general idea, not a resource. When the user asks for a sandbox, give a workspace, unless they ask for one command or a throwaway run, which is a capsule.
 
@@ -81,7 +82,7 @@ team ─┬─ desk ── joins ──> workspaces, capsules ──> environmen
 
 ## Agent types and topologies
 
-An agent is a session. One session that works alone holds both roles below: it talks to the user and it works in its workspace. The split starts when work is delegated. `references/permissions.md` gives each tool action for each type.
+An agent is a session. There are two types. Which one you are is decided by capability, not by host: if you hold a tool that starts another agent, you are a Coordinator and may delegate; if you hold none, read "When you cannot delegate" below. `references/permissions.md` gives each tool action for each type.
 
 - **Coordinator.** Talks to the user, owns the plan and the three budgets, picks the topology, starts and stops Workers. Creates and deletes workspaces, environments and desks. It is the only agent that makes a declared, shared artifact (a named base volume, a team environment, a saved pipeline with a trigger). After it delegates, it does not edit or run code: it reads the Worker's artifact first (report, diff, test output), opens one file only to check one claim, and when it wants a command run, it asks a Worker or a capsule for the exit code and the end of the log.
 - **Worker.** One session with the resources that it created or that the brief names. Full freedom inside that scope, nothing outside it. It ends with persist, then stop or delete, and leaves `REPORT.md` (`references/worker-templates.md`). A Worker can start sub-Workers with four limits: only in a clone of its own workspace; the same scope, never wider; the report comes back as an artifact; one level deep. A new environment or a new desk comes from the Coordinator.
@@ -89,6 +90,15 @@ An agent is a session. One session that works alone holds both roles below: it t
 Topologies. **Solo:** one session, one workspace; the default. **Conductor:** one session drives many workspaces or capsules that need no memory of each other (parallel experiments, a test matrix). **Delegation:** the Coordinator gives each Worker its own workspace and a brief; the work is independent, parallel and verifiable, and the hand-off is an artifact. **Pipeline:** the work repeats or follows an event; make a proven Worker workflow a saved pipeline.
 
 You make the plan and you execute it: say the topology in one line, then build it. When no use case fits, compose from the primitives: a snapshot is a commit of a whole machine or a whole system, an intercept is a swap of one service for live code, a capsule is a function call with a file system. Ask what becomes possible when these cost almost nothing, and leave only what a person can read.
+
+## When you cannot delegate
+
+A session with no tool that starts another agent is the Coordinator and does the Worker's work itself. It holds both columns of `references/permissions.md`; the human gate for what cannot be undone stays.
+
+1. **Topologies.** Solo, Conductor and Pipeline work as written. Delegation is out: do not plan work for Workers that cannot exist, and do not wait for a report that nobody will write.
+2. **Parallel work.** Capsules, detached processes and pipelines still run in parallel. One context thinks, so keep the plan short and finish one thing before the next.
+3. **Context.** Nobody else absorbs noise. Push a long or noisy run into a capsule or a detached process, and take back only the exit code and the end of the log, as a Coordinator would.
+4. **Hand-off to yourself.** Write the brief before the work and `REPORT.md` at the end anyway. They carry the work across compaction and into a later session: the next session starts by reading them.
 
 ## Device workspaces
 
@@ -120,7 +130,7 @@ Use a tool, not a command. Two things have no tool: connecting a provider (the w
 
 ## How to work
 
-1. **Orient first.** Call `status`, `desk` with `action: "list"`, `workspace` with `action: "list"` (the owner's workspaces; `thisDesk` marks this desk's), then `env` with `action: "get"` of the desk's environment, before any create. Say in one line what exists.
+1. **Orient first.** Call `status`, then `memory` with `action: "read"` (the project as it is, and your open work), `desk` with `action: "list"`, `workspace` with `action: "list"` (the owner's workspaces; `thisDesk` marks this desk's), then `env` with `action: "get"` of the desk's environment, before any create. Say in one line what exists.
 2. **Scope is this desk.** The tools reach everything of the owner; a task is about this desk's workspaces and environment unless the person names another object. Outside the desk, act only on an explicit name or id.
 3. **Reuse for the same job; clone for isolation.** A workspace that holds the repo, an environment that runs the app, a desk on it: use them. Create what is missing, and clone when the work must not disturb the original. Name each object in the answer.
 4. **Derive the set-up from the repository.** Read `docker-compose.yml`, `.env.example`, `README`, `Procfile`, `package.json`, `go.mod`, `pyproject.toml`, `Cargo.toml`: they give services, ports, variables and packages. Ask the user only what the repo does not say (which registry, which environment to share).
@@ -175,6 +185,7 @@ The tools act on one desk. Most tools are one per resource: `action` picks the v
 | Intercepts | `intercept` | none |
 | Volumes | `volume`, `snapshot` | `volume`: `list`, `get`, `delete`; `snapshot`: `delete` |
 | Account | `quota`, `regions`, `devices`, `requests_list`, `request_get`, `request_create` | none |
+| Memory | `memory` | `memory`: `read`, `write`, `list` |
 | Capsules | `capsule` | `capsule`: `create`, `get`, `list`, `wait`, `logs`, `delete` |
 | Pipelines | `pipeline`, `run`, `webhook_rotate` | `pipeline`: `list`, `get`, `save`, `delete`; `run`: `start`, `list`, `get`, `wait`, `logs`, `cancel` |
 | Secrets and connectors | `secret_set`, `secret_list`, `secret_delete`, `connector_list` | none |
