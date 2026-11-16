@@ -119,9 +119,15 @@ const ENV = { type: "string", description: "The environment id or name." };
 const N = { type: "number" };
 const I = { type: "integer" };
 const SL = { type: "array", items: S };
+/** A snapshot reference, as `/v1` resolves it wherever a snapshot is named. */
+const SNAP_REF = "a volume name (its newest version), `name@N`, `name@<tag>` or a snapshot id";
 /** What a volume says about itself, set at a push or with `volume describe`: a cold session picks its volumes from these. */
 const DESCRIPTION = { type: "string", description: "What the volume holds and what it is for (at most 500 characters). Set it on the first snapshot; a later value replaces it." };
-const TAGS = { type: "array", items: S, description: "Up to 8 short labels (lowercase letters, digits, hyphens), such as `base`, `wip`, `test` and the project name. A later value replaces the set." };
+const LABELS = { type: "array", items: S, description: "Up to 8 short labels on the volume, for finding it (lowercase letters, digits, hyphens), such as the project name, `wip` and `test`. A later value replaces the set." };
+/** A tag is a movable name on ONE snapshot of a volume, as a git tag is on a commit: `shop-base@base`. */
+const SNAP_TAGS = { type: "array", items: S, description: "Tags to put on this snapshot, such as `[\"base\"]`: each is a movable name read as `name@<tag>`, and one that another version holds moves here." };
+const TAG = { type: "string", description: "The tag name: lowercase letters, digits and hyphens; not a number and not `latest`." };
+const NAMED_VOLUME = { type: "string", description: "The volume's given name." };
 const OBJ = { type: "object" };
 const SERVICE = {
   type: "object",
@@ -405,8 +411,8 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
     }
     return { ...snapshot, note: "still being written; it lists in volume get once ready" };
   };
-  const snapAct = wact({ message: S, volume: VOLUME, description: DESCRIPTION, tags: TAGS }, [], async (a) => {
-    const snapshot = await settled(JSON.parse(await api("POST", `${wsPath(a)}/snapshots`, strip({ message: a.message, volume: a.volume, description: a.description, tags: a.tags }))));
+  const snapAct = wact({ message: S, volume: VOLUME, description: DESCRIPTION, labels: LABELS, tags: SNAP_TAGS }, [], async (a) => {
+    const snapshot = await settled(JSON.parse(await api("POST", `${wsPath(a)}/snapshots`, strip({ message: a.message, volume: a.volume, description: a.description, labels: a.labels, tags: a.tags }))));
     // the POST succeeded: a failed re-read must not turn a saved snapshot into an error
     try { return JSON.stringify({ ...JSON.parse(await api("GET", wsPath(a))), snapshot }, null, 2); }
     catch (e) { return JSON.stringify({ snapshot, note: `saved; the workspace was not re-read: ${(e as Error).message}` }, null, 2); }
@@ -427,7 +433,7 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
               const ses = process.env.KD_DESK;
               return thenWaitWs(ses ? await api("POST", `/v1/desks/${seg(ses)}/workspaces`, strip(body)) : await api("POST", "/v1/workspaces", strip({ team: a.team, ...body })), a);
             }),
-            restore: act({ name: S, snapshot_id: { type: "string", description: "A volume name, `name@N` or a snapshot id." }, team: S, image: S, packages: SL, ...WAITING }, ["name", "snapshot_id"], async (a) =>
+            restore: act({ name: S, snapshot_id: { type: "string", description: `What to restore: ${SNAP_REF}.` }, team: S, image: S, packages: SL, ...WAITING }, ["name", "snapshot_id"], async (a) =>
               thenWaitWs(await api("POST", "/v1/workspaces/restore", strip({ name: a.name, snapshot_id: a.snapshot_id, team: a.team, image: a.image, packages: a.packages })), a)),
             start: mact(WAITING, [], async (a) => thenWaitWs(await api("POST", `/v1/workspaces/${seg(a.workspace)}/start`), a, { ws: a.workspace, reread: true })),
             stop: mact(WAITING, [], async (a) => thenWaitWs(await api("POST", `/v1/workspaces/${seg(a.workspace)}/stop`), a, { stopped: true, ws: a.workspace })),
@@ -471,7 +477,7 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
         : {
             list: act({ team: S }, [], async (a) => api("GET", `/v1/environments${qs({ owner: a.team })}`)),
             get: eact({}, [], async (env) => (await wake(env), envView(env))),
-            create: act({ name: S, services: { type: "array", items: SERVICE }, team: S, region: S, source: { type: "string", description: "An environment (id or name) to clone live, or a snapshot id to restore into a new environment. Omit it for an empty one. A clone shares its source's volume and history: its snapshots appear there and take the source's volume name." }, ...WAITING }, ["name"], async (a) => {
+            create: act({ name: S, services: { type: "array", items: SERVICE }, team: S, region: S, source: { type: "string", description: `An environment (id or name) to clone live, or a snapshot to restore into a new environment: ${SNAP_REF}. Omit it for an empty one. A clone shares its source's volume and history: its snapshots appear there and take the source's volume name.` }, ...WAITING }, ["name"], async (a) => {
               const services = a.services?.map(withServiceDefaults);
               if (a.source) {
                 const r = await raw("GET", `/v1/environments/${seg(a.source)}`);
@@ -486,12 +492,12 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
             delete: eact({}, [], async (env) => deleting(`/v1/environments/${env}`, () => api("DELETE", `/v1/environments/${env}`))),
             wait: eact({ timeout_ms: TIMEOUT }, [], async (env, a) => (await wake(env), waitEnv(env, a))),
             ttl: eact({ ttl_secs: TTL, clear: CLEAR }, [], async (env, a) => { const b = ttlBody(a); return typeof b === "string" ? b : (await api("PUT", `/v1/environments/${env}/ttl`, b), envView(env)); }),
-            snapshot: eact({ message: S, volume: VOLUME, description: DESCRIPTION, tags: TAGS }, [], async (env, a) => {
-              const snapshot = await settled(JSON.parse(await api("POST", `/v1/environments/${env}/snapshots`, strip({ message: a.message, volume: a.volume, description: a.description, tags: a.tags }))));
+            snapshot: eact({ message: S, volume: VOLUME, description: DESCRIPTION, labels: LABELS, tags: SNAP_TAGS }, [], async (env, a) => {
+              const snapshot = await settled(JSON.parse(await api("POST", `/v1/environments/${env}/snapshots`, strip({ message: a.message, volume: a.volume, description: a.description, labels: a.labels, tags: a.tags }))));
               try { return JSON.stringify({ ...JSON.parse(await envView(env)), snapshot }, null, 2); }
               catch (e) { return JSON.stringify({ snapshot, note: `saved; the environment was not re-read: ${(e as Error).message}` }, null, 2); }
             }),
-            restore: eact({ source: { type: "string", description: "A volume name, `name@N` or a snapshot id." }, discard: { type: "array", items: S, description: "Names of the services from the 409 `lost` list whose data you accept losing." }, ...WAITING }, ["source"], async (env, a) => {
+            restore: eact({ source: { type: "string", description: `What to restore: ${SNAP_REF}.` }, discard: { type: "array", items: S, description: "Names of the services from the 409 `lost` list whose data you accept losing." }, ...WAITING }, ["source"], async (env, a) => {
               // an in-place restore keeps the environment "running" throughout, so done is the restore
               // having landed (`restore_requested_at` moved on) with every service back and ready
               const before = (await apiJson<any>("GET", `/v1/environments/${env}`).catch(() => undefined))?.restore_requested_at;
@@ -614,6 +620,12 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
 function mainOnly(tickMs: number): ToolDef[] {
   const sbx = (a: any) => `/v1/capsules/${seg(a.capsule)}`;
   const own = (a: any) => a.owner || process.env.KD_TEAM;
+  /** The owner a volume name is looked up under: a name is unique per owner, so the name routes are keyed by both. */
+  const nameOwner = (a: any): string => {
+    const owner = own(a);
+    if (!owner) throw new Error("`owner` is required: there is no desk team to default to");
+    return owner;
+  };
   const pipe = (a: any) => `/v1/pipelines/${seg(own(a))}/${seg(a.pipeline)}`;
   const run = (a: any) => `${pipe(a)}/runs/${seg(a.run)}`;
   const secret = (a: any) => `/v1/secrets/${seg(a.owner ?? process.env.KD_TEAM)}${a.mine ? "/mine" : ""}`;
@@ -636,7 +648,7 @@ function mainOnly(tickMs: number): ToolDef[] {
   };
   return [
     resource("capsule", "Capsules: an isolated container that runs one command and ends when it exits. Actions: create, get, list, wait, logs, delete (ends a running one first).", {
-      create: act({ command: { oneOf: [S, SL], description: "A shell string (run with `sh -c`), or an argv array." }, image: S, packages: SL, variables: { type: "object", additionalProperties: S, description: "Environment variables for the command. A value of exactly `${{ secrets.NAME }}` reads a secret." }, lifetime_s: { ...I, description: "The capsule's hard lifetime in seconds, 10 to 86400 (default 300). It ends when the command exits or this runs out." }, team: TEAMSLUG, from_workspace: { type: "string", description: "A workspace of yours (id, name or `team/name`) whose current files the capsule starts as, uncommitted work included." }, from_snapshot: { type: "string", description: "A snapshot id or `name@N` reference whose files the capsule starts as." }, ...WAITING }, ["command"], async (a) => {
+      create: act({ command: { oneOf: [S, SL], description: "A shell string (run with `sh -c`), or an argv array." }, image: S, packages: SL, variables: { type: "object", additionalProperties: S, description: "Environment variables for the command. A value of exactly `${{ secrets.NAME }}` reads a secret." }, lifetime_s: { ...I, description: "The capsule's hard lifetime in seconds, 10 to 86400 (default 300). It ends when the command exits or this runs out." }, team: TEAMSLUG, from_workspace: { type: "string", description: "A workspace of yours (id, name or `team/name`) whose current files the capsule starts as, uncommitted work included." }, from_snapshot: { type: "string", description: `The snapshot whose files the capsule starts as: ${SNAP_REF}.` }, ...WAITING }, ["command"], async (a) => {
         const cmd = Array.isArray(a.command) ? a.command : ["sh", "-c", String(a.command)];
         const body = { cmd, image: a.image, packages: a.packages, env: a.variables, timeout_secs: a.lifetime_s ?? a.timeout_s, from_workspace: a.from_workspace, from_snapshot: a.from_snapshot };
         const ses = process.env.KD_DESK;
@@ -658,8 +670,8 @@ function mainOnly(tickMs: number): ToolDef[] {
         return JSON.stringify({ ...doc, state: "deleted" }, null, 2);
       }),
     }),
-    resource("volume", "Volumes: the stored state of workspaces and environments, each with a name, a description and tags. Actions: list (filter by `tag`), get (history and branch tips), describe (set `description` and `tags`), delete a detached volume.", {
-      list: act({ kind: S, owner: S, tag: { type: "string", description: "Keep only volumes that carry this tag." } }, [], async (a) => api("GET", `/v1/volumes${qs({ kind: a.kind, owner: a.owner, tag: a.tag })}`)),
+    resource("volume", "Volumes: the stored state of workspaces and environments, each with a name, a description, labels and numbered versions; a tag is a movable name on one version (`name@<tag>`). Actions: list (filter by `label`), get (history with each version's tags, and branch tips), describe (set `description` and `labels`), tag (put or move a tag onto a version), untag, delete a detached volume.", {
+      list: act({ kind: S, owner: S, label: { type: "string", description: "Keep only volumes that carry this label." } }, [], async (a) => api("GET", `/v1/volumes${qs({ kind: a.kind, owner: a.owner, label: a.label })}`)),
       get: act({ volume: { type: "string", description: "The volume's id or its given name." } }, ["volume"], async (a) => {
         // /history and /refs are keyed by the volume id; a name given at a snapshot is a claim on the list row
         const rows = await apiJson<any[]>("GET", "/v1/volumes").catch(() => []);
@@ -669,16 +681,22 @@ function mainOnly(tickMs: number): ToolDef[] {
         const [history, refs] = await Promise.all([api("GET", `/v1/volumes/${seg(id)}/history?include=working`), api("GET", `/v1/volumes/${seg(id)}/refs`)]);
         // `working` and each row's `working_copies` come from the api untouched; an object answer ({history, working}) is spread, a bare list stays `history`
         const h = JSON.parse(history);
-        // the description and tags live on the name claim, which only the list row carries
-        return JSON.stringify({ volume: a.volume, ...strip({ description: row?.description, tags: row?.tags }), ...(Array.isArray(h) ? { history: h } : h), refs: JSON.parse(refs) }, null, 2);
+        // the description, labels and tags ({tag: version}) live on the name claim, which only the list row carries;
+        // each history entry carries its own `tags` from the api
+        return JSON.stringify({ volume: a.volume, ...strip({ description: row?.description, labels: row?.labels, tags: row?.tags }), ...(Array.isArray(h) ? { history: h } : h), refs: JSON.parse(refs) }, null, 2);
       }),
-      describe: act({ volume: { type: "string", description: "The volume's given name." }, owner: OWNER_DEFAULT, description: DESCRIPTION, tags: TAGS }, ["volume"], async (a) => {
+      describe: act({ volume: NAMED_VOLUME, owner: OWNER_DEFAULT, description: DESCRIPTION, labels: LABELS }, ["volume"], async (a) => {
         // an empty string and an empty list are values (they clear), so only an absent field is left out
-        if (a.description === undefined && a.tags === undefined) throw new Error("give `description` or `tags` (an empty string or an empty list clears)");
-        const owner = own(a);
-        if (!owner) throw new Error("`owner` is required: there is no desk team to default to");
-        return api("PATCH", `/v1/volumes/${seg(owner)}/${seg(a.volume)}`, strip({ description: a.description, tags: a.tags }));
+        if (a.description === undefined && a.labels === undefined) throw new Error("give `description` or `labels` (an empty string or an empty list clears)");
+        return api("PATCH", `/v1/volumes/${seg(nameOwner(a))}/${seg(a.volume)}`, strip({ description: a.description, labels: a.labels }));
       }),
+      tag: act({ volume: NAMED_VOLUME, owner: OWNER_DEFAULT, tag: TAG, version: { ...I, description: "The version number to tag (the N of `name@N`). Give this or `snapshot`." }, snapshot: { type: "string", description: "The snapshot id to tag. Give this or `version`." } }, ["volume", "tag"], async (a) => {
+        // the route takes exactly one target; refused here so a model reads which, not a 422
+        if ((a.version === undefined) === (a.snapshot === undefined)) throw new Error("give exactly one of `version` or `snapshot`");
+        // the path is spelled at the call, as every /v1 call here is: the api's audience test reads this file for them
+        return api("PUT", `/v1/volumes/${seg(nameOwner(a))}/${seg(a.volume)}/tags/${seg(a.tag)}`, strip({ version: a.version, snapshot: a.snapshot }));
+      }),
+      untag: act({ volume: NAMED_VOLUME, owner: OWNER_DEFAULT, tag: TAG }, ["volume", "tag"], async (a) => (await api("DELETE", `/v1/volumes/${seg(nameOwner(a))}/${seg(a.volume)}/tags/${seg(a.tag)}`), JSON.stringify({ volume: a.volume, tag: a.tag, state: "untagged" }, null, 2))),
       delete: act({ volume: S }, ["volume"], async (a) => (await api("DELETE", `/v1/volumes/${seg(a.volume)}`), JSON.stringify({ volume: a.volume, state: "deleted" }, null, 2))),
     }),
     resource("snapshot", "Snapshots of a volume. Action: delete one.", {

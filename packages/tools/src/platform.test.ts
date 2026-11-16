@@ -847,64 +847,117 @@ test("memory write is a patch and refuses anything but one of edits, content, de
   await expect(t.run({ action: "read", project: "a", owner: "b" })).rejects.toThrow("same thing");
 });
 
-test("the push tools pass description and tags, and leave out what was not given", async () => {
+test("the push tools pass description, labels and snapshot tags, and leave out what was not given", async () => {
   routes["POST /v1/workspaces/w1/snapshots"] = json({});
   routes["POST /v1/environments/e1/snapshots"] = json({});
   routes["GET /v1/workspaces/w1"] = json({ id: "w1", state: "ready" });
   routes["GET /v1/environments/e1"] = json({ id: "e1", state: "running", services: [] });
   const post = (n: number) => calls.filter((c) => c.method === "POST")[n]!.body;
-  await tool(platformTools("main"), "workspace_snapshot").run({ workspace: "w1", volume: "pg", description: "Postgres 16 with the seed data", tags: ["base", "shop"] });
-  expect(post(0)).toEqual({ volume: "pg", description: "Postgres 16 with the seed data", tags: ["base", "shop"] });
+  await tool(platformTools("main"), "workspace_snapshot").run({ workspace: "w1", volume: "pg", description: "Postgres 16 with the seed data", labels: ["shop", "test"], tags: ["base"] });
+  // `labels` are the volume's, `tags` go on the snapshot this push makes: two fields of the body
+  expect(post(0)).toEqual({ volume: "pg", description: "Postgres 16 with the seed data", labels: ["shop", "test"], tags: ["base"] });
   await tool(platformTools("workspace", "w1"), "workspace_snapshot").run({ message: "m", tags: ["wip"] });
   expect(post(1)).toEqual({ message: "m", tags: ["wip"] });
-  await tool(platformTools("main"), "env_snapshot").run({ env: "e1", volume: "pg", description: "d", tags: [] });
-  expect(post(2)).toEqual({ volume: "pg", description: "d", tags: [] });
+  await tool(platformTools("main"), "env_snapshot").run({ env: "e1", volume: "pg", description: "d", labels: [], tags: ["base", "green"] });
+  expect(post(2)).toEqual({ volume: "pg", description: "d", labels: [], tags: ["base", "green"] });
+  await tool(platformTools("main"), "env_snapshot").run({ env: "e1", message: "m" });
+  expect(post(3)).toEqual({ message: "m" });
+  for (const t of ["workspace", "env"]) {
+    const p = (platformTools("main").find((x) => x.name === t)!.inputSchema as any).properties;
+    expect(p.labels.description).toContain("labels on the volume");
+    expect(p.tags.description).toContain("Tags to put on this snapshot");
+  }
 });
 
-test("volume list filters by tag; get adds the description and tags of the list row", async () => {
+test("every argument that names a snapshot says it takes a name, name@N, name@<tag> or an id", () => {
+  const props = (n: string) => (platformTools("main").find((x) => x.name === n)!.inputSchema as any).properties;
+  const ref = "a volume name (its newest version), `name@N`, `name@<tag>` or a snapshot id";
+  for (const d of [props("workspace").snapshot_id.description, props("env").source.description, props("capsule").from_snapshot.description]) expect(d).toContain(ref);
+});
+
+test("volume list filters by label; get adds the description, labels and tags of the list row", async () => {
   const t = platformTools("main");
-  routes["GET /v1/volumes?owner=acme&tag=base"] = json([{ id: "ws-ab12", name: "pg" }]);
-  expect(JSON.parse(await tool(t, "volume_list").run({ owner: "acme", tag: "base" }))).toEqual([{ id: "ws-ab12", name: "pg" }]);
-  routes["GET /v1/volumes"] = json([{ id: "ws-ab12", name: "pg", description: "Postgres 16", tags: ["base", "shop"] }, { id: "ws-cd34", name: null, description: null, tags: [] }]);
+  routes["GET /v1/volumes?owner=acme&label=shop"] = json([{ id: "ws-ab12", name: "pg" }]);
+  expect(JSON.parse(await tool(t, "volume_list").run({ owner: "acme", label: "shop" }))).toEqual([{ id: "ws-ab12", name: "pg" }]);
+  // the old filter is no argument any more: it must not reach the query as `tag`
+  await expect(tool(t, "volume_list").run({ owner: "acme", tag: "base" })).rejects.toThrow();
+  routes["GET /v1/volumes"] = json([{ id: "ws-ab12", name: "pg", description: "Postgres 16", labels: ["shop", "test"], tags: { base: 1 } }, { id: "ws-cd34", name: null, description: null, labels: [], tags: {} }]);
   for (const id of ["ws-ab12", "ws-cd34"]) {
-    routes[`GET /v1/volumes/${id}/history?include=working`] = json([{ id: "s1" }]);
+    // each history entry's own tags come from the api untouched
+    routes[`GET /v1/volumes/${id}/history?include=working`] = json([{ id: "s1", version: 1, tags: ["base"] }]);
     routes[`GET /v1/volumes/${id}/refs`] = json({});
   }
   // by name and by id alike: the row is the same one
-  for (const volume of ["pg", "ws-ab12"]) expect(JSON.parse(await tool(t, "volume_get").run({ volume }))).toEqual({ volume, description: "Postgres 16", tags: ["base", "shop"], history: [{ id: "s1" }], refs: {} });
-  expect(JSON.parse(await tool(t, "volume_get").run({ volume: "ws-cd34" }))).toMatchObject({ description: null, tags: [] });
+  for (const volume of ["pg", "ws-ab12"]) expect(JSON.parse(await tool(t, "volume_get").run({ volume }))).toEqual({ volume, description: "Postgres 16", labels: ["shop", "test"], tags: { base: 1 }, history: [{ id: "s1", version: 1, tags: ["base"] }], refs: {} });
+  expect(JSON.parse(await tool(t, "volume_get").run({ volume: "ws-cd34" }))).toMatchObject({ description: null, labels: [], tags: {} });
 });
 
 test("volume describe PATCHes the name under its owner, sends only what was given, and refuses neither", async () => {
   const t = platformTools("main");
-  const doc = { id: "ws-ab12", name: "pg", description: "Postgres 16", tags: ["base"] };
+  const doc = { id: "ws-ab12", name: "pg", description: "Postgres 16", labels: ["shop"], tags: {} };
   routes["PATCH /v1/volumes/acme/pg"] = json(doc);
   routes["PATCH /v1/volumes/alice/pg"] = json(doc);
   const patches = () => calls.filter((c) => c.method === "PATCH").map((c) => [c.url, c.body]);
   process.env.KD_TEAM = "acme";
   try {
     // the owner defaults to the desk's team, as the pipeline tools' does
-    expect(JSON.parse(await tool(t, "volume_describe").run({ volume: "pg", description: "Postgres 16", tags: ["base"] }))).toEqual(doc);
-    await tool(t, "volume_describe").run({ volume: "pg", owner: "alice", tags: ["wip"] });
+    expect(JSON.parse(await tool(t, "volume_describe").run({ volume: "pg", description: "Postgres 16", labels: ["shop"] }))).toEqual(doc);
+    await tool(t, "volume_describe").run({ volume: "pg", owner: "alice", labels: ["wip"] });
     // "" and [] clear, so they are sent
     await tool(t, "volume_describe").run({ volume: "pg", description: "" });
-    await tool(t, "volume_describe").run({ volume: "pg", tags: [] });
+    await tool(t, "volume_describe").run({ volume: "pg", labels: [] });
     expect(patches()).toEqual([
-      ["/v1/volumes/acme/pg", { description: "Postgres 16", tags: ["base"] }],
-      ["/v1/volumes/alice/pg", { tags: ["wip"] }],
+      ["/v1/volumes/acme/pg", { description: "Postgres 16", labels: ["shop"] }],
+      ["/v1/volumes/alice/pg", { labels: ["wip"] }],
       ["/v1/volumes/acme/pg", { description: "" }],
-      ["/v1/volumes/acme/pg", { tags: [] }],
+      ["/v1/volumes/acme/pg", { labels: [] }],
     ]);
-    await expect(tool(t, "volume_describe").run({ volume: "pg" })).rejects.toThrow("give `description` or `tags`");
-    await expect(tool(t, "volume_describe").run({ volume: "pg", description: null })).rejects.toThrow("give `description` or `tags`");
+    await expect(tool(t, "volume_describe").run({ volume: "pg" })).rejects.toThrow("give `description` or `labels`");
+    await expect(tool(t, "volume_describe").run({ volume: "pg", description: null })).rejects.toThrow("give `description` or `labels`");
+    // describe sets labels only: a snapshot tag is `volume tag`'s, so `tags` is no argument here
+    await expect(tool(t, "volume_describe").run({ volume: "pg", tags: ["base"] })).rejects.toThrow();
     expect(patches().length).toBe(4);
   } finally {
     delete process.env.KD_TEAM;
   }
-  await expect(tool(t, "volume_describe").run({ volume: "pg", tags: ["wip"] })).rejects.toThrow("`owner` is required");
-  routes["PATCH /v1/volumes/acme/pg"] = json({ error: "tags: at most 8" }, 422);
-  await expect(tool(t, "volume_describe").run({ volume: "pg", owner: "acme", tags: ["a"] })).rejects.toThrow("422: tags: at most 8");
+  await expect(tool(t, "volume_describe").run({ volume: "pg", labels: ["wip"] })).rejects.toThrow("`owner` is required");
+  routes["PATCH /v1/volumes/acme/pg"] = json({ error: "labels: at most 8" }, 422);
+  await expect(tool(t, "volume_describe").run({ volume: "pg", owner: "acme", labels: ["a"] })).rejects.toThrow("422: labels: at most 8");
   const v = t.find((x) => x.name === "volume")!;
-  expect((v.inputSchema as any).properties.action.enum).toEqual(["list", "get", "describe", "delete"]);
-  expect(v.description).toBe("Volumes: the stored state of workspaces and environments, each with a name, a description and tags. Actions: list (filter by `tag`), get (history and branch tips), describe (set `description` and `tags`), delete a detached volume.");
+  expect((v.inputSchema as any).properties.action.enum).toEqual(["list", "get", "describe", "tag", "untag", "delete"]);
+  expect(v.description).toBe("Volumes: the stored state of workspaces and environments, each with a name, a description, labels and numbered versions; a tag is a movable name on one version (`name@<tag>`). Actions: list (filter by `label`), get (history with each version's tags, and branch tips), describe (set `description` and `labels`), tag (put or move a tag onto a version), untag, delete a detached volume.");
+});
+
+test("volume tag PUTs one target under the owner and the name; untag DELETEs the same path", async () => {
+  const t = platformTools("main");
+  const doc = { id: "ws-ab12", name: "pg", labels: ["shop"], tags: { base: 3 } };
+  routes["PUT /v1/volumes/acme/pg/tags/base"] = json(doc);
+  routes["PUT /v1/volumes/alice/pg/tags/green"] = json(doc);
+  routes["DELETE /v1/volumes/acme/pg/tags/base"] = () => new Response(null, { status: 204 });
+  const sent = (m: string) => calls.filter((c) => c.method === m).map((c) => [c.url, c.body]);
+  process.env.KD_TEAM = "acme";
+  try {
+    // the owner defaults to the desk's team; the answer is the named volume the api answers
+    expect(JSON.parse(await tool(t, "volume_tag").run({ volume: "pg", tag: "base", version: 3 }))).toEqual(doc);
+    await tool(t, "volume_tag").run({ volume: "pg", owner: "alice", tag: "green", snapshot: "snap-9f" });
+    expect(sent("PUT")).toEqual([
+      ["/v1/volumes/acme/pg/tags/base", { version: 3 }],
+      ["/v1/volumes/alice/pg/tags/green", { snapshot: "snap-9f" }],
+    ]);
+    // exactly one target: neither and both are refused before any request
+    for (const extra of [{}, { version: 3, snapshot: "snap-9f" }, { version: null }]) await expect(tool(t, "volume_tag").run({ volume: "pg", tag: "base", ...extra })).rejects.toThrow("exactly one of `version` or `snapshot`");
+    await expect(tool(t, "volume_tag").run({ volume: "pg", version: 3 })).rejects.toThrow("tag");
+    expect(sent("PUT").length).toBe(2);
+    expect(JSON.parse(await tool(t, "volume_untag").run({ volume: "pg", tag: "base" }))).toEqual({ volume: "pg", tag: "base", state: "untagged" });
+    expect(sent("DELETE")).toEqual([["/v1/volumes/acme/pg/tags/base", undefined]]);
+    // the api's sentences come back as written
+    routes["PUT /v1/volumes/acme/pg/tags/base"] = json({ error: "volume pg has no version 9" }, 404);
+    await expect(tool(t, "volume_tag").run({ volume: "pg", tag: "base", version: 9 })).rejects.toThrow("404: volume pg has no version 9");
+    routes["DELETE /v1/volumes/acme/pg/tags/base"] = json({ error: "volume pg has no tag base" }, 404);
+    await expect(tool(t, "volume_untag").run({ volume: "pg", tag: "base" })).rejects.toThrow("404: volume pg has no tag base");
+  } finally {
+    delete process.env.KD_TEAM;
+  }
+  await expect(tool(t, "volume_tag").run({ volume: "pg", tag: "base", version: 1 })).rejects.toThrow("`owner` is required");
+  await expect(tool(t, "volume_untag").run({ volume: "pg", tag: "base" })).rejects.toThrow("`owner` is required");
 });
