@@ -405,7 +405,7 @@ for (const [name, args, method, url, body] of CASES) {
 }
 
 test("the component tools are in main and all, never in a workspace desk", () => {
-  const names = ["capsule", "volume", "snapshot", "pipeline", "run", "worktree", "workspace_vars", "webhook_rotate", "secret_set", "secret_list", "secret_delete", "connector_list"];
+  const names = ["capsule", "volume", "snapshot", "pipeline", "run", "workspace_vars", "webhook_rotate", "secret_set", "secret_list", "secret_delete", "connector_list"];
   for (const k of ["main", "all"] as const) for (const n of names) expect(platformTools(k, "w1").map((t) => t.name)).toContain(n);
   for (const n of names) expect(platformTools("workspace", "w1").map((t) => t.name)).not.toContain(n);
 });
@@ -761,13 +761,15 @@ test("volume get resolves a given name to the volume id", async () => {
   expect(JSON.parse(await tool(platformTools("main"), "volume_get").run({ volume: "pg" })).history).toEqual([{ id: "s1" }]);
 });
 
-test("worktree add waits for the row and says how to reach it; request_create echoes the title; quota defaults to KD_TEAM", async () => {
+test("no worktree tool and no tree argument; request_create echoes the title; quota defaults to KD_TEAM", async () => {
   const t = platformTools("main", undefined, 1);
-  routes["POST /v1/workspaces/w1/trees"] = json({ name: "fix", path: "/home/kl/.agents/fix/workspace" }, 202);
-  let n = 0;
-  routes["GET /v1/workspaces/w1"] = () => new Response(JSON.stringify({ trees: n++ < 1 ? [] : [{ name: "fix", ready: true }] }));
-  const w = JSON.parse(await tool(t, "worktree_add").run({ workspace: "w1", name: "fix" }));
-  expect(w).toEqual({ name: "fix", path: "/home/kl/.agents/fix/workspace", note: 'pass tree: "fix" to exec, read and write; the path is not visible from the main tree' });
+  // a workspace has one tree: a second working copy is a clone
+  for (const k of ["main", "all", "workspace"] as const) {
+    const tools = platformTools(k, "w1");
+    expect(tools.map((x) => x.name)).not.toContain("worktree");
+    for (const x of tools) expect(JSON.stringify(x.inputSchema)).not.toContain('"tree"');
+  }
+  await expect(tool(t, "download").run({ workspace: "w1", path: "a", tree: "fix" })).rejects.toThrow();
   routes["POST /v1/requests"] = json({ id: "r1", kind: "other" }, 201);
   expect(JSON.parse(await tool(t, "request_create").run({ kind: "other", reason: "x", title: "T", body: "B" }))).toMatchObject({ id: "r1", title: "T", body: "B" });
   process.env.KD_TEAM = "acme";
@@ -847,54 +849,91 @@ test("memory write is a patch and refuses anything but one of edits, content, de
   await expect(t.run({ action: "read", project: "a", owner: "b" })).rejects.toThrow("same thing");
 });
 
-test("the push tools pass description, labels and snapshot tags, and leave out what was not given", async () => {
+test("the push tools pass description, labels and a branch, and leave out what was not given", async () => {
   routes["POST /v1/workspaces/w1/snapshots"] = json({});
   routes["POST /v1/environments/e1/snapshots"] = json({});
   routes["GET /v1/workspaces/w1"] = json({ id: "w1", state: "ready" });
   routes["GET /v1/environments/e1"] = json({ id: "e1", state: "running", services: [] });
   const post = (n: number) => calls.filter((c) => c.method === "POST")[n]!.body;
-  await tool(platformTools("main"), "workspace_snapshot").run({ workspace: "w1", volume: "pg", description: "Postgres 16 with the seed data", labels: ["shop", "test"], tags: ["base"] });
-  // `labels` are the volume's, `tags` go on the snapshot this push makes: two fields of the body
-  expect(post(0)).toEqual({ volume: "pg", description: "Postgres 16 with the seed data", labels: ["shop", "test"], tags: ["base"] });
-  await tool(platformTools("workspace", "w1"), "workspace_snapshot").run({ message: "m", tags: ["wip"] });
-  expect(post(1)).toEqual({ message: "m", tags: ["wip"] });
-  await tool(platformTools("main"), "env_snapshot").run({ env: "e1", volume: "pg", description: "d", labels: [], tags: ["base", "green"] });
-  expect(post(2)).toEqual({ volume: "pg", description: "d", labels: [], tags: ["base", "green"] });
+  await tool(platformTools("main"), "workspace_snapshot").run({ workspace: "w1", volume: "pg", description: "Postgres 16 with the seed data", labels: ["shop", "test"], branch: "base" });
+  // `labels` are the volume's, `branch` is where this push's commit goes: two fields of the body
+  expect(post(0)).toEqual({ volume: "pg", description: "Postgres 16 with the seed data", labels: ["shop", "test"], branch: "base" });
+  await tool(platformTools("workspace", "w1"), "workspace_snapshot").run({ message: "m", branch: "wip-auth" });
+  expect(post(1)).toEqual({ message: "m", branch: "wip-auth" });
+  await tool(platformTools("main"), "env_snapshot").run({ env: "e1", volume: "pg", description: "d", labels: [], branch: "green" });
+  expect(post(2)).toEqual({ volume: "pg", description: "d", labels: [], branch: "green" });
   await tool(platformTools("main"), "env_snapshot").run({ env: "e1", message: "m" });
   expect(post(3)).toEqual({ message: "m" });
+  // the old list is no argument any more
+  await expect(tool(platformTools("main"), "workspace_snapshot").run({ workspace: "w1", tags: ["base"] })).rejects.toThrow();
   for (const t of ["workspace", "env"]) {
     const p = (platformTools("main").find((x) => x.name === t)!.inputSchema as any).properties;
     expect(p.labels.description).toContain("labels on the volume");
-    expect(p.tags.description).toContain("Tags to put on this snapshot");
+    expect(p.branch).toMatchObject({ type: "string" });
+    expect(p.branch.description).toContain("The branch this storage commit goes on");
+    expect(p.tags).toBeUndefined();
   }
 });
 
-test("every argument that names a snapshot says it takes a name, name@N, name@<tag> or an id", () => {
+test("a push answers the branch it moved and why a fast-forward was refused", async () => {
+  routes["POST /v1/workspaces/w1/snapshots"] = json({ id: "s9", volume: "pg", version: 4, branch: null, detached: "branch base moved to v5 since this workspace was made from v3" });
+  // the history row arrives later and carries the commit's own branches, never the push's verdict
+  routes["GET /v1/volumes/pg/history"] = json([{ id: "s9", version: 4, branches: [] }]);
+  routes["GET /v1/workspaces/w1"] = json({ id: "w1", state: "ready" });
+  const out = JSON.parse(await tool(platformTools("main"), "workspace_snapshot").run({ workspace: "w1" }));
+  expect(out.snapshot).toMatchObject({ id: "s9", version: 4, branch: null, detached: "branch base moved to v5 since this workspace was made from v3", branches: [], phase: "ready" });
+}, 10_000);
+
+test("workspace and env create set ttl_secs on the new object in the same call", async () => {
+  const t = platformTools("main");
+  routes["POST /v1/workspaces"] = json({ id: "w9", state: "creating" }, 201);
+  routes["PUT /v1/workspaces/w9/ttl"] = json({});
+  routes["POST /v1/environments"] = json({ id: "e9", state: "creating" }, 201);
+  routes["PUT /v1/environments/e9/ttl"] = json({});
+  routes["GET /v1/environments/src"] = json({ id: "src" });
+  routes["POST /v1/environments/src/clone"] = json({ id: "e8" }, 201);
+  routes["PUT /v1/environments/e8/ttl"] = json({});
+  expect(JSON.parse(await tool(t, "workspace_create").run({ name: "a", ttl_secs: 3600 }))).toEqual({ id: "w9", state: "creating" });
+  await tool(t, "env_create").run({ name: "b", ttl_secs: 600 });
+  await tool(t, "env_create").run({ name: "c", source: "src", ttl_secs: 7200 });
+  const puts = calls.filter((c) => c.method === "PUT").map((c) => [c.url, c.body]);
+  expect(puts).toEqual([["/v1/workspaces/w9/ttl", { ttl_secs: 3600 }], ["/v1/environments/e9/ttl", { ttl_secs: 600 }], ["/v1/environments/e8/ttl", { ttl_secs: 7200 }]]);
+  // the create body never carries it, and no ttl means no second call
+  expect(calls.find((c) => c.method === "POST" && c.url === "/v1/workspaces")!.body).toEqual({ name: "a" });
+  await tool(t, "workspace_create").run({ name: "d" });
+  expect(calls.filter((c) => c.method === "PUT").length).toBe(3);
+  // a refused ttl fails the answer and names what was made
+  routes["PUT /v1/workspaces/w9/ttl"] = json({ error: "ttl_secs: 600 to 2592000" }, 422);
+  await expect(tool(t, "workspace_create").run({ name: "a", ttl_secs: 3600 })).rejects.toThrow("created w9, but `ttl_secs` was refused");
+  expect((t.find((x) => x.name === "workspace")!.inputSchema as any).properties.ttl_secs.description).toContain("(create, ttl)");
+});
+
+test("every argument that names a snapshot says it takes a name, name@N, name@<branch> or an id", () => {
   const props = (n: string) => (platformTools("main").find((x) => x.name === n)!.inputSchema as any).properties;
-  const ref = "a volume name (its newest version), `name@N`, `name@<tag>` or a snapshot id";
+  const ref = "a volume name (its `base` branch, else its newest commit), `name@N`, `name@<branch>` or a snapshot id";
   for (const d of [props("workspace").snapshot_id.description, props("env").source.description, props("capsule").from_snapshot.description]) expect(d).toContain(ref);
 });
 
-test("volume list filters by label; get adds the description, labels and tags of the list row", async () => {
+test("volume list filters by label; get adds the description, labels and branches of the list row", async () => {
   const t = platformTools("main");
   routes["GET /v1/volumes?owner=acme&label=shop"] = json([{ id: "ws-ab12", name: "pg" }]);
   expect(JSON.parse(await tool(t, "volume_list").run({ owner: "acme", label: "shop" }))).toEqual([{ id: "ws-ab12", name: "pg" }]);
   // the old filter is no argument any more: it must not reach the query as `tag`
   await expect(tool(t, "volume_list").run({ owner: "acme", tag: "base" })).rejects.toThrow();
-  routes["GET /v1/volumes"] = json([{ id: "ws-ab12", name: "pg", description: "Postgres 16", labels: ["shop", "test"], tags: { base: 1 } }, { id: "ws-cd34", name: null, description: null, labels: [], tags: {} }]);
+  routes["GET /v1/volumes"] = json([{ id: "ws-ab12", name: "pg", description: "Postgres 16", labels: ["shop", "test"], branches: { base: 1 } }, { id: "ws-cd34", name: null, description: null, labels: [], branches: {} }]);
   for (const id of ["ws-ab12", "ws-cd34"]) {
-    // each history entry's own tags come from the api untouched
-    routes[`GET /v1/volumes/${id}/history?include=working`] = json([{ id: "s1", version: 1, tags: ["base"] }]);
+    // each history entry's own branches come from the api untouched
+    routes[`GET /v1/volumes/${id}/history?include=working`] = json([{ id: "s1", version: 1, branches: ["base"] }]);
     routes[`GET /v1/volumes/${id}/refs`] = json({});
   }
   // by name and by id alike: the row is the same one
-  for (const volume of ["pg", "ws-ab12"]) expect(JSON.parse(await tool(t, "volume_get").run({ volume }))).toEqual({ volume, description: "Postgres 16", labels: ["shop", "test"], tags: { base: 1 }, history: [{ id: "s1", version: 1, tags: ["base"] }], refs: {} });
-  expect(JSON.parse(await tool(t, "volume_get").run({ volume: "ws-cd34" }))).toMatchObject({ description: null, labels: [], tags: {} });
+  for (const volume of ["pg", "ws-ab12"]) expect(JSON.parse(await tool(t, "volume_get").run({ volume }))).toEqual({ volume, description: "Postgres 16", labels: ["shop", "test"], branches: { base: 1 }, history: [{ id: "s1", version: 1, branches: ["base"] }], refs: {} });
+  expect(JSON.parse(await tool(t, "volume_get").run({ volume: "ws-cd34" }))).toMatchObject({ description: null, labels: [], branches: {} });
 });
 
 test("volume describe PATCHes the name under its owner, sends only what was given, and refuses neither", async () => {
   const t = platformTools("main");
-  const doc = { id: "ws-ab12", name: "pg", description: "Postgres 16", labels: ["shop"], tags: {} };
+  const doc = { id: "ws-ab12", name: "pg", description: "Postgres 16", labels: ["shop"], branches: {} };
   routes["PATCH /v1/volumes/acme/pg"] = json(doc);
   routes["PATCH /v1/volumes/alice/pg"] = json(doc);
   const patches = () => calls.filter((c) => c.method === "PATCH").map((c) => [c.url, c.body]);
@@ -914,8 +953,8 @@ test("volume describe PATCHes the name under its owner, sends only what was give
     ]);
     await expect(tool(t, "volume_describe").run({ volume: "pg" })).rejects.toThrow("give `description` or `labels`");
     await expect(tool(t, "volume_describe").run({ volume: "pg", description: null })).rejects.toThrow("give `description` or `labels`");
-    // describe sets labels only: a snapshot tag is `volume tag`'s, so `tags` is no argument here
-    await expect(tool(t, "volume_describe").run({ volume: "pg", tags: ["base"] })).rejects.toThrow();
+    // describe sets labels only: a branch is `volume branch`'s, so `branches` is no argument here
+    await expect(tool(t, "volume_describe").run({ volume: "pg", branches: ["base"] })).rejects.toThrow();
     expect(patches().length).toBe(4);
   } finally {
     delete process.env.KD_TEAM;
@@ -924,40 +963,42 @@ test("volume describe PATCHes the name under its owner, sends only what was give
   routes["PATCH /v1/volumes/acme/pg"] = json({ error: "labels: at most 8" }, 422);
   await expect(tool(t, "volume_describe").run({ volume: "pg", owner: "acme", labels: ["a"] })).rejects.toThrow("422: labels: at most 8");
   const v = t.find((x) => x.name === "volume")!;
-  expect((v.inputSchema as any).properties.action.enum).toEqual(["list", "get", "describe", "tag", "untag", "delete"]);
-  expect(v.description).toBe("Volumes: the stored state of workspaces and environments, each with a name, a description, labels and numbered versions; a tag is a movable name on one version (`name@<tag>`). Actions: list (filter by `label`), get (history with each version's tags, and branch tips), describe (set `description` and `labels`), tag (put or move a tag onto a version), untag, delete a detached volume.");
+  expect((v.inputSchema as any).properties.action.enum).toEqual(["list", "get", "describe", "branch", "delete_branch", "delete"]);
+  expect(v.description).toBe("Volumes: the stored state of workspaces and environments, each with a name, a description, labels and numbered storage commits; a branch is a movable name on one commit (`name@<branch>`) that a snapshot advances. Actions: list (filter by `label`), get (history with each commit's branches, and the newest commit), describe (set `description` and `labels`), branch (create a branch or move it onto a commit), delete_branch, delete a detached volume.");
 });
 
-test("volume tag PUTs one target under the owner and the name; untag DELETEs the same path", async () => {
+test("volume branch PUTs one target under the owner and the name; delete_branch DELETEs the same path", async () => {
   const t = platformTools("main");
-  const doc = { id: "ws-ab12", name: "pg", labels: ["shop"], tags: { base: 3 } };
-  routes["PUT /v1/volumes/acme/pg/tags/base"] = json(doc);
-  routes["PUT /v1/volumes/alice/pg/tags/green"] = json(doc);
-  routes["DELETE /v1/volumes/acme/pg/tags/base"] = () => new Response(null, { status: 204 });
+  const doc = { id: "ws-ab12", name: "pg", labels: ["shop"], branches: { base: 3 } };
+  routes["PUT /v1/volumes/acme/pg/branches/base"] = json(doc);
+  routes["PUT /v1/volumes/alice/pg/branches/green"] = json(doc);
+  routes["DELETE /v1/volumes/acme/pg/branches/base"] = () => new Response(null, { status: 204 });
   const sent = (m: string) => calls.filter((c) => c.method === m).map((c) => [c.url, c.body]);
   process.env.KD_TEAM = "acme";
   try {
     // the owner defaults to the desk's team; the answer is the named volume the api answers
-    expect(JSON.parse(await tool(t, "volume_tag").run({ volume: "pg", tag: "base", version: 3 }))).toEqual(doc);
-    await tool(t, "volume_tag").run({ volume: "pg", owner: "alice", tag: "green", snapshot: "snap-9f" });
+    expect(JSON.parse(await tool(t, "volume_branch").run({ volume: "pg", branch: "base", version: 3 }))).toEqual(doc);
+    await tool(t, "volume_branch").run({ volume: "pg", owner: "alice", branch: "green", snapshot: "snap-9f" });
     expect(sent("PUT")).toEqual([
-      ["/v1/volumes/acme/pg/tags/base", { version: 3 }],
-      ["/v1/volumes/alice/pg/tags/green", { snapshot: "snap-9f" }],
+      ["/v1/volumes/acme/pg/branches/base", { version: 3 }],
+      ["/v1/volumes/alice/pg/branches/green", { snapshot: "snap-9f" }],
     ]);
     // exactly one target: neither and both are refused before any request
-    for (const extra of [{}, { version: 3, snapshot: "snap-9f" }, { version: null }]) await expect(tool(t, "volume_tag").run({ volume: "pg", tag: "base", ...extra })).rejects.toThrow("exactly one of `version` or `snapshot`");
-    await expect(tool(t, "volume_tag").run({ volume: "pg", version: 3 })).rejects.toThrow("tag");
+    for (const extra of [{}, { version: 3, snapshot: "snap-9f" }, { version: null }]) await expect(tool(t, "volume_branch").run({ volume: "pg", branch: "base", ...extra })).rejects.toThrow("exactly one of `version` or `snapshot`");
+    await expect(tool(t, "volume_branch").run({ volume: "pg", version: 3 })).rejects.toThrow("branch");
     expect(sent("PUT").length).toBe(2);
-    expect(JSON.parse(await tool(t, "volume_untag").run({ volume: "pg", tag: "base" }))).toEqual({ volume: "pg", tag: "base", state: "untagged" });
-    expect(sent("DELETE")).toEqual([["/v1/volumes/acme/pg/tags/base", undefined]]);
+    expect(JSON.parse(await tool(t, "volume_delete_branch").run({ volume: "pg", branch: "base" }))).toEqual({ volume: "pg", branch: "base", state: "deleted" });
+    expect(sent("DELETE")).toEqual([["/v1/volumes/acme/pg/branches/base", undefined]]);
     // the api's sentences come back as written
-    routes["PUT /v1/volumes/acme/pg/tags/base"] = json({ error: "volume pg has no version 9" }, 404);
-    await expect(tool(t, "volume_tag").run({ volume: "pg", tag: "base", version: 9 })).rejects.toThrow("404: volume pg has no version 9");
-    routes["DELETE /v1/volumes/acme/pg/tags/base"] = json({ error: "volume pg has no tag base" }, 404);
-    await expect(tool(t, "volume_untag").run({ volume: "pg", tag: "base" })).rejects.toThrow("404: volume pg has no tag base");
+    routes["PUT /v1/volumes/acme/pg/branches/base"] = json({ error: "volume pg has no commit 9" }, 404);
+    await expect(tool(t, "volume_branch").run({ volume: "pg", branch: "base", version: 9 })).rejects.toThrow("404: volume pg has no commit 9");
+    routes["DELETE /v1/volumes/acme/pg/branches/base"] = json({ error: "volume pg has no branch base" }, 404);
+    await expect(tool(t, "volume_delete_branch").run({ volume: "pg", branch: "base" })).rejects.toThrow("404: volume pg has no branch base");
+    // the old actions are gone
+    for (const action of ["tag", "untag"]) await expect(t.find((x) => x.name === "volume")!.run({ action, volume: "pg", tag: "base", version: 3 })).rejects.toThrow("`action` must be one of");
   } finally {
     delete process.env.KD_TEAM;
   }
-  await expect(tool(t, "volume_tag").run({ volume: "pg", tag: "base", version: 1 })).rejects.toThrow("`owner` is required");
-  await expect(tool(t, "volume_untag").run({ volume: "pg", tag: "base" })).rejects.toThrow("`owner` is required");
+  await expect(tool(t, "volume_branch").run({ volume: "pg", branch: "base", version: 1 })).rejects.toThrow("`owner` is required");
+  await expect(tool(t, "volume_delete_branch").run({ volume: "pg", branch: "base" })).rejects.toThrow("`owner` is required");
 });

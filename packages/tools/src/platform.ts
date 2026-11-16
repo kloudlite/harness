@@ -114,19 +114,20 @@ type Props = Record<string, unknown>;
 const S = { type: "string" };
 const WS = { type: "string", description: "The workspace id or name." };
 /** One end of a `transfer`. */
-const SPOT = { type: "object", description: "One end: `{workspace, path, tree?}`.", properties: { workspace: WS, path: { type: "string", description: "Relative to the workspace." }, tree: { type: "string", description: "Which worktree; omit for the main one." } }, required: ["workspace", "path"] };
+const SPOT = { type: "object", description: "One end: `{workspace, path}`.", properties: { workspace: WS, path: { type: "string", description: "Relative to the workspace." } }, required: ["workspace", "path"] };
 const ENV = { type: "string", description: "The environment id or name." };
 const N = { type: "number" };
 const I = { type: "integer" };
 const SL = { type: "array", items: S };
 /** A snapshot reference, as `/v1` resolves it wherever a snapshot is named. */
-const SNAP_REF = "a volume name (its newest version), `name@N`, `name@<tag>` or a snapshot id";
+const SNAP_REF = "a volume name (its `base` branch, else its newest commit), `name@N`, `name@<branch>` or a snapshot id";
 /** What a volume says about itself, set at a push or with `volume describe`: a cold session picks its volumes from these. */
 const DESCRIPTION = { type: "string", description: "What the volume holds and what it is for (at most 500 characters). Set it on the first snapshot; a later value replaces it." };
 const LABELS = { type: "array", items: S, description: "Up to 8 short labels on the volume, for finding it (lowercase letters, digits, hyphens), such as the project name and `test`. A later value replaces the set." };
-/** A tag is a movable name on ONE snapshot of a volume, as a git tag is on a commit: `shop-base@base`. */
-const SNAP_TAGS = { type: "array", items: S, description: "Tags to put on this snapshot, such as `[\"base\"]`: each is a movable name read as `name@<tag>`, and one that another version holds moves here." };
-const TAG = { type: "string", description: "The tag name: lowercase letters, digits and hyphens; not a number and not `latest`." };
+/** A branch is a movable name on ONE storage commit of a volume, as a git branch is: `shop@base`. A push advances the
+ * branch its source has checked out, so the argument is only for naming another one. */
+const SNAP_BRANCH = { type: "string", description: "The branch this storage commit goes on, such as `base` or `wip-auth` (read as `name@<branch>`): created or moved here, and checked out from then on. Omit it to advance the branch this was made from; if someone else moved that branch, the commit stays detached and the answer's `detached` says so. A volume's first commit makes `base`." };
+const BRANCH = { type: "string", description: "The branch name: lowercase letters, digits and hyphens (at most 32); not a number and not `latest`." };
 const NAMED_VOLUME = { type: "string", description: "The volume's given name." };
 const OBJ = { type: "object" };
 const SERVICE = {
@@ -232,6 +233,16 @@ function cutLines(text: string, a: { head?: unknown; tail?: unknown }): string {
   const cut = total - lines.length;
   const note = cut > 0 ? `[${cut} of ${total} lines left out; raise tail (maximum ${MAX_TAIL}) or pass head]\n` : "";
   return note + lines.join("\n") + (trailing !== undefined && lines.length ? "\n" : "");
+}
+/** A create given `ttl_secs` sets it on the new object before answering, as the runtime's door does: cleanup is
+ * certain without a second call, and a refused ttl fails the answer instead of passing silently. */
+async function ttlAfter(a: any, base: string, out: string): Promise<string> {
+  if (a.ttl_secs === undefined || a.ttl_secs === null) return out;
+  let id: unknown;
+  try { id = JSON.parse(out)?.id; } catch {}
+  if (typeof id !== "string" || !id) throw new Error("created, but the answer carried no id to set `ttl_secs` on");
+  await api("PUT", `${base}/${seg(id)}/ttl`, { ttl_secs: a.ttl_secs }).catch((e) => { throw new Error(`created ${id}, but \`ttl_secs\` was refused: ${e?.message ?? e}`); });
+  return out;
 }
 const ttlBody = (a: any): { ttl_secs: number | null } | string =>
   a.clear && a.ttl_secs !== undefined ? "error: give `ttl_secs` or `clear`, not both" : a.clear ? { ttl_secs: null } : a.ttl_secs === undefined ? "error: give `ttl_secs` (600 to 2592000) or `clear: true`; neither would change the limit by guesswork" : { ttl_secs: a.ttl_secs };
@@ -403,16 +414,18 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
     const id = snapshot?.id; const vol = snapshot?.volume;
     if (!id || !vol || snapshot?.phase === "ready") return snapshot;
     const until = Date.now() + 25_000;
+    // what the push did to a branch is the push answer's alone: a history row must not hide it
+    const moved = strip({ branch: snapshot.branch, detached: snapshot.detached });
     while (Date.now() < until) {
       await new Promise((r) => setTimeout(r, 1000));
       const rows = await apiJson<any[]>("GET", `/v1/volumes/${seg(vol)}/history`).catch(() => undefined);
       const row = Array.isArray(rows) ? rows.find((r) => r?.id === id) : undefined;
-      if (row) return { ...snapshot, ...row, phase: "ready" };
+      if (row) return { ...snapshot, ...row, ...moved, phase: "ready" };
     }
     return { ...snapshot, note: "still being written; it lists in volume get once ready" };
   };
-  const snapAct = wact({ message: S, volume: VOLUME, description: DESCRIPTION, labels: LABELS, tags: SNAP_TAGS }, [], async (a) => {
-    const snapshot = await settled(JSON.parse(await api("POST", `${wsPath(a)}/snapshots`, strip({ message: a.message, volume: a.volume, description: a.description, labels: a.labels, tags: a.tags }))));
+  const snapAct = wact({ message: S, volume: VOLUME, description: DESCRIPTION, labels: LABELS, branch: SNAP_BRANCH }, [], async (a) => {
+    const snapshot = await settled(JSON.parse(await api("POST", `${wsPath(a)}/snapshots`, strip({ message: a.message, volume: a.volume, description: a.description, labels: a.labels, branch: a.branch }))));
     // the POST succeeded: a failed re-read must not turn a saved snapshot into an error
     try { return JSON.stringify({ ...JSON.parse(await api("GET", wsPath(a))), snapshot }, null, 2); }
     catch (e) { return JSON.stringify({ snapshot, note: `saved; the workspace was not re-read: ${(e as Error).message}` }, null, 2); }
@@ -427,11 +440,11 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
             // In a desk (KD_DESK) a workspace is created and deleted THROUGH it, so it is managed: a
             // direct create would be standalone and then refused by this desk's own tools, and a direct
             // delete of a managed one is a 409. The desk already names the owner, so `team` is dropped.
-            create: act({ name: S, image: S, packages: SL, team: S, source: { type: "string", description: "A workspace (id or name) to clone instead of creating an empty one." }, task: { type: "string", description: "What the clone is for (at most 200 characters)." }, device: { type: "string", description: "A device id (dev-…, from `kode devices list`): make a device workspace, whose folder is on that machine and whose tools run there. The device must be online and active in this team." }, snapshot: { type: "string", description: "With `source` a device workspace: the id (dsnap-…) of the snapshot of it to clone." }, access: { type: "array", items: { type: "string" }, description: "Device workspaces only: names of extra sandbox access (`xcode`, `user-temp`, `android`, `pty`), defined on the person's own machine (built in, or added with `kode devices access add`). A name the machine does not define keeps the workspace from starting (`AccessUndefined`)." }, ...WAITING }, ["name"], async (a) => {
-              if (a.source) return thenWaitWs(await api("POST", `/v1/workspaces/${seg(a.source)}/clone`, strip({ name: a.name, task: a.task, snapshot: a.snapshot })), a);
+            create: act({ name: S, image: S, packages: SL, team: S, ttl_secs: TTL, source: { type: "string", description: "A workspace (id or name) to clone instead of creating an empty one." }, task: { type: "string", description: "What the clone is for (at most 200 characters)." }, device: { type: "string", description: "A device id (dev-…, from `kode devices list`): make a device workspace, whose folder is on that machine and whose tools run there. The device must be online and active in this team." }, snapshot: { type: "string", description: "With `source` a device workspace: the id (dsnap-…) of the snapshot of it to clone." }, access: { type: "array", items: { type: "string" }, description: "Device workspaces only: names of extra sandbox access (`xcode`, `user-temp`, `android`, `pty`), defined on the person's own machine (built in, or added with `kode devices access add`). A name the machine does not define keeps the workspace from starting (`AccessUndefined`)." }, ...WAITING }, ["name"], async (a) => {
+              if (a.source) return thenWaitWs(await ttlAfter(a, "/v1/workspaces", await api("POST", `/v1/workspaces/${seg(a.source)}/clone`, strip({ name: a.name, task: a.task, snapshot: a.snapshot }))), a);
               const body = { name: a.name, image: a.image, packages: a.packages, device: a.device, access: a.access };
               const ses = process.env.KD_DESK;
-              return thenWaitWs(ses ? await api("POST", `/v1/desks/${seg(ses)}/workspaces`, strip(body)) : await api("POST", "/v1/workspaces", strip({ team: a.team, ...body })), a);
+              return thenWaitWs(await ttlAfter(a, "/v1/workspaces", ses ? await api("POST", `/v1/desks/${seg(ses)}/workspaces`, strip(body)) : await api("POST", "/v1/workspaces", strip({ team: a.team, ...body }))), a);
             }),
             restore: act({ name: S, snapshot_id: { type: "string", description: `What to restore: ${SNAP_REF}.` }, team: S, image: S, packages: SL, ...WAITING }, ["name", "snapshot_id"], async (a) =>
               thenWaitWs(await api("POST", "/v1/workspaces/restore", strip({ name: a.name, snapshot_id: a.snapshot_id, team: a.team, image: a.image, packages: a.packages })), a)),
@@ -477,23 +490,23 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
         : {
             list: act({ team: S }, [], async (a) => api("GET", `/v1/environments${qs({ owner: a.team })}`)),
             get: eact({}, [], async (env) => (await wake(env), envView(env))),
-            create: act({ name: S, services: { type: "array", items: SERVICE }, team: S, region: S, source: { type: "string", description: `An environment (id or name) to clone live, or a snapshot to restore into a new environment: ${SNAP_REF}. Omit it for an empty one. A clone shares its source's volume and history: its snapshots appear there and take the source's volume name.` }, ...WAITING }, ["name"], async (a) => {
+            create: act({ name: S, services: { type: "array", items: SERVICE }, team: S, region: S, ttl_secs: TTL, source: { type: "string", description: `An environment (id or name) to clone live, or a snapshot to restore into a new environment: ${SNAP_REF}. Omit it for an empty one. A clone shares its source's volume and history: its snapshots appear there and take the source's volume name.` }, ...WAITING }, ["name"], async (a) => {
               const services = a.services?.map(withServiceDefaults);
               if (a.source) {
                 const r = await raw("GET", `/v1/environments/${seg(a.source)}`);
                 if (r.unavailable) throw new Error(UNAVAILABLE);
-                if (r.status === 200) return thenWaitEnv(await api("POST", `/v1/environments/${seg(a.source)}/clone`, strip({ name: a.name, owner: a.team, services, region: a.region })), a);
+                if (r.status === 200) return thenWaitEnv(await ttlAfter(a, "/v1/environments", await api("POST", `/v1/environments/${seg(a.source)}/clone`, strip({ name: a.name, owner: a.team, services, region: a.region }))), a);
                 if (r.status !== 404) throw new Error(httpError(r.status, r.text));
               }
-              return thenWaitEnv(await api("POST", "/v1/environments", strip({ name: a.name, snapshot_id: a.source, services, owner: a.team })), a);
+              return thenWaitEnv(await ttlAfter(a, "/v1/environments", await api("POST", "/v1/environments", strip({ name: a.name, snapshot_id: a.source, services, owner: a.team }))), a);
             }),
             start: eact(WAITING, [], async (env, a) => thenWaitEnv(await api("POST", `/v1/environments/${env}/start`), a, env, true)),
             stop: eact(WAITING, [], async (env, a) => thenWaitEnv(await api("POST", `/v1/environments/${env}/stop`), a, env, false, stoppedDone)),
             delete: eact({}, [], async (env) => deleting(`/v1/environments/${env}`, () => api("DELETE", `/v1/environments/${env}`))),
             wait: eact({ timeout_ms: TIMEOUT }, [], async (env, a) => (await wake(env), waitEnv(env, a))),
             ttl: eact({ ttl_secs: TTL, clear: CLEAR }, [], async (env, a) => { const b = ttlBody(a); return typeof b === "string" ? b : (await api("PUT", `/v1/environments/${env}/ttl`, b), envView(env)); }),
-            snapshot: eact({ message: S, volume: VOLUME, description: DESCRIPTION, labels: LABELS, tags: SNAP_TAGS }, [], async (env, a) => {
-              const snapshot = await settled(JSON.parse(await api("POST", `/v1/environments/${env}/snapshots`, strip({ message: a.message, volume: a.volume, description: a.description, labels: a.labels, tags: a.tags }))));
+            snapshot: eact({ message: S, volume: VOLUME, description: DESCRIPTION, labels: LABELS, branch: SNAP_BRANCH }, [], async (env, a) => {
+              const snapshot = await settled(JSON.parse(await api("POST", `/v1/environments/${env}/snapshots`, strip({ message: a.message, volume: a.volume, description: a.description, labels: a.labels, branch: a.branch }))));
               try { return JSON.stringify({ ...JSON.parse(await envView(env)), snapshot }, null, 2); }
               catch (e) { return JSON.stringify({ snapshot, note: `saved; the environment was not re-read: ${(e as Error).message}` }, null, 2); }
             }),
@@ -670,7 +683,7 @@ function mainOnly(tickMs: number): ToolDef[] {
         return JSON.stringify({ ...doc, state: "deleted" }, null, 2);
       }),
     }),
-    resource("volume", "Volumes: the stored state of workspaces and environments, each with a name, a description, labels and numbered versions; a tag is a movable name on one version (`name@<tag>`). Actions: list (filter by `label`), get (history with each version's tags, and branch tips), describe (set `description` and `labels`), tag (put or move a tag onto a version), untag, delete a detached volume.", {
+    resource("volume", "Volumes: the stored state of workspaces and environments, each with a name, a description, labels and numbered storage commits; a branch is a movable name on one commit (`name@<branch>`) that a snapshot advances. Actions: list (filter by `label`), get (history with each commit's branches, and the newest commit), describe (set `description` and `labels`), branch (create a branch or move it onto a commit), delete_branch, delete a detached volume.", {
       list: act({ kind: S, owner: S, label: { type: "string", description: "Keep only volumes that carry this label." } }, [], async (a) => api("GET", `/v1/volumes${qs({ kind: a.kind, owner: a.owner, label: a.label })}`)),
       get: act({ volume: { type: "string", description: "The volume's id or its given name." } }, ["volume"], async (a) => {
         // /history and /refs are keyed by the volume id; a name given at a snapshot is a claim on the list row
@@ -681,22 +694,22 @@ function mainOnly(tickMs: number): ToolDef[] {
         const [history, refs] = await Promise.all([api("GET", `/v1/volumes/${seg(id)}/history?include=working`), api("GET", `/v1/volumes/${seg(id)}/refs`)]);
         // `working` and each row's `working_copies` come from the api untouched; an object answer ({history, working}) is spread, a bare list stays `history`
         const h = JSON.parse(history);
-        // the description, labels and tags ({tag: version}) live on the name claim, which only the list row carries;
-        // each history entry carries its own `tags` from the api
-        return JSON.stringify({ volume: a.volume, ...strip({ description: row?.description, labels: row?.labels, tags: row?.tags }), ...(Array.isArray(h) ? { history: h } : h), refs: JSON.parse(refs) }, null, 2);
+        // the description, labels and branches ({branch: version}) live on the name claim, which only the list row carries;
+        // each history entry carries its own `branches` from the api
+        return JSON.stringify({ volume: a.volume, ...strip({ description: row?.description, labels: row?.labels, branches: row?.branches }), ...(Array.isArray(h) ? { history: h } : h), refs: JSON.parse(refs) }, null, 2);
       }),
       describe: act({ volume: NAMED_VOLUME, owner: OWNER_DEFAULT, description: DESCRIPTION, labels: LABELS }, ["volume"], async (a) => {
         // an empty string and an empty list are values (they clear), so only an absent field is left out
         if (a.description === undefined && a.labels === undefined) throw new Error("give `description` or `labels` (an empty string or an empty list clears)");
         return api("PATCH", `/v1/volumes/${seg(nameOwner(a))}/${seg(a.volume)}`, strip({ description: a.description, labels: a.labels }));
       }),
-      tag: act({ volume: NAMED_VOLUME, owner: OWNER_DEFAULT, tag: TAG, version: { ...I, description: "The version number to tag (the N of `name@N`). Give this or `snapshot`." }, snapshot: { type: "string", description: "The snapshot id to tag. Give this or `version`." } }, ["volume", "tag"], async (a) => {
+      branch: act({ volume: NAMED_VOLUME, owner: OWNER_DEFAULT, branch: BRANCH, version: { ...I, description: "The storage commit the branch points at (the N of `name@N`). Give this or `snapshot`." }, snapshot: { type: "string", description: "The snapshot id the branch points at. Give this or `version`." } }, ["volume", "branch"], async (a) => {
         // the route takes exactly one target; refused here so a model reads which, not a 422
         if ((a.version === undefined) === (a.snapshot === undefined)) throw new Error("give exactly one of `version` or `snapshot`");
         // the path is spelled at the call, as every /v1 call here is: the api's audience test reads this file for them
-        return api("PUT", `/v1/volumes/${seg(nameOwner(a))}/${seg(a.volume)}/tags/${seg(a.tag)}`, strip({ version: a.version, snapshot: a.snapshot }));
+        return api("PUT", `/v1/volumes/${seg(nameOwner(a))}/${seg(a.volume)}/branches/${seg(a.branch)}`, strip({ version: a.version, snapshot: a.snapshot }));
       }),
-      untag: act({ volume: NAMED_VOLUME, owner: OWNER_DEFAULT, tag: TAG }, ["volume", "tag"], async (a) => (await api("DELETE", `/v1/volumes/${seg(nameOwner(a))}/${seg(a.volume)}/tags/${seg(a.tag)}`), JSON.stringify({ volume: a.volume, tag: a.tag, state: "untagged" }, null, 2))),
+      delete_branch: act({ volume: NAMED_VOLUME, owner: OWNER_DEFAULT, branch: BRANCH }, ["volume", "branch"], async (a) => (await api("DELETE", `/v1/volumes/${seg(nameOwner(a))}/${seg(a.volume)}/branches/${seg(a.branch)}`), JSON.stringify({ volume: a.volume, branch: a.branch, state: "deleted" }, null, 2))),
       delete: act({ volume: S }, ["volume"], async (a) => (await api("DELETE", `/v1/volumes/${seg(a.volume)}`), JSON.stringify({ volume: a.volume, state: "deleted" }, null, 2))),
     }),
     resource("snapshot", "Snapshots of a volume. Action: delete one.", {
@@ -759,20 +772,6 @@ function mainOnly(tickMs: number): ToolDef[] {
         }
       }),
       cancel: act(RUNREF, RUNREQ, async (a) => (await api("POST", `${run(a)}/cancel`), api("GET", run(a)))),
-    }),
-    resource("worktree", "Worktrees of a workspace. Actions: add, drop.", {
-      add: act({ workspace: WS, name: S, soft_ms: WAITING.soft_ms }, ["workspace", "name"], async (a) => {
-        const out = JSON.parse(await api("POST", `/v1/workspaces/${seg(a.workspace)}/trees`, { name: a.name }));
-        // the node cuts the subvolume on its next pass: wait for the row to be ready, within soft_ms
-        const end = Date.now() + softMs(a);
-        let ready = false;
-        while (!ready && Date.now() < end) {
-          await new Promise((r) => setTimeout(r, Math.min(1000, tickMs)));
-          ready = !!JSON.parse(await api("GET", `/v1/workspaces/${seg(a.workspace)}`))?.trees?.some((t: any) => t.name === a.name && t.ready);
-        }
-        return JSON.stringify({ name: out?.name ?? a.name, path: out?.path, ...(ready ? {} : { ready: false }), note: `pass tree: "${a.name}" to exec, read and write; the path is not visible from the main tree` }, null, 2);
-      }),
-      drop: act({ workspace: WS, name: S }, ["workspace", "name"], async (a) => api("DELETE", `/v1/workspaces/${seg(a.workspace)}/trees/${seg(a.name)}`)),
     }),
     resource("workspace_vars", "A workspace's variables as stored (a secret shows as its reference). Actions: get, set (merges unless `replace`).", {
       get: act({ workspace: WS }, ["workspace"], async (a) => api("GET", `/v1/workspaces/${seg(a.workspace)}/env`)),
@@ -847,10 +846,10 @@ function mainOnly(tickMs: number): ToolDef[] {
     def(
       "download",
       "Hands one file of a workspace (yours alone, at most 200 MB) to the person: `url` opens it in the Kode console once they are signed in (images, PDFs and text show in the browser, anything else downloads), and an MCP client gets the file as a resource link it reads with resources/read (at most 7.5 MB that way). Give the person the `url`; it carries no credential. For reading a file yourself use `read`.",
-      { workspace: WS, path: { type: "string", description: "The file, relative to the workspace." }, tree: { type: "string", description: "Which worktree; omit for the main one." } },
+      { workspace: WS, path: { type: "string", description: "The file, relative to the workspace." } },
       ["workspace", "path"],
       async (a) => {
-        const v = await apiJson<{ uri: string; url: string; name: string; size: number; mime: string }>("POST", `/v1/workspaces/${seg(a.workspace)}/file-link`, strip({ path: a.path, tree: a.tree }));
+        const v = await apiJson<{ uri: string; url: string; name: string; size: number; mime: string }>("POST", `/v1/workspaces/${seg(a.workspace)}/file-link`, { path: a.path });
         // An MCP door lifts `resource_link` into its own content block; the rest stays the text beside it.
         return JSON.stringify({
           ...v,
@@ -868,7 +867,7 @@ function mainOnly(tickMs: number): ToolDef[] {
         const end = async (s: any) => {
           const t = await apiJson<{ address: string; scheme?: string; base_path?: string; token?: string }>("GET", `/v1/workspaces/${seg(s.workspace)}/tools`);
           const base = `${t.scheme === "https" ? "https://" : "http://"}${t.address.replace(/^https?:\/\//, "")}${t.base_path ?? ""}`;
-          return { base, token: t.token, q: `path=${encodeURIComponent(s.path)}${s.tree ? `&tree=${encodeURIComponent(s.tree)}` : ""}` };
+          return { base, token: t.token, q: `path=${encodeURIComponent(s.path)}` };
         };
         const [src, dst] = [await end(a.from), await end(a.to)];
         const auth = (t?: string): Record<string, string> => (t ? { authorization: `Bearer ${t}` } : {});
