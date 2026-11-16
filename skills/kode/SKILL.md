@@ -9,6 +9,16 @@ Kode (Kernel for Orchestrated Development and Execution) is the infrastructure t
 
 This is the one Kode skill: the definitions, the rules and the way to choose. It gives no fixed steps for a task; you compose them. The `references/` folder holds the depth: `tools.md` (every tool and argument, ids and states), `permissions.md` (who may call each action), `models.md` (which model class each agent gets), `worker-templates.md` (the briefs and the hand-off report), `use-cases.md` (14 worked cases and how to compose a new one), `planning.md` (the plan file for work that is split), `pipelines.md` (the definition format), `services.md` (common services with ports and mounts), `devices.md` (workspaces on the person's Mac), `errors.md` and `setup.md` (the steps, and a row for each host). When the Kode tools are present, code runs in a workspace, not on the user's computer, whatever the request says.
 
+## Solo quick path
+
+The default: one session, one workspace, nothing delegated.
+
+1. `status`; `memory` `read`; `volume` `list` with the project `label`.
+2. `workspace` `restore` from `name@base` (or the `wip-` branch that `open-work` names) with a `name`, then `ttl` in the same turn.
+3. Pull, work, test.
+4. Push; remove credentials from the home; `workspace` `snapshot`: plain only when the state builds and passes (the checked-out `base` advances), else with `branch: "wip-<topic>"`.
+5. `memory` `write`; `workspace` `delete`. The volume stays.
+
 ## Glossary
 
 One word, one meaning. All work runs in the context of one team: a person's own team or a shared team. A team is not a component.
@@ -25,7 +35,7 @@ One word, one meaning. All work runs in the context of one team: a person's own 
 10. **Secrets and variables.** A variable is `NAME=value` in the `env` of a workspace, service, capsule or job. A secret is a named value of an owner; a variable refers to it as the whole value `${{ secrets.NAME }}`. No one reads a value back.
 11. **Connector.** A link from an owner to a code host (GitHub, GitLab) or a container registry: clone over HTTPS, push to github.com with the person's linked GitHub account, image push and private pull. Connected in the web console.
 12. **Memory.** The current structure of a project, kept by the `memory` tool for a cold start, in five sections: `environments`, `volumes`, `run`, `conventions` (the team's) and `open-work` (yours). It names only what lasts: never a workspace, a desk or a running environment. A project is its owner, a team or a person's own account: a team with several repositories shares one memory, with a heading for each repository inside a section. It says what is, never what happened.
-13. **TTL and quota.** A TTL (`ttl_secs`, 10 minutes to 30 days) deletes a workspace, environment or desk that stays unused past it; `create` takes it in the same call, a `restore` takes it with `ttl` after. Quota is the owner's ceiling on workspaces, environments, snapshots, capsules, disk, cpu and memory; the `quota` tool reads it.
+13. **TTL and quota.** A TTL (`ttl_secs`, 10 minutes to 30 days) deletes a workspace, environment or desk that stays unused past it; `create` takes it in the same call; `restore` takes none: restore, then `ttl` in the same turn. Quota is the owner's ceiling on workspaces, environments, snapshots, capsules, disk, cpu and memory; the `quota` tool reads it.
 
 **"Sandbox" is not a Kode object.** It is the general idea, not a resource. When the user asks for a sandbox, give a workspace, unless they ask for one command or a throwaway run, which is a capsule.
 
@@ -58,7 +68,7 @@ team ─┬─ desk ── joins ──> workspaces, capsules ──> environmen
 
 ## Invariants
 
-1. **Packages.** Never `apt-get`, never pipe `curl` into a shell, never install system-wide. Use the `packages` tool (nixpkgs) first. Only what nixpkgs lacks goes into the home folder, where it persists; Python libraries go in with pip.
+1. **Packages.** Never `apt-get`, never pipe `curl` into a shell, never install system-wide. Use the `packages` tool (nixpkgs) first. Only what nixpkgs lacks goes into the home folder, where it persists. Python libraries: `packages` `add` `uv`, then `uv venv .venv && uv pip install <lib>`, run with `.venv/bin/python` (there is no `pip` beside `python3`).
 2. **Two end states.** Each resource that you create ends as one of: **snapshotted, then deleted** or **deleted**. The session's main workspace (the one restored from the project volume) always ends snapshotted, then deleted, even when all code went to git: the snapshot carries the pulled code, the packages and the caches. Clones, capsules and copies of an environment are throwaway: deleted. Stopped is a pause inside a session, never an end.
 3. **Snapshot-first sessions.** A session starts from a snapshot and ends with one, and nothing that runs or is stopped stays between sessions. Start with `workspace` `restore` from `name@base` or the branch that `open-work` names (an environment: `env` `create` with `source`): that checks the branch out. Never start from a commit number unless you mean to work detached. End with a snapshot, the memory updated, and every workspace and environment that you created deleted. Conventions 15 and 16 give the order. The first session of a project has nothing to restore: use case 13.
 4. **A volume stays.** Work adds commits to the volume that it came from. It never makes a second volume from a snapshot and never deletes a volume to end a session: a commit stores only the blocks that changed, a second volume stores a full copy. Only a workspace or environment that was created empty names a new volume. A commit stays while a branch points at it, so keep `base` on a good commit: a volume whose commits all expire is gone.
@@ -75,14 +85,14 @@ A checklist of practice. Each rule holds in every topology, and the rest of the 
 1. **Names.** 1 to 40 lowercase letters, digits or `-`, starting with a letter, unique per owner. Workspace: the repository or component (`api`). Clone: `<source>-<stream>` (`api-auth`), with a `task` that says what it is for. Environment: the app and purpose (`shop-dev`, `shop-pr-42`). Desk: the piece of work (`orders`). Pipeline: what it does (`api-ci`). Branch: the stream name of the plan file.
 2. **Volume names.** `<project>-base` for a workspace volume, `<project>-env` for an environment volume. Never the name of a live environment: `env` `create` reads `source` as an environment first.
 3. **Labels** say what a volume is, so that `volume` `list` with `label` finds it: the project name, and `test` for a fixture. At most 8. A `labels` value replaces the whole set: repeat the ones to keep.
-4. **Branches.** `base` is the good state that a session starts from: only commits whose build or test passed go on it. `wip-<topic>` holds unfinished work (`wip-auth`). Other names are free (`release-12`). Not a number and not `latest`; at most 16 on a volume.
+4. **Branches.** `base` is the good state that a session starts from: only commits whose build or test passed go on it, and it moves only when the Coordinator decides a state is the new start. Any other name is allowed (`release-12`); `wip-<topic>` is only the convention for unfinished work. Not a number and not `latest`; at most 16 on a volume.
 5. **Who moves `base`.** Practice, not a platform rule: the Coordinator. A Worker works in a clone, which is detached, and never moves a branch; a Worker on a restored workspace snapshots only onto the branch that its brief names.
 6. **Snapshot `message`.** What changed since the last commit and whether it is good (`node 22, deps of 2026-11-16, build passes`), or what is left when the work is unfinished.
 7. **Volume `description`** (at most 500 characters). What is inside (repositories, toolchain, data) and what to use it for. Give a new one when the contents change.
-8. **When to snapshot.** The main workspace at the end of every session, and before a risky step. Not after every edit: git holds the code. A good state: a plain `snapshot` advances the checked-out branch (`base`). Unfinished work that cannot go to git: `snapshot` with `branch: "wip-<topic>"`, and `open-work` names `name@wip-<topic>` and what is left. The next session restores `name@wip-<topic>`; when the work is good it snapshots, moves `base` to that commit with `volume` `branch`, and deletes the wip branch with `volume` `delete_branch`.
+8. **When to snapshot.** The main workspace at the end of every session, and before a risky step. Not after every edit: git holds the code. After a restore from `name@base` the checked-out branch is `base`, so a plain `snapshot` advances it: do that only for a good state, and pass `branch` to keep `base` where it is. Unfinished work that cannot go to git: `snapshot` with `branch: "wip-<topic>"`, and `open-work` names `name@wip-<topic>` and what is left. The next session restores `name@wip-<topic>`; when the work is good it snapshots, moves `base` to that commit with `volume` `branch`, and deletes the wip branch with `volume` `delete_branch`.
 9. **Detached.** When a snapshot answers `detached` (someone else moved the branch since you checked it out), say so, then decide: put your commit on its own branch with `volume` `branch`, or move the branch to it when yours is the one to keep. Never leave a good commit without a branch.
 10. **Storage.** A commit stores only the changed blocks and uses one snapshot slot (20 for a person, 80 for a team). A commit that no branch points at expires 30 days after its last use; delete it sooner with `snapshot` `delete` when nothing needs it. A branch head is refused; never delete the last commit.
-11. **TTL.** Every workspace, environment and desk gets a TTL: `ttl_secs` in the `create` call, and the `ttl` action right after a `restore`. It is a backstop: an environment is not expired while a desk is connected to it, and a workspace or desk only once its desk is idle. You still delete at the end.
+11. **TTL.** Every workspace, environment and desk gets a TTL: `ttl_secs` in the `create` call; restore, then `ttl` in the same turn. It is a backstop: an environment is not expired while a desk is connected to it, and a workspace or desk only once its desk is idle. You still delete at the end.
 12. **Never in a snapshot or the memory.** No credential in the home before a snapshot: no token file, kubeconfig, registry login, `.npmrc` or `.env` with a value. Every member of the team can restore a team volume. The memory names a secret, never its value.
 13. **Memory content.** `volumes`: each volume, what is inside, its labels and the branch to start from (`shop-base@base`). `environments`: the volume and branch that an environment starts from, and its services. `run`: the repositories, and the commands to build, run and test. `conventions`: the team's rules. `open-work` (yours): each unfinished item with its branch (`shop-base@wip-auth`) and what is left. The memory names branches, never commit numbers.
 14. **Memory hygiene.** Current state, never history, and short (a section holds at most 16 KiB). Only the Coordinator writes: read it first, write it last, patch with `edits` and the `if_version` of your read, and on a `409` merge and write again. Each tool answer carries `memory: {rev, changed}`; when `changed` is true another session wrote it: read it again before you rely on it.
@@ -105,7 +115,7 @@ A checklist of practice. Each rule holds in every topology, and the rest of the 
 | Run one command cleanly | `capsule` `create` with `from_workspace` or `from_snapshot` | 1 capsule slot for its lifetime; nothing after |
 | Test this exact state, uncommitted work included | `capsule` `create` with `from_workspace` | 1 capsule slot; the workspace is not touched |
 | Keep a server up while you work | `exec` with `detach: true`; check it with `status` each turn | Nothing more; it ends with the workspace |
-| Guard against a forgotten resource | `ttl_secs` on `workspace`, `env` or `desk` `create`; `ttl` right after a `restore` | Nothing; a backstop only (convention 11) |
+| Guard against a forgotten resource | `ttl_secs` on `workspace`, `env` or `desk` `create`; restore, then `ttl` in the same turn | Nothing; a backstop only (convention 11) |
 | Edit and run code against real services | A workspace in a desk that is connected to the environment | 1 workspace slot; storage grows with the home |
 | Test a change with real traffic, without a deploy | `intercept` `start` to your workspace | Each desk on that environment sees it: say so first, stop it when done |
 | Try N approaches at one time | N clones of one base (`workspace` `create` with `source`), or N capsules; one session coordinates | N slots while they run; delete the losers, keep the winner |
@@ -176,35 +186,14 @@ The example app: a shop with `web`, `api`, `worker`, `db` (Postgres) and `cache`
 
 ## Tools
 
-The tools act on one desk. Most tools are one per resource: `action` picks the verb. Every code, run, package and image tool takes `workspace`, the id of a `ready` workspace. `references/tools.md` lists every tool with its actions and arguments, and the ids and states of each object; `references/permissions.md` says who may call each action.
-
-| Group | Tools | Actions |
-|---|---|---|
-| Session | `status`, `task` | `task`: `list`, `add`, `update` |
-| Desk | `desk` | `desk`: `list`, `create`, `connect`, `start`, `stop`, `delete`, `ttl` |
-| Workspaces | `workspace`, `workspace_vars` | `workspace`: `list`, `get`, `create`, `restore`, `start`, `stop`, `restart`, `delete`, `wait`, `ttl`, `snapshot`; `workspace_vars`: `get`, `set` |
-| Code | `read`, `write`, `edit`, `glob`, `grep`, `download`, `transfer` | none |
-| Run | `exec`, `process`, `watch` | `process`: `list`, `output`, `wait`, `write`, `close_stdin`, `kill`; `watch`: `start`, `poll`, `stop` |
-| Packages | `packages` | `packages`: `list`, `add`, `remove`, `update` |
-| Images | `container_build`, `container_push` | none |
-| Environments | `env`, `service` | `env`: `list`, `get`, `create`, `start`, `stop`, `delete`, `wait`, `ttl`, `snapshot`, `restore`; `service`: `add`, `update`, `remove`, `logs` |
-| Intercepts | `intercept` | none |
-| Volumes | `volume`, `snapshot` | `volume`: `list`, `get`, `describe`, `branch`, `delete_branch`, `delete`; `snapshot`: `delete` |
-| Account | `quota`, `regions`, `devices`, `requests_list`, `request_get`, `request_create` | none |
-| Memory | `memory` | `memory`: `read`, `write`, `list` |
-| Capsules | `capsule` | `capsule`: `create`, `get`, `list`, `wait`, `logs`, `delete` |
-| Pipelines | `pipeline`, `run`, `webhook_rotate` | `pipeline`: `list`, `get`, `save`, `delete`; `run`: `start`, `list`, `get`, `wait`, `logs`, `cancel` |
-| Secrets and connectors | `secret_set`, `secret_list`, `secret_delete`, `connector_list` | none |
-| Web | `web_fetch`, `web_search` | none |
-
-Tools take the id or the name; write the name to the user. `volume` `get` takes the id or the name; `branch`, `delete_branch` and `describe` take the name. Workspace `restore` takes a reference in `snapshot_id`. Env `create` takes in `source` an environment (cloned live) or a snapshot reference; an environment of that name wins, which is why a volume never has the name of an environment (convention 2). Workspace `create` `source` is a workspace to clone, never a snapshot.
+The tools act on one desk. Most tools are one per resource: `action` picks the verb. Every code, run, package and image tool takes `workspace`, the id of a `ready` workspace. `references/tools.md` lists every tool with its actions and arguments, and the ids and states of each object; `references/permissions.md` says who may call each action. Tools take the id or the name; write the name to the user. `volume` `get` takes the id or the name; `branch`, `delete_branch` and `describe` take the name. Workspace `restore` takes a reference in `snapshot_id`. Env `create` takes in `source` an environment (cloned live) or a snapshot reference; an environment of that name wins, which is why a volume never has the name of an environment (convention 2). Workspace `create` `source` is a workspace to clone, never a snapshot.
 
 ## Reads, lifecycle and deletes
 
 - **What do I have:** the orient calls, plus `env` with `action: "list"`.
 - **Status:** `workspace` or `env` with `action: "get"` or `"wait"`. Intercepts in force: `env` `get`, `services[].interceptedBy`.
 - **Logs of a service:** `service` with `action: "logs"`, `name`, and `tail`, `since`, `previous` (after a crash). It names the workspace when an intercept holds the service.
-- **Start and stop:** `workspace` and `env` with `action: "start"` or `"stop"`. Before restarting a stopped `workspace` or `env`, read `stopped_reason`, `stopped_at` and `hint` from `get`: an `idle` stop starts again on use (a start, a create in the desk or a connect wakes an idle desk), an explicit stop stays stopped. A stop is a pause inside a session (invariant 2). A `snapshot` answers ready only when restorable, else `promoted`; a restore or create from one not ready yet answers 409 `not ready yet`: retry after a few seconds. `desk` `stop` also stops the bench (the process that serves your own tools in the harness): say so first and make it your last call.
+- **Start and stop:** `workspace` and `env` with `action: "start"` or `"stop"`. Before restarting a stopped `workspace` or `env`, read `stopped_reason`, `stopped_at` and `hint` from `get`: an `idle` stop starts again on use (a start, a create in the desk or a connect wakes an idle desk), an explicit stop stays stopped. A stop is a pause inside a session (invariant 2). A `snapshot` takes no `wait`: it answers when the commit is ready. `desk` `stop` also stops the bench (the process that serves your own tools in the harness): say so first and make it your last call.
 - **Delete:** invariant 5 decides. What you created: persist it if it has value (push, or a commit on a branch of its volume), then the `delete` action of `workspace`, `env`, `capsule` or `snapshot` (a commit that no branch points at and nothing needs), and say what you removed. A volume is not deleted to end a session (invariant 4). What you did not create: list the targets by name and call only when the user named them, or after a yes. A refusal is final.
 
 ## Setup and recovery
