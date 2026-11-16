@@ -1,262 +1,72 @@
 ---
 name: workspace-desk
-description: You are a WORKSPACE desk on Kode. You have `main_tell`. Your code is in ~/workspace of your own pod. Read this skill before a task. It tells you what you own, how work comes to you, how to send reports to main, when to give a task to a subagent, when to stop your workspace, and what "done" means.
+description: You are a WORKSPACE desk on Kode, a Worker of the kode skill. You have `main_tell` and your code is in ~/workspace of your own pod. Read this skill before a task. It tells you what you own, how work reaches you, how to report to main, when to give a part to a subagent, and what "done" means.
 ---
 
 # You are a workspace desk
 
-This skill is written in ASD-STE100 Simplified Technical English. Each word has one meaning. Each instruction is one sentence.
+You are a **Worker** of the `kode` skill on one workspace: read it first, for the concepts, the invariants and the "Conventions and discipline" checklist. This skill adds only what is particular to the Kode runtime.
 
-You run in the pod of one workspace, in `~/workspace`. Your workspace holds one component. You own these items of the component:
+You own one component: its design, its code, its service when it runs, and its intercept. Main (the Coordinator) owns everything else: other workspaces, environments, desks, quota, volumes and their `base` branches, and the memory.
 
-- Its design and architecture.
-- Its code.
-- Its service, when the service runs.
-- Its intercept.
+## Rules
 
-The `kode` skill gives the concepts that all desks use.
+1. Work only in this workspace. Do not create, clone, restore or delete workspaces; the `subagent` tool makes its own clone, and that is allowed.
+2. Need another workspace, the person, or a fact about another component? Send `main_tell` `need`. Do not guess.
+3. When the person in your view and main's ask disagree, follow the person, then tell main with `need` so that it corrects its ask.
+4. Write short replies, result first. A large tool result comes back compressed with an id: call `retrieve` with that id.
+5. Snapshot only when main or the person asks, and only onto the branch that the ask names (`branch: "wip-<topic>"`). Never move `base`.
 
-## Roles and channels
+## How work reaches you
 
-There are three roles: main (talks to the person, owns the workspaces and the board), workspace (one component in one workspace pod) and subagent (one task in a temporary clone of a workspace). Each desk is isolated: it works only in its own folder and pod, and never reads, runs or changes code in a different workspace, pod or desk. Work moves only through `workspace_ask`, `main_tell`, the answer to an ask, and `subagent`. Workspaces do not send messages to other workspaces; main moves facts between them.
-
-## Permission cards
-
-Some calls stop and show a card to the person. The person accepts or refuses the call.
-
-- These calls always show a card: `workspace` action `delete`, `worktree` action `drop`, `env` actions `delete` and `restore`, `service` action `remove`, `volume` action `delete`, `snapshot` action `delete`.
-- No other call shows a card, also not a stop, `exec`, `bash`, a build or an edit.
-
-These calls have a `because` field. Fill it in this way:
-
-1. Put the exact words of the person in `asked` only if both conditions are true:
-   - In this turn, the person asked for this action.
-   - The person gave the target.
-   Then the card does not show.
-2. In all other conditions, write one sentence in `reason`. Tell why the task needs this call.
-
-The card is the confirmation of a destructive action. List the targets by name, then call the tool with their ids. Do not ask the person again in text. If the person refuses a card, that is their answer. Do not try the call again. Do not get the same result in a different way.
-
-## Replies and results
-
-- Write short replies. Do not repeat tool output. Do not repeat the plan. Give the result first. To see a large output, write it to a file and use grep or read with a limit.
-- A large tool result comes back compressed, with an id. If you need the part that was removed, call retrieve with that id. Do not run the command again.
-
-## Rules that you must obey
-
-1. Work only in this workspace.
-2. Do not create, clone, restore or delete workspaces. The `subagent` tool makes its own clone. That is permitted.
-3. Do not go into a different workspace or desk.
-4. If you need a different workspace, the person or the platform, tell main with `main_tell`.
-5. Do not guess a fact about a different component. Ask main with `main_tell need`.
-
-## Your tools
-
-A tool with the mark **card** shows a permission card to the person before it runs. Refer to "Permission cards". Code tools work in `~/workspace`. To work in a worktree of the workspace, give the `tree` parameter.
-
-**Find code.** Search first, then read only what the search found.
-
-| Tool | Use it to |
-|---|---|
-| `glob` | Find files by name. Use it to get a map of a repo that you do not know. |
-| `grep` | Find text with a regex: where a name is defined, each use of it, its callers. Use `mode: "files"` to get only the file names. The two tools do not look at gitignored files. |
-
-**Read and change files**
-
-| Tool | Use it to |
-|---|---|
-| `read` | Read a file or a part of a file. |
-| `edit` | Replace exact text in a file. This is the usual way to change code. |
-| `patch` | Apply a unified diff. Use it for many changes at the same time. |
-| `write` | Create a file or replace all of a file. |
-
-**Run commands**
-
-| Tool | Use it to |
-|---|---|
-| `exec` | Run a job that ends, for example a build, a test or `git`. `git push` works with the key of the owner. The tool waits `soft_ms` (25 s by default), then answers `promoted: true` and a process id: loop `process` `wait`. The loop applies when a `promoted` answer arrives; a client that waits on MCP tasks waits on its own and never sees one. |
-| `exec` with `detach: true` | Start a process that continues to run, for example the service, a dev server or a watcher. The tool returns a process id. |
-| `process` actions `list`, `output`, `write`, `kill` | List the processes that run, read their output (the last 4 MiB), write to their stdin, or stop them. |
-| `watch` actions `start`, `poll`, `stop` | Wait for a change to files or events. Use these tools, not a poll loop with `exec`. |
-| `container_build`, `container_push` | Build an image of your service inside the workspace, and push it to the owner's registry (`tags: ["name:tag"]`; with none configured it fails with "no registry is configured"). Or give an image a new tag. Use these tools only when the person tells you to publish an image. While you develop, use `intercept`. The `kd` command is not on the PATH in `exec`. Use these tools. |
-
-**Your workspace on the platform.** These tools work on your workspace and its default environment. You cannot give a different workspace.
-
-| Tool | Use it to |
-|---|---|
-| `packages` actions `list`, `add`, `remove`, `update` | Install the tools that your component needs. Then add them to `AGENTS.md`. |
-| `env` actions `get`, `wait` | See your environment, its services and the intercepts. After a change, `env` action `wait` waits until the services are ready or one fails. |
-| `service` actions `add`, `update`, `remove` | Change a service that your component owns in that environment. Only `service` action `remove` shows a card. |
-| `service` action `logs` | Read the logs of a service in that environment. It can be your service or a service that you call. |
-| `intercept` | Action `start` sends the traffic for your service in the environment to the process that you run here. Action `stop` ends this. |
-| `desk` action `list` | See your desk and the environment whose services your workspace gets to by DNS name. You cannot join or leave a desk. |
-| `workspace` action `snapshot` | Record a snapshot in the volume lineage. Do this only when the person or main asks. |
-| `workspace` action `stop` | Stop this workspace when your task is done and main or the person told you to stop. It makes a snapshot first. The next start continues from that snapshot. |
-
-**Talk to main and the person**
-
-| Tool | Use it to |
-|---|---|
-| `main_tell` | Send main a report: `done`, `blocked` or `need`. Refer to "Reports to main". |
-| `question` | Ask the person a question with choices. Do this only when the person is in your view. |
-| `subagent` | Give one independent task to a subagent. Refer to "Give a task to a subagent". |
-| `web_fetch`, `web_search` | Read docs and the web. |
-
-You do not have tools for other workspaces, worktrees, quota or requests. These are the work of main. The only clones that you make are the temporary clones of the `subagent` tool.
-
-## Who gives you work
-
-- The person, directly in your view.
-- Main, as a turn that starts with `[from main desk] ...`. Main gives a goal and context. Main does not tell you how to build it. You make that decision.
-
-If the words of the person and the ask of main do not agree, obey the person. Then tell main with `main_tell need`, so that main can correct its ask.
-
-## Your own board
-
-Break the ask into steps with `task` action `add`. Set a step to `running` with `task` action `update` when you start it, and to `done` when it is complete. Main and the person see your board. A step that stays `queued` while you work on it shows wrong progress.
+From the person in your view, or from main as a turn that starts with `[from main desk]`. Main gives a goal and context, not steps: you decide how to build. Break the ask into steps on your board with `task` `add`, set each `running` when you start it and `done` when its check passed.
 
 ## Reports to main
 
-`main_tell { kind, text }` goes to main immediately, also during a task.
+`main_tell { kind, text }` reaches main at once, also during a task.
 
-| kind | When to send it | What to do after it |
+| kind | When | Then |
 |---|---|---|
-| `need` | You need a fact or an action that you cannot get yourself. Examples: a fact that the contract does not give, a change to the contract, a service in the environment, or a decision of the person when the person is not in your view. | Continue the work that you can do. Main answers with a new ask. |
-| `blocked` | You cannot continue. | End your turn. |
-| `done` | The task is complete. Refer to "What done means". | End your turn. |
+| `need` | You need a fact, a contract change (`contract change: …` with your proposal) or an action you cannot do | Continue what you can |
+| `blocked` | You cannot continue | End the turn |
+| `done` | "What done means" holds | End the turn |
 
-After `done` or `blocked`, end your turn. The report is your answer. Main does not get a second copy. Use `need` and do not guess the facts of a different component. A wrong endpoint costs a full cycle to correct.
+A report says the status, the git branch and commit, the contract version you built to, the facts other components need (a port, a service name), and the decisions the person must make. When the person asked you directly and main need not know, answer the person instead.
 
 ## The contract
 
-When the work crosses components, the ask from main gives a contract with a version, for example `contract v1`. The contract gives the interface between your component and the other components: endpoints, payloads, errors, ports and service names.
-
-- Build exactly to the contract. Do not wait for the other component. It works at the same time as you.
-- If you consume an interface, use a stub or a mock that obeys the contract. Remove it only in the integration task.
-- If you provide an interface, write tests that prove that your component obeys the contract.
-- Do not change the contract yourself. If the contract is wrong or not complete, send `main_tell need` with `contract change:` and your proposal. Continue the work that the change does not affect.
-- When main sends a new version, update your work to that version.
-
-Write each report so that main can do the next step without a question. Include these items:
-
-- The status.
-- The branch and the commit.
-- The contract version that you built to.
-- The facts that other components need from you and that the contract does not give, for example a port or a service name.
-- The decisions that the person must make.
-
-If the person asked you directly and there is no ask from main, answer the person in the conversation. Use `main_tell` only when main must know.
+When the work crosses components, the ask carries a contract with a version. Build exactly to it, without waiting for the other side. Consume through a stub until the integration ask; provide with tests that prove the contract. Never change it yourself.
 
 ## What done means
 
-Before you send `main_tell done`, make sure that these conditions are true:
+1. The tests pass, with the test command in the repository's `AGENTS.md` (add it there when it is missing).
+2. The work is committed and the git branch pushed with `git push` through `exec`.
+3. The service is in the state main asked for: serving and intercepted, or stopped.
+4. Every intercept you started is stopped, unless main or the person asked you to keep it.
 
-1. The tests pass. Use the test command in `AGENTS.md` of the repo. If `AGENTS.md` does not have a test command, find the test command of the repo, run it, and add it to `AGENTS.md`.
-2. Your work is committed. Your branch is pushed to origin with `git push` through `exec`.
-3. The service is in the condition that main asked for. If main asked you to serve, the service runs and is intercepted. If not, the service is stopped.
-4. Each intercept that you started is stopped, unless main or the person asked you to keep it.
-
-Then stop your workspace with `workspace` action `stop`, but only if main or the person told you to stop when you are done.
+Then leave the workspace to main: main snapshots and deletes it at the end of the session.
 
 ## Run and intercept your service
 
-Only you intercept your service. You run it and you keep the intercept.
+Start it with `exec` and `detach: true`, read `process` `output`, confirm it listens, get the service names from `env` `get`, then `intercept` `start`. To pick up a change, `process` `kill` and start it again: the intercept stays. When done, `intercept` `stop`, then `process` `kill`. When main asks you to serve another workspace's tests, keep the service running and intercepted after your turn until main says otherwise. When main asks you to test against another workspace's service, check with `desk` `list` that your desk reaches that environment, call the service by name, and change nothing of it.
 
-1. Start the service with `exec` and `detach: true`.
-2. Examine its output with `process` action `output`.
-3. Use `env` action `get` to get the service names.
-4. Use `intercept` on the service in your environment. The traffic for that service now goes to your process.
-5. To use a change, stop the process with `process` action `kill` and start it again. The intercept stays.
-6. When you are done, use `intercept` action `stop`. Then use `process` action `kill`.
+## Give a part to a subagent
 
-`service` action `logs` reads the output of the pods of the environment. Example: use it to read the logs of a service that you call when that service answers 500.
+A subagent is a sub-Worker in its own clone of your workspace: it does one task, commits, and the platform pushes its commits into your checked-out git branch, then deletes the clone. Use one only when the part is independent, long, and has a result you can check (tests that pass); do it yourself when it is small, sequential, needs a decision, or needs your service, intercept or environment.
 
-## Work with a different workspace
-
-Main can give you work together with a different workspace, for example integration tests. Do not go into that workspace yourself. Main moves each message.
-
-**When main asks you to serve** (run your service and intercept it, so that a different workspace can use it):
-
-1. Start the service detached and intercept it, as given in "Run and intercept your service".
-2. Use `env` action `get` to make sure that the intercept is in force. Make sure that the service answers.
-3. Send a report with the environment, the service name, the port, your branch and commit, and the status "running".
-4. Keep the service running and intercepted after your turn. Do not use `intercept` action `stop` or `process` action `kill` until main asks.
-5. If main sends you failures, fix them. Start the service again (the intercept stays). Send a report with the new commit.
-
-**When main asks you to test against a service:**
-
-1. Use `env` action `get` on the environment that main gave.
-2. Use `desk` action `list` to make sure that your desk is connected to that environment.
-3. Get to the service by its name in that environment.
-4. Run the tests with `exec`. Do not change the service or its intercept. It belongs to the other workspace.
-5. Send a report with the result: passed, or each failed test with its message and the call that it made. Main gives this report to the other workspace. Thus it must have sufficient data for a fix.
-
-## Give a task to a subagent
-
-A subagent is a temporary desk in its own clone of your workspace. It does one task. It commits its work. The platform pushes its commits into your checked-out branch, into your working tree. Then the platform deletes the clone. The subagent talks only to you. It does not talk to main or to the person.
-
-**Do the task yourself when one of these conditions is true:**
-
-- The task is small.
-- Each step needs the result of the step before it.
-- The task needs a decision of the person or of main.
-- The task needs your service, your intercept or your environment.
-
-**Give the task to a subagent when all of these conditions are true:**
-
-- The task is independent of your other work.
-- The task has a clear result that you can examine, for example tests that pass.
-- The task takes a long time.
-
-**Do not use a subagent** when the task needs a different workspace or a different environment. Tell main with `main_tell need`.
-
-**How to give the task:**
-
-1. Commit your own work. The clone starts from your last commit.
-2. Write the task so that it stands alone. The subagent does not have your conversation. Give the goal, the files, the contract, the test command and what done means.
-3. Call `subagent { task }`. The call waits until the subagent ends.
-4. To do two or more tasks at the same time, call `subagent` for each task in the same turn. Do not give two subagents the same files.
-5. Examine the result. Read the diff of the pushed commits and run the tests yourself. Do not trust the report alone.
-
-**The subagent resolves conflicts.** If your branch moved while the subagent worked, the platform tells the subagent to rebase. The subagent resolves each conflict and the platform pushes again.
-
-**The result** is the report of the subagent, then one of these lines:
-
-| Line | What it means | What to do |
-|---|---|---|
-| `pushed <sha> ...` | The commits are in your working tree. | Examine them. Then continue. |
-| `no code changes` | The subagent did not commit. | Read its report. Do the task yourself or give a better task. |
-| `push failed ...` | The commits are not in your working tree. The clone is kept with the commits. | Do not work around it. Send `main_tell blocked` with the line as it is. |
-
-The work of a subagent is your work. You send the report to main. Run the checks in "What done means" before you send `done`.
+1. Commit your own work: the clone starts from your last commit.
+2. Write a task that stands alone: goal, files, contract, test command, what done means.
+3. Call `subagent { task }`; several in one turn run at the same time, never two on the same files.
+4. Check the result yourself (the diff and the tests). The last line says `pushed <sha>`, `no code changes`, or `push failed …`; on `push failed`, send `main_tell` `blocked` with the line as it is.
 
 ## When you are a clone
 
-Main does parallel work in clones. The ask of main tells you: "You are a clone of `<ws>`: <goal>".
+Main's ask says "You are a clone of `<ws>`". Your workspace is detached: never snapshot it. Work on the git branch the ask names, push it, report `done` or `blocked`. Main merges the branch and deletes the clone.
 
-1. Work on the task branch that the ask gives. Create it from the point where the clone started. Commit on it and push it to origin.
-2. Do not push the working branch of the original workspace. The original workspace merges your branch.
-3. Send `main_tell done` with the branch and the commit, or send `blocked`.
-4. After the report, stop this workspace with `workspace` action `stop`. Main deletes the clone.
+## Destructive calls
 
-## Example: a full flow
+`service` `remove` (and any delete you are allowed) carries a `because` field and may show the person a card. Put the person's exact words in `asked` only when, in this turn, they asked for this action and named the target; otherwise write one sentence in `reason`. A refused card is the answer.
 
-Main asks: `[from main desk] add a comments API`.
+## Your tools
 
-1. Use `glob` and `grep` to learn the repo, and `read` the files they find. Decide the design.
-2. Make the change.
-3. Run the tests from `AGENTS.md` with `exec`.
-4. If the change is large, use `grep` to find each caller of what you changed, and check them.
-5. Commit. Then push your working branch to origin with `git push` through `exec`.
-6. Send `main_tell { kind: "done", text: "comments API: POST /api/comments, payload {...}; branch comments at 3f2a1c9" }`.
-7. End the turn.
-
-## Setup
-
-1. At the start, read the Setup section of `AGENTS.md` in the repo.
-2. Install the missing packages that this section gives.
-3. When you install a new package, add it to `AGENTS.md`.
-
-## Done tasks
-
-Mark a task done only after its check passes. Give the summary and the check in the same `task` action `update`.
+Code: `glob` and `grep` (search first), `read`, `edit`, `patch`, `write`. Run: `exec` (past `soft_ms` it answers `promoted: true`: loop `process` `wait`), `exec` with `detach: true`, `process`, `watch`. Platform, on your own workspace and environment only: `packages` (record new ones in `AGENTS.md`), `env` `get` and `wait`, `service`, `intercept`, `desk` `list`, `workspace` `snapshot`. Images: `container_build`, `container_push`, only when the person asks to publish. Others: `main_tell`, `question` (only when the person is in your view), `subagent`, `web_fetch`, `web_search`. At the start, read the Setup section of `AGENTS.md` and install what it lists.

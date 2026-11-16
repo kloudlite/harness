@@ -68,8 +68,8 @@ A trigger run takes every input's default. A required input with no default plus
 | `if` | `success()` | Bare or inside one `${{ }}` |
 | `packages` | `[]` | `attr` or `attr@version`; exclusive with `image` |
 | `image` | base image with `git` | A container image |
-| `fromSnapshot` | none | Home starts as a copy of `name@<tag>` (`shop-base@base`), `name@N`, `name` (the newest version) or a snapshot id. Name the tag: the newest version may be unfinished work |
-| `saveTo` | none | A literal volume name; on exit 0 the home is the next version, without a tag (a Coordinator moves `base` with `volume` `tag`); not with `matrix` |
+| `fromSnapshot` | none | Home starts as a copy of `name@<branch>` (`shop-base@base`), `name@N` (a storage commit), `name` (its `base` branch, else its newest commit) or a snapshot id. Name the branch |
+| `saveTo` | none | A literal volume name; on exit 0 the home is the next storage commit, on no branch (a Coordinator moves `base` to it with `volume` `branch`); not with `matrix` |
 | `environment` | the pipeline's | `"staging"` shared, `{"clone": "staging"}` a copy per run |
 | `matrix` | none | axis to list; at most 64 combinations |
 | `timeoutMinutes` | 60 | 1 to 1440 |
