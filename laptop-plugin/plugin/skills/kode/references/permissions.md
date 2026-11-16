@@ -17,6 +17,7 @@ The one rule behind every row: a Worker may do anything to what it made, and not
 | `workspace`, `env` | `list`, `get`, `wait` | |
 | `capsule`, `run` | `list`, `get`, `wait`, `logs` | |
 | `volume`, `pipeline` | `list`, `get` | |
+| `memory` | `read`, `list` | Read it first in a new session: it names the volumes to start from |
 | `service` | `logs` | |
 | `workspace_vars` | `get` | A secret shows as its reference, never as its value |
 | `packages` | `list` | |
@@ -28,7 +29,7 @@ The one rule behind every row: a Worker may do anything to what it made, and not
 |---|---|---|---|
 | `create` | Yes | No | One desk for one piece of work; give `ttl_secs` |
 | `connect` | Yes | No | It changes what each workspace of the desk reaches |
-| `start`, `stop`, `ttl` | Yes | Own desk only | A stop keeps each home; a start brings them back |
+| `start`, `stop`, `ttl` | Yes | Own desk only | A stop keeps each home; a start brings them back. It is a pause inside a session |
 | `delete` | Yes | No | It deletes each managed workspace of the desk |
 
 ## Workspaces
@@ -37,9 +38,9 @@ The one rule behind every row: a Worker may do anything to what it made, and not
 |---|---|---|---|
 | `create` (empty, or a clone with `source`) | Yes | A clone of its own only | Give a name that a person can read and a `task` that says why; call `ttl` in the same turn |
 | `restore` | Yes | Yes | It makes a new workspace; the source is not changed |
-| `start`, `stop`, `restart`, `ttl` | Yes | Own | Stop unfinished work; never delete it |
+| `start`, `stop`, `restart`, `ttl` | Yes | Own | A stop is a pause inside a session. Before the session ends, snapshot unfinished work, then delete |
 | `snapshot` | Yes | Own | The `message` says why. A new named base volume is a declared artifact: the Coordinator names it |
-| `delete` | Yes | Own | Persist first: push, snapshot or report |
+| `delete` | Yes | Own | Persist first: push, snapshot or report. No workspace stays between sessions |
 | `exec`, `process` | Not after it delegates | Own | The Coordinator asks a Worker or a capsule for the exit code and the end of the log |
 | `read`, `glob`, `grep`, `watch` | Yes | Own | The Coordinator reads the artifact first (report, diff, test output), then one file for one claim. It does not browse the tree |
 | `write`, `edit` | Not after it delegates | Own | A change of code is the Worker's work |
@@ -62,7 +63,7 @@ The one rule behind every row: a Worker may do anything to what it made, and not
 | `env` `create` (services as data, or a clone with `source`) | Yes | No | A clone is a full environment slot; call `ttl` in the same turn |
 | `env` `start`, `stop`, `ttl`, `snapshot` | Yes | Own | A snapshot holds the services, their configuration and the data |
 | `env` `restore` in place | Yes, after a yes from the person | No | It overwrites the current data |
-| `env` `delete` | Yes | Own, never shared | The data stays only in snapshots |
+| `env` `delete` | Yes | Own, never shared | The data stays only in snapshots: snapshot first when the data has value |
 | `service` `add`, `update`, `remove` | Yes | In its own environment only | A service that writes data gets a mount in the call that creates it |
 | `intercept` `start`, `stop` | Yes | Its own environment freely; a shared one only when the brief names the service | Say it first on a shared environment; one workspace per service; stop it when done |
 
@@ -72,6 +73,7 @@ The one rule behind every row: a Worker may do anything to what it made, and not
 |---|---|---|---|
 | `snapshot` `delete` | Yes | Own | Refused for the base of a running workspace |
 | `volume` `delete` | Yes | No | It removes each snapshot of a detached volume for good |
+| `memory` `write` | Yes | No | It names only what lasts: volumes (name, version, contents), repositories, how to run, conventions, open work. Never a workspace, a desk or a running environment |
 
 ## Pipelines and runs
 

@@ -19,7 +19,7 @@ The branch or commit, or "nothing persisted". The files touched, one per line.
 The command, its exit code and the last 20 lines of its output. "Not verified" is an allowed answer. A claim without this section is not.
 
 ## Resources left
-Each workspace, environment, capsule, snapshot or pipeline that still exists: its name, its state (stopped, snapshotted, running) and why it was kept. Empty means that everything was deleted.
+Each volume version or pipeline saved: its name, its number (`name@N`) and what is inside. Each workspace or environment that still runs, only when the brief says that the Coordinator removes it. A stopped workspace is never left. Empty means that everything was deleted.
 
 ## Budget spent
 The slots used at the peak, the snapshots taken, the context used (approximately).
@@ -38,8 +38,8 @@ A Worker that deletes its workspace copies `REPORT.md` first, with `transfer`, t
 | Scope | One workspace, created or handed over. The desk's environment is read-only unless the brief grants an intercept |
 | Tools | Each Worker tool of `permissions.md` |
 | Sub-Workers | In clones of its own workspace, one level, for independent and verifiable parts |
-| End state | Commit or push. Stop the workspace if the Coordinator can continue it, else delete it. `REPORT.md` |
-| Must not | Touch the resources of another desk; clone an environment; name a base volume |
+| End state | Commit or push. Unfinished work that cannot go to git: `workspace` `snapshot` with a `message` that starts with `wip:`, and the version (`name@N`) in the report. Then delete the workspace, unless the brief says that the Coordinator removes it. `REPORT.md` |
+| Must not | Touch the resources of another desk; clone an environment; name a base volume; leave a stopped workspace |
 
 ## 2. Throwaway experiment
 
@@ -86,5 +86,7 @@ One short block, in this order:
 4. What "done" means: a command that passes, a merged branch, an answered question.
 5. The budget: slots and a time limit.
 6. What is granted beyond the template, such as one named intercept.
+7. Where unfinished work goes: "a `wip` snapshot, its version in the report", or "leave the workspace, the Coordinator removes it".
+8. When the work is split under a plan file (`planning.md`): the path of the plan, the files that this Worker owns, and its branch.
 
 A brief that does not say what "done" means goes back to the Coordinator.
