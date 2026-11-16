@@ -146,8 +146,7 @@ export function fromTeam(v: TeamView): { workspaces: Workspace[]; environments: 
     branch: w.branch ?? "",
     processes: w.processes?.map((p) => ({
       id: p.id,
-      // a process in another tree says whose it is; main's needs no label
-      name: (p.tree && p.tree !== "main" ? `${p.tree} · ` : "") + (procName(p.cmd) || p.id),
+      name: procName(p.cmd) || p.id,
       startedAt: isoStart(p.started_at),
       command: p.cmd,
       status: p.state === "running" ? "running" : p.failed || (p.exit_code ?? 0) !== 0 ? "crashed" : "exited",

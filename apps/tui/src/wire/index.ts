@@ -36,7 +36,7 @@ export type LoginType = AuthType;
 export type LoginUi = AuthInteraction;
 export type CatalogModel = { provider: string; id: string; name: string; input: string[] };
 /** What the sidebar shows, read by the bench from the platform (./desk). JSON-safe: it crosses the websocket. */
-export type TeamProcess = { id: string; tree?: string; cmd: string; state: string; exit_code?: number | null; failed?: boolean; started_at?: string; logs: { text: string; err?: true }[] };
+export type TeamProcess = { id: string; cmd: string; state: string; exit_code?: number | null; failed?: boolean; started_at?: string; logs: { text: string; err?: true }[] };
 export type TeamWorkspace = {
   id: string;
   name: string;
