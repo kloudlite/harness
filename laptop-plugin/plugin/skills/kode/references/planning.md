@@ -12,11 +12,11 @@ Write one when two or more Workers change things that must fit together: an API 
 2. **Write the contracts before any Worker starts.** A contract is what two streams must agree on: names, fields, arguments, limits, error sentences, and who owns which files. Write the exact words. Leave the inside of a stream to its Worker.
 3. **Give each file one owner.** Two streams never edit the same file. When two streams need one file, one stream owns it and the contract says what it must put there.
 4. **Put the plan in the base workspace.** Write it as one file at the root of the source folder (`~/workspace/PLAN.md`). Each clone of the base then carries it.
-5. **Make one clone of the base for each Worker.** Read `quota` first. `workspace` `create` with `source`, a `task` that names the stream, then `ttl`. A clone starts ready: the code, the packages and the plan are in it.
+5. **Make one clone of the base for each Worker.** Read `quota` first. `workspace` `create` with `source`, a name `<base>-<stream>`, a `task` that names the stream, then `ttl`. A clone starts ready: the code, the packages and the plan are in it. A clone is never snapshotted: it shares the volume of the base.
 6. **Give each Worker a brief.** The brief names the workspace, the plan file, the stream, the files that the Worker owns, its branch and what "done" means (a command that exits 0). `worker-templates.md` gives the order of a brief.
 7. **Workers never negotiate with each other.** A Worker that finds a gap or an error in a contract stops that part, says so in `REPORT.md` and goes on with what the gap does not touch. The Coordinator corrects the plan file and tells each Worker that the change touches. A contract changes in one place only.
-8. **Integrate in a fixed order.** The plan names the order: the stream that others build on goes first. The Coordinator reads each `REPORT.md`, takes the branches in that order into one workspace, and runs the whole test set once. A failure goes back to the Worker that owns the file, with the end of the log.
-9. **End the session.** Push the result. Save the base as the next version of its volume when the work changed what a session starts from, with a `description` that still says what is inside and its `tags`. `memory` `write`: the volume version and the open work. Delete every workspace, the clones and the base included.
+8. **Integrate in a fixed order.** The plan names the order: the stream that others build on goes first. The Coordinator reads each `REPORT.md`, takes the branches in that order into the base workspace (a pushed branch, or a patch or bundle file that the Worker sent with `transfer`), deletes each clone when its commits are taken, and runs the whole test set once. A failure goes back to the Worker that owns the file, with the end of the log.
+9. **End the session.** Push the result. Remove credentials from the home. Snapshot the base workspace as the next version of its volume, with `tags: ["base"]` when the whole test set passed and no tag when work is left, and a `description` that still says what is inside. `memory` `write`: the volume, and the open work with its version. Delete every workspace, the clones and the base included.
 
 ## What makes a contract good
 
@@ -38,7 +38,7 @@ Two or three sentences: the problem and what is true when the work is done.
 ## Repositories
 - `~/workspace/<repo>`: what it holds and which parts this work touches.
 - The files to read before an edit (the rules of the repository).
-- How a commit leaves the workspace: push, or the Coordinator takes it.
+- How a commit leaves the workspace: push, or a patch or bundle file sent with `transfer` to the base workspace.
 
 ## Contract 1: <the data>
 Each new field: its name, its type, its limits, what an absent value means, who writes it.
@@ -62,7 +62,7 @@ Integration order: A, then B. What a stream must hold back, when another stream 
 - How to commit: the branch, the author, the form of the subject.
 - How to build and test: the commands, and what not to run.
 - Leave `REPORT.md`: outcome, commits, how it was verified, what is not verified, open questions.
-- What the Worker must not do to the workspace (stop, snapshot, delete), when the Coordinator ends it.
+- What the Worker must not do to the workspace (stop, snapshot, delete): the Coordinator ends it. A clone is never snapshotted.
 ```
 
 ## Mistakes

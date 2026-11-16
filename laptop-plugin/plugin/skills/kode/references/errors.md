@@ -11,20 +11,25 @@ The status comes first; the body is one sentence. Report it as it is, then take 
 | `422` name rule (`name must be 1-40 lowercase letters, digits or '-'…`) | Rename: lowercase, hyphens, starts with a letter, no `--`, not `ws`, `env`, `api`, `admin`, `system`, `kd`. |
 | `409 a workspace named "x" already exists here` (also environment, desk) | Reuse it, or pick another name. |
 | `409` `"x" is ambiguous; qualify it as owner/name` | Use the id or `team/name`. |
-| `409 workspace is interrupted: its storage is moving; it resumes in seconds` | Wait, then read the object again. |
-| `409 no storage disk has room for {n} GiB; retry later or ask an operator` | Tell the user. |
+| `409 the storage pool is full; retry later or ask an operator` | Tell the user. |
 | `409 a snapshot is already being cut for this workspace` | Wait, read the volume history, do not repeat. |
-| `409 this snapshot is the base of a running worktree` | Keep it; tell the user. |
+| `409 this snapshot is the base of …` / `… is where … stands now (its latest push)` | A live workspace or environment was built from it or last pushed it. Delete that workspace first (after its own snapshot), or keep the version. |
+| `409 version {N} carries the tag {tag}; move or remove the tag first` | The version is protected. Move the tag to a newer version with `volume` `tag`, or keep the version. |
 | `409 the volume still has a workspace or environment` | Delete the owner first, if the user asked. |
-| `409 this desk has no environment; connect one…` | `desk` action `create` with `environment` makes a desk that has one. |
-| `409 conflict, retry` / `the desk changed; retry` | Read again, repeat once. |
+| `409 this desk has no environment; connect one…` | `desk` `connect` with `environment`. |
+| `409 conflict, retry` / `the desk changed; retry` / `volume {name} is being changed; retry` | Read again, repeat once. |
 | `env` action `restore` `409` with `lost` | Name the services; call again with `discard` only after a yes. |
 | `422` for a package; the answer lists versions | Pick a listed version. |
-| `422 volume: this volume has no name yet; name it on its first push` | Ask for a name; give `volume`. |
+| A first snapshot without `volume` | It names the volume after the workspace. Always pass `volume` on the first snapshot of a workspace that was created empty. |
+| `409 this volume is named X, not Y (this workspace is a clone of that volume…)` | Drop `volume` or pass X: a clone or a restore saves into its source's volume. |
 | `409 volume {name} already exists; delete it first` | Ask for another name. |
 | `409 volume {name} is used by {readers}` | A pipeline reads it. Tell the user. |
-| `404 volume {name} has no version {n}` / `has no ready version` | List with `volume` action `get`. |
+| `404 volume {name} has no version {n}` / `has no tag {tag}` / `has no ready version` | Read `volume` `get`: it lists the versions and the tags. A `base` tag that is gone means that nobody tagged a good version: ask which version is good. |
+| `422 tag: "X" must be lowercase letters, digits and hyphens (at most 32), and not a number or "latest"` | Pick another tag name. |
+| `422 labels: …` / `tags: at most 16 on one volume` | Fix the list; remove a tag that nobody uses with `volume` `untag`. |
 | `no git connector of {owner} covers {host}/{repo}` | The user connects the code host in the web console. |
+| `link your GitHub account to push: …` / `your GitHub link has expired; link it again` | The person links GitHub in the web console (Settings, Connectors). Until then the work is an unfinished snapshot, not a push. |
+| `connector {name} can only read` | The connector's GitHub App has no write on contents. Tell the user; leave the work as an unfinished snapshot. |
 | `no registry is configured` | The user connects a registry in the web console. |
 | `422 pipeline {name} is invalid:` + lines | Fix every line, save again. |
 | `422 pipeline {name} cannot run:` + lines | A missing input or secret. Fix the cause, start again. |

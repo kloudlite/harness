@@ -123,7 +123,7 @@ const SL = { type: "array", items: S };
 const SNAP_REF = "a volume name (its newest version), `name@N`, `name@<tag>` or a snapshot id";
 /** What a volume says about itself, set at a push or with `volume describe`: a cold session picks its volumes from these. */
 const DESCRIPTION = { type: "string", description: "What the volume holds and what it is for (at most 500 characters). Set it on the first snapshot; a later value replaces it." };
-const LABELS = { type: "array", items: S, description: "Up to 8 short labels on the volume, for finding it (lowercase letters, digits, hyphens), such as the project name, `wip` and `test`. A later value replaces the set." };
+const LABELS = { type: "array", items: S, description: "Up to 8 short labels on the volume, for finding it (lowercase letters, digits, hyphens), such as the project name and `test`. A later value replaces the set." };
 /** A tag is a movable name on ONE snapshot of a volume, as a git tag is on a commit: `shop-base@base`. */
 const SNAP_TAGS = { type: "array", items: S, description: "Tags to put on this snapshot, such as `[\"base\"]`: each is a movable name read as `name@<tag>`, and one that another version holds moves here." };
 const TAG = { type: "string", description: "The tag name: lowercase letters, digits and hyphens; not a number and not `latest`." };
