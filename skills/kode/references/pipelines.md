@@ -68,12 +68,12 @@ A trigger run takes every input's default. A required input with no default plus
 | `if` | `success()` | Bare or inside one `${{ }}` |
 | `packages` | `[]` | `attr` or `attr@version`; exclusive with `image` |
 | `image` | base image with `git` | A container image |
-| `fromSnapshot` | none | Home starts as a copy of `name`, `name@N` or a snapshot id |
-| `saveTo` | none | A literal volume name; on exit 0 the home is the next version; not with `matrix` |
+| `fromSnapshot` | none | Home starts as a copy of `name@<tag>` (`shop-base@base`), `name@N`, `name` (the newest version) or a snapshot id. Name the tag: the newest version may be unfinished work |
+| `saveTo` | none | A literal volume name; on exit 0 the home is the next version, without a tag (a Coordinator moves `base` with `volume` `tag`); not with `matrix` |
 | `environment` | the pipeline's | `"staging"` shared, `{"clone": "staging"}` a copy per run |
 | `matrix` | none | axis to list; at most 64 combinations |
 | `timeoutMinutes` | 60 | 1 to 1440 |
-| `permissions` | none | `{"registry": "push", "git": "read"}` |
+| `permissions` | none | `{"registry": "push", "git": "read"}`. A push: `"git": "write"` with `"gitPush": ["github.com/owner/name"]` (at most 10 repositories); the saver must be the person or a team admin, a connector of the owner must be able to write, and a run that descends from a webhook never gets a push |
 | `env` | `{}` | Values interpolate, except a whole-value `${{ secrets.NAME }}` |
 | `secrets` | `[]` | Owner's secrets for every step; each must exist at save |
 | `steps` | required | At least one |
