@@ -119,6 +119,9 @@ const ENV = { type: "string", description: "The environment id or name." };
 const N = { type: "number" };
 const I = { type: "integer" };
 const SL = { type: "array", items: S };
+/** What a volume says about itself, set at a push or with `volume describe`: a cold session picks its volumes from these. */
+const DESCRIPTION = { type: "string", description: "What the volume holds and what it is for (at most 500 characters). Set it on the first snapshot; a later value replaces it." };
+const TAGS = { type: "array", items: S, description: "Up to 8 short labels (lowercase letters, digits, hyphens), such as `base`, `wip`, `test` and the project name. A later value replaces the set." };
 const OBJ = { type: "object" };
 const SERVICE = {
   type: "object",
@@ -402,8 +405,8 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
     }
     return { ...snapshot, note: "still being written; it lists in volume get once ready" };
   };
-  const snapAct = wact({ message: S, volume: VOLUME }, [], async (a) => {
-    const snapshot = await settled(JSON.parse(await api("POST", `${wsPath(a)}/snapshots`, strip({ message: a.message, volume: a.volume }))));
+  const snapAct = wact({ message: S, volume: VOLUME, description: DESCRIPTION, tags: TAGS }, [], async (a) => {
+    const snapshot = await settled(JSON.parse(await api("POST", `${wsPath(a)}/snapshots`, strip({ message: a.message, volume: a.volume, description: a.description, tags: a.tags }))));
     // the POST succeeded: a failed re-read must not turn a saved snapshot into an error
     try { return JSON.stringify({ ...JSON.parse(await api("GET", wsPath(a))), snapshot }, null, 2); }
     catch (e) { return JSON.stringify({ snapshot, note: `saved; the workspace was not re-read: ${(e as Error).message}` }, null, 2); }
@@ -483,8 +486,8 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
             delete: eact({}, [], async (env) => deleting(`/v1/environments/${env}`, () => api("DELETE", `/v1/environments/${env}`))),
             wait: eact({ timeout_ms: TIMEOUT }, [], async (env, a) => (await wake(env), waitEnv(env, a))),
             ttl: eact({ ttl_secs: TTL, clear: CLEAR }, [], async (env, a) => { const b = ttlBody(a); return typeof b === "string" ? b : (await api("PUT", `/v1/environments/${env}/ttl`, b), envView(env)); }),
-            snapshot: eact({ message: S, volume: VOLUME }, [], async (env, a) => {
-              const snapshot = await settled(JSON.parse(await api("POST", `/v1/environments/${env}/snapshots`, strip({ message: a.message, volume: a.volume }))));
+            snapshot: eact({ message: S, volume: VOLUME, description: DESCRIPTION, tags: TAGS }, [], async (env, a) => {
+              const snapshot = await settled(JSON.parse(await api("POST", `/v1/environments/${env}/snapshots`, strip({ message: a.message, volume: a.volume, description: a.description, tags: a.tags }))));
               try { return JSON.stringify({ ...JSON.parse(await envView(env)), snapshot }, null, 2); }
               catch (e) { return JSON.stringify({ snapshot, note: `saved; the environment was not re-read: ${(e as Error).message}` }, null, 2); }
             }),
@@ -655,16 +658,26 @@ function mainOnly(tickMs: number): ToolDef[] {
         return JSON.stringify({ ...doc, state: "deleted" }, null, 2);
       }),
     }),
-    resource("volume", "Volumes: the stored state of workspaces and environments. Actions: list, get (history and branch tips), delete a detached volume.", {
-      list: act({ kind: S, owner: S }, [], async (a) => api("GET", `/v1/volumes${qs({ kind: a.kind, owner: a.owner })}`)),
+    resource("volume", "Volumes: the stored state of workspaces and environments, each with a name, a description and tags. Actions: list (filter by `tag`), get (history and branch tips), describe (set `description` and `tags`), delete a detached volume.", {
+      list: act({ kind: S, owner: S, tag: { type: "string", description: "Keep only volumes that carry this tag." } }, [], async (a) => api("GET", `/v1/volumes${qs({ kind: a.kind, owner: a.owner, tag: a.tag })}`)),
       get: act({ volume: { type: "string", description: "The volume's id or its given name." } }, ["volume"], async (a) => {
         // /history and /refs are keyed by the volume id; a name given at a snapshot is a claim on the list row
         const rows = await apiJson<any[]>("GET", "/v1/volumes").catch(() => []);
-        const id = (Array.isArray(rows) ? rows : []).find((r) => r?.name === a.volume)?.id ?? a.volume;
+        const list = Array.isArray(rows) ? rows : [];
+        const row = list.find((r) => r?.name === a.volume) ?? list.find((r) => r?.id === a.volume);
+        const id = row?.id ?? a.volume;
         const [history, refs] = await Promise.all([api("GET", `/v1/volumes/${seg(id)}/history?include=working`), api("GET", `/v1/volumes/${seg(id)}/refs`)]);
         // `working` and each row's `working_copies` come from the api untouched; an object answer ({history, working}) is spread, a bare list stays `history`
         const h = JSON.parse(history);
-        return JSON.stringify({ volume: a.volume, ...(Array.isArray(h) ? { history: h } : h), refs: JSON.parse(refs) }, null, 2);
+        // the description and tags live on the name claim, which only the list row carries
+        return JSON.stringify({ volume: a.volume, ...strip({ description: row?.description, tags: row?.tags }), ...(Array.isArray(h) ? { history: h } : h), refs: JSON.parse(refs) }, null, 2);
+      }),
+      describe: act({ volume: { type: "string", description: "The volume's given name." }, owner: OWNER_DEFAULT, description: DESCRIPTION, tags: TAGS }, ["volume"], async (a) => {
+        // an empty string and an empty list are values (they clear), so only an absent field is left out
+        if (a.description === undefined && a.tags === undefined) throw new Error("give `description` or `tags` (an empty string or an empty list clears)");
+        const owner = own(a);
+        if (!owner) throw new Error("`owner` is required: there is no desk team to default to");
+        return api("PATCH", `/v1/volumes/${seg(owner)}/${seg(a.volume)}`, strip({ description: a.description, tags: a.tags }));
       }),
       delete: act({ volume: S }, ["volume"], async (a) => (await api("DELETE", `/v1/volumes/${seg(a.volume)}`), JSON.stringify({ volume: a.volume, state: "deleted" }, null, 2))),
     }),

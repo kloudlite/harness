@@ -846,3 +846,65 @@ test("memory write is a patch and refuses anything but one of edits, content, de
   await expect(t.run({ action: "write", owner: "acme", section: "run", if_version: 1 })).rejects.toThrow("exactly one");
   await expect(t.run({ action: "read", project: "a", owner: "b" })).rejects.toThrow("same thing");
 });
+
+test("the push tools pass description and tags, and leave out what was not given", async () => {
+  routes["POST /v1/workspaces/w1/snapshots"] = json({});
+  routes["POST /v1/environments/e1/snapshots"] = json({});
+  routes["GET /v1/workspaces/w1"] = json({ id: "w1", state: "ready" });
+  routes["GET /v1/environments/e1"] = json({ id: "e1", state: "running", services: [] });
+  const post = (n: number) => calls.filter((c) => c.method === "POST")[n]!.body;
+  await tool(platformTools("main"), "workspace_snapshot").run({ workspace: "w1", volume: "pg", description: "Postgres 16 with the seed data", tags: ["base", "shop"] });
+  expect(post(0)).toEqual({ volume: "pg", description: "Postgres 16 with the seed data", tags: ["base", "shop"] });
+  await tool(platformTools("workspace", "w1"), "workspace_snapshot").run({ message: "m", tags: ["wip"] });
+  expect(post(1)).toEqual({ message: "m", tags: ["wip"] });
+  await tool(platformTools("main"), "env_snapshot").run({ env: "e1", volume: "pg", description: "d", tags: [] });
+  expect(post(2)).toEqual({ volume: "pg", description: "d", tags: [] });
+});
+
+test("volume list filters by tag; get adds the description and tags of the list row", async () => {
+  const t = platformTools("main");
+  routes["GET /v1/volumes?owner=acme&tag=base"] = json([{ id: "ws-ab12", name: "pg" }]);
+  expect(JSON.parse(await tool(t, "volume_list").run({ owner: "acme", tag: "base" }))).toEqual([{ id: "ws-ab12", name: "pg" }]);
+  routes["GET /v1/volumes"] = json([{ id: "ws-ab12", name: "pg", description: "Postgres 16", tags: ["base", "shop"] }, { id: "ws-cd34", name: null, description: null, tags: [] }]);
+  for (const id of ["ws-ab12", "ws-cd34"]) {
+    routes[`GET /v1/volumes/${id}/history?include=working`] = json([{ id: "s1" }]);
+    routes[`GET /v1/volumes/${id}/refs`] = json({});
+  }
+  // by name and by id alike: the row is the same one
+  for (const volume of ["pg", "ws-ab12"]) expect(JSON.parse(await tool(t, "volume_get").run({ volume }))).toEqual({ volume, description: "Postgres 16", tags: ["base", "shop"], history: [{ id: "s1" }], refs: {} });
+  expect(JSON.parse(await tool(t, "volume_get").run({ volume: "ws-cd34" }))).toMatchObject({ description: null, tags: [] });
+});
+
+test("volume describe PATCHes the name under its owner, sends only what was given, and refuses neither", async () => {
+  const t = platformTools("main");
+  const doc = { id: "ws-ab12", name: "pg", description: "Postgres 16", tags: ["base"] };
+  routes["PATCH /v1/volumes/acme/pg"] = json(doc);
+  routes["PATCH /v1/volumes/alice/pg"] = json(doc);
+  const patches = () => calls.filter((c) => c.method === "PATCH").map((c) => [c.url, c.body]);
+  process.env.KD_TEAM = "acme";
+  try {
+    // the owner defaults to the desk's team, as the pipeline tools' does
+    expect(JSON.parse(await tool(t, "volume_describe").run({ volume: "pg", description: "Postgres 16", tags: ["base"] }))).toEqual(doc);
+    await tool(t, "volume_describe").run({ volume: "pg", owner: "alice", tags: ["wip"] });
+    // "" and [] clear, so they are sent
+    await tool(t, "volume_describe").run({ volume: "pg", description: "" });
+    await tool(t, "volume_describe").run({ volume: "pg", tags: [] });
+    expect(patches()).toEqual([
+      ["/v1/volumes/acme/pg", { description: "Postgres 16", tags: ["base"] }],
+      ["/v1/volumes/alice/pg", { tags: ["wip"] }],
+      ["/v1/volumes/acme/pg", { description: "" }],
+      ["/v1/volumes/acme/pg", { tags: [] }],
+    ]);
+    await expect(tool(t, "volume_describe").run({ volume: "pg" })).rejects.toThrow("give `description` or `tags`");
+    await expect(tool(t, "volume_describe").run({ volume: "pg", description: null })).rejects.toThrow("give `description` or `tags`");
+    expect(patches().length).toBe(4);
+  } finally {
+    delete process.env.KD_TEAM;
+  }
+  await expect(tool(t, "volume_describe").run({ volume: "pg", tags: ["wip"] })).rejects.toThrow("`owner` is required");
+  routes["PATCH /v1/volumes/acme/pg"] = json({ error: "tags: at most 8" }, 422);
+  await expect(tool(t, "volume_describe").run({ volume: "pg", owner: "acme", tags: ["a"] })).rejects.toThrow("422: tags: at most 8");
+  const v = t.find((x) => x.name === "volume")!;
+  expect((v.inputSchema as any).properties.action.enum).toEqual(["list", "get", "describe", "delete"]);
+  expect(v.description).toBe("Volumes: the stored state of workspaces and environments, each with a name, a description and tags. Actions: list (filter by `tag`), get (history and branch tips), describe (set `description` and `tags`), delete a detached volume.");
+});
