@@ -22,7 +22,7 @@ The command, its exit code and the last 20 lines of its output. "Not verified" i
 Each volume version or pipeline saved: its name, its number (`name@N`), whether it is good or what is left, and what is inside. Each workspace or environment that still runs, only when the brief says that the Coordinator removes it. A stopped workspace is never left. Empty means that everything was deleted.
 
 ## Budget spent
-The slots used at the peak, the snapshots taken, the context used (approximately).
+The model that ran (its class), the slots used at the peak, the snapshots taken, the context used (approximately).
 
 ## Open questions
 What the Coordinator must decide. Empty is correct.
@@ -88,7 +88,8 @@ One short block, in this order:
 4. What "done" means: a command that passes, a merged branch, an answered question.
 5. The budget: slots and a time limit.
 6. What is granted beyond the template, such as one named intercept.
-7. Where the work goes at the end: "push the branch", "hand the commits back as a file", "an untagged snapshot, its version in the report", or "leave the workspace, the Coordinator ends it".
-8. When the work is split under a plan file (`planning.md`): the path of the plan, the files that this Worker owns, and its branch.
+7. The model class (`models.md`): standard for a clear brief, light for mechanical work, one class up after a failed attempt.
+8. Where the work goes at the end: "push the branch", "hand the commits back as a file", "an untagged snapshot, its version in the report", or "leave the workspace, the Coordinator ends it".
+9. When the work is split under a plan file (`planning.md`): the path of the plan, the files that this Worker owns, and its branch.
 
 A brief that does not say what "done" means goes back to the Coordinator.
