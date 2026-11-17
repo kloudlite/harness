@@ -8,7 +8,7 @@
       "displayName": "Kode",
       "source": "./laptop-plugin/plugin",
       "description": "Work on Kode workspaces from Claude Code through the desk's tools and skills.",
-      "version": "0.12.5",
+      "version": "0.12.6",
       "author": { "name": "Kloudlite" },
       "homepage": "https://github.com/kloudlite/harness",
       "repository": "https://github.com/kloudlite/harness",

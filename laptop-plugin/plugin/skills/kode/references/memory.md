@@ -66,6 +66,8 @@ A stale line is worse than a missing one: remove what no longer exists. Only the
 ## Writing rules
 
 - Present tense: what is, never what happened.
+- Inside a section, headings are `###`: the merged read puts each section under its own `##`.
+- What is not known yet is a line `unknown: <question>`, never a guess.
 - Names, not ids. Branches, not commit numbers. Secrets by name, never a value.
 - Patch with `edits` and the `if_version` of your read; full `content` only for a new section. On a `409`, merge with the current text and write again.
 - Each tool answer carries `memory: {rev, changed}`; when `changed` is true, read again before you rely on it.
