@@ -62,9 +62,9 @@ import { copySelection, readClipboardImage, type ClipImage } from "./clipboard.t
 import {
   getDesk,
   patchDesk,
-    deskIdOf,
+  deskIdOf,
   deskKey,
-  pickAgentDesk,
+  workerKeys,
   askFor,
   baseOf,
   type QueuedMessage,
@@ -100,10 +100,10 @@ type ViewId = "agent" | "files" | "processes" | "plan" | "done";
 const WIDE_COLUMNS = 120;
 
 /**
- * Desks are hierarchical: each environment has a main desk, and each
- * workspace has its own desk running pi's full agent harness (streaming,
- * thinking, coding tools, steering queues, compaction, retries). A running
- * turn belongs to its desk and keeps streaming while you look elsewhere.
+ * Two kinds of conversation: the Coordinator, which talks to you and plans,
+ * and the workers it starts, which execute. Workspaces are tools they use,
+ * not conversations. A running turn belongs to its conversation and keeps
+ * streaming while you look elsewhere.
  */
 const MIN_COLUMNS = 80;
 const MIN_ROWS = 24;
@@ -179,10 +179,12 @@ export function App({
     () => (hello().settings.vim ?? "off") === "on" ? "normal" : "insert",
   );
   const [hint, setHint] = useState(0);
-  // 0 = main context (orchestrator); 1..N = inside workspaces[focus - 1]
+  // 0 = no workspace selected; 1..N = workspaces[focus - 1], what the files and jobs views show.
+  // The conversation on screen is `worker` (undefined = the Coordinator), independent of it.
   const [focus, setFocus] = useState(0);
+  const [worker, setWorker] = useState<string>();
   // The team view: the desk's real workspaces and environments, polled from the backend (see `refreshTeam`).
-  // Workspaces belong to the working desk, not to an environment.
+  // Workspaces belong to the desk, not to an environment.
   const [teamView, setTeamView] = useState<TeamView>();
   const mapped = useMemo(() => (teamView ? fromTeam(teamView) : { workspaces: [], environments: [], envIndex: -1 }), [teamView]);
   const user = teamView?.user ?? "";
@@ -213,9 +215,8 @@ export function App({
   // seeded from pi's bundled catalog so the picker paints at once, then
   // replaced by the providers' live lists — never block the TUI on the network
   const [models, setModels] = useState(catalog);
-  // Every context — the environment's main desks and each workspace's —
-  // can hold several named desks: base key → id of the one in use, plus a
-  // name cache so the UI can label them.
+  // The Coordinator can hold several named conversations (`main:<id>`): base key → id of the one
+  // in use (`/desk use`).
   const [deskId, setDeskId] = useState<Record<string, string>>({});
 
   // index into the active desk's queue while editing it, else null
@@ -272,9 +273,8 @@ export function App({
   const mainBase = "main";
   const mainDesk = deskId[mainBase] ?? "main";
   const mainKey = deskKey(undefined, mainDesk);
-  // desks belong to the context you are in: the environment's, or this
-  // workspace's own
-  const activeBase = focus === 0 ? "main" : workspaces[focus - 1]!.id;
+  // the conversation on screen: a worker's name, or the Coordinator's base
+  const activeBase = worker ?? "main";
   // Pushed by the bench when it can (`desks.watch`): every view's list and busy marks move the
   // moment any view opens, names or runs a desk. `undefined` = not answered yet, `null` = an
   // old bench, which keeps today's fetch.
@@ -363,20 +363,14 @@ export function App({
   const [fetched, setFetched] = useState<DeskMeta[]>([]);
   useEffect(() => {
     if (watched !== null) return;
-    backend().desks.list(activeBase).then(setFetched).catch(() => {});
+    backend().desks.list().then(setFetched).catch(() => {});
   }, [watched, activeBase]);
-  // same filter as the bench's listDesks(prefix)
-  const baseDesks = watched ? watched.filter((m) => m.key.startsWith(activeBase)) : fetched;
-  // a clone has no desk of its own, only its subagent's: open that one
-  useEffect(() => {
-    if (activeBase === "main" || deskId[activeBase]) return;
-    const id = pickAgentDesk(activeBase, baseDesks);
-    if (id) setDeskId((m) => (m[activeBase] ? m : { ...m, [activeBase]: id }));
-  }, [activeBase, baseDesks, deskId]);
-  const activeKey = deskKey(
-    focus === 0 ? undefined : workspaces[focus - 1]!.id,
-    deskId[activeBase] ?? "main",
-  );
+  // every conversation the bench knows: the Coordinator's and the workers'
+  const allDesks: DeskMeta[] = watched ?? fetched;
+  // the Workers list: what the bench lists, what this view has open, and the one on screen even
+  // before the bench lists it
+  const workerList = workerKeys([...allDesks.map((m) => m.key), ...Object.keys(desks), ...(worker ? [worker] : [])]);
+  const activeKey = worker ?? mainKey;
   const desk = getDesk(desks, activeKey);
   latest.current = { desks, activeKey };
   // the card on screen: only an ask from this view's workspace, so another
@@ -507,19 +501,21 @@ export function App({
     if (inputLive && !menuOpen) {
     }
     const n = workspaces.length;
-    // only your own workspaces can be entered; others are visible but attached
-    // to their owner's desk
+    // only your own workspaces can be selected; others are visible but attached
+    // to their owner
     const own = workspaces
       .map((w, i) => (w.owner === user ? i + 1 : -1))
       .filter((i) => i > 0);
-    // cycle through the whole hierarchy: main, then your workspaces
-    const ring = [0, ...own];
-    const cycle = (delta: number) =>
-      setFocus((f) => {
-        const pos = Math.max(0, ring.indexOf(f));
-        const next = ring[(pos + delta + ring.length) % ring.length]!;
-        return next;
-      });
+    // the ring: the Coordinator, each worker, then your workspaces. A workspace stop leaves the
+    // conversation as it is; a conversation stop clears the workspace selection.
+    type Stop = { worker?: string; focus: number };
+    const ring: Stop[] = [{ focus: 0 }, ...workerList.map((k) => ({ worker: k, focus: 0 })), ...own.map((f) => ({ focus: f }))];
+    const here = focus > 0 ? ring.findIndex((s) => s.focus === focus) : ring.findIndex((s) => s.focus === 0 && s.worker === worker);
+    const cycle = (delta: number) => {
+      const s = ring[(Math.max(0, here) + delta + ring.length) % ring.length]!;
+      setFocus(s.focus);
+      if (s.focus === 0) setWorker(s.worker);
+    };
 
     /**
      * The command surface, shared by both key schemes: a bare letter in vim's
@@ -565,11 +561,15 @@ export function App({
       }
       if (name === "b") {
         setFocus(0);
+        setWorker(undefined);
         return true;
       }
       if (/^[0-9]$/.test(name)) {
         const d = Number(name);
-        if (d === 0) setFocus(0);
+        if (d === 0) {
+          setFocus(0);
+          setWorker(undefined);
+        }
         else if (d <= n && workspaces[d - 1]!.owner === user) setFocus(d);
         return true;
       }
@@ -947,7 +947,7 @@ export function App({
   /** ^f / f: chat ⇄ files. Jobs have their own key (^j). */
   function cycleView(): void {
     if (focus === 0) {
-      append(activeKey, { kind: "info", text: "enter a workspace first — f opens its files" });
+      append(activeKey, { kind: "info", text: "select a workspace first — f opens its files" });
       return;
     }
     setView(view === "files" ? "agent" : "files");
@@ -961,10 +961,10 @@ export function App({
       body: [
         "Navigation (NORMAL mode)",
         "  i           type a prompt        /    commands",
-        "  j k         workspace ring       p    jump: env · desk · ws",
+        "  j k         conversations, then workspaces   p    jump",
         "  f · ^j      files · jobs screen   r    (in files) rescan",
         "  ^g · ^q     the plan · finished tasks",
-        "  1-9 · 0     workspace N · main   p    jump anywhere",
+        "  1-9 · 0     workspace N · Coordinator",
         "  esc         interrupt the agent  ?    this help",
         "  u d         scroll",
         "",
@@ -1096,7 +1096,9 @@ export function App({
         return append(activeKey, { kind: "info", text: `desk described "${arg}"` });
       }
       if (verb === "use" && arg) {
-        setDeskId((m) => ({ ...m, [activeBase]: arg }));
+        // named conversations are the Coordinator's: a worker is its own name
+        setDeskId((m) => ({ ...m, main: arg }));
+        setWorker(undefined);
         return;
       }
       openCmd("desk ");
@@ -1112,7 +1114,7 @@ export function App({
     if (trimmed === "/help") return openHelp();
     if (trimmed === "/files") {
       if (focus > 0) setView("files");
-      else append(activeKey, { kind: "info", text: "enter a workspace first — /files browses its files and diffs" });
+      else append(activeKey, { kind: "info", text: "select a workspace first — /files browses its files and diffs" });
       return;
     }
     if (trimmed.startsWith("/theme ")) {
@@ -1283,12 +1285,15 @@ export function App({
         group: `Workspaces · ${environment?.name ?? "no environment"}`,
         run: () => setFocus(i + 1),
       })),
-    {
-      label: "main context",
-      hint: "orchestrator",
-      group: "Context",
-      run: () => setFocus(0),
-    },
+    ...[undefined, ...workerList].map((k) => ({
+      label: k ?? "Coordinator",
+      hint: k ? "worker" : "talks to you and plans",
+      group: "Conversations",
+      run: () => {
+        setFocus(0);
+        setWorker(k);
+      },
+    })),
   ];
 
   // Built once per auth or catalog change, NOT per keystroke — sorting/mapping
@@ -1311,16 +1316,15 @@ export function App({
         .map((m) => ({ provider: m.provider, id: m.id, hint: m.name })),
       themes: themeNames,
       logins: hello().logins,
-      // this environment's main desks, newest first
-      // desks of the context you are in (environment main, or this workspace)
-      desks: baseDesks
-        .filter((m) => m.key === activeBase || m.key.startsWith(`${activeBase}:`))
+      // the Coordinator's named conversations (`/desk use`)
+      desks: allDesks
+        .filter((m) => baseOf(m.key) === "main")
         .map((m) => {
-          const id = deskIdOf(activeBase, m.key);
+          const id = deskIdOf("main", m.key);
           return {
             id,
             label: m.name ?? (id === "main" ? "main" : "untitled"),
-            hint: [id === (deskId[activeBase] ?? "main") ? "current" : "", ago(m.updated)]
+            hint: [id === (deskId.main ?? "main") ? "current" : "", ago(m.updated)]
               .filter(Boolean)
               .join(" · "),
           };
@@ -1367,7 +1371,7 @@ export function App({
         })),
       ],
     }),
-    [auth, models, prefs, envs, env, focus, environment, activeBase, deskId, baseDesks, toast],
+    [auth, models, prefs, envs, env, focus, environment, activeBase, deskId, allDesks, toast],
   );
   const jumpMatches = useMemo(
     () =>
@@ -1375,7 +1379,7 @@ export function App({
         ? paletteItems.filter((it) => it.label.toLowerCase().includes(input.toLowerCase()))
         : [],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [palette, input, envs, env, focus],
+    [palette, input, envs, env, focus, workerList.join(",")],
   );
   const menu = useMemo(() => {
     if (palette)
@@ -1391,14 +1395,13 @@ export function App({
   const processesView = view === "processes";
   const planView = view === "plan";
   const doneView = view === "done";
-  // the plan: boards per desk, in this desk's words (main sees all, a workspace only itself)
-  const nameOf = (key: string) => workspaces.find((w) => w.id === key)?.name ?? key;
-  const stateOf = (key: string) => {
-    const i = workspaces.findIndex((w) => w.id === key);
-    if (i < 0) return "";
-    const w = workspaces[i]!;
-    return asks.some((a) => baseOf(a.key) === key) ? "needs you" : getDesk(desks, key).busy || watched?.some((m) => baseOf(m.key) === key && m.busy) ? "working" : w.status === "stopped" ? "" : "idle";
-  };
+  // the plan: boards per conversation (the Coordinator sees all, a worker only its own). An older
+  // desk's board keyed by a workspace id still reads as that workspace's name.
+  const nameOf = (key: string) => (baseOf(key) === "main" ? "Coordinator" : workspaces.find((w) => w.id === key)?.name ?? key);
+  const busyOf = (key: string) => getDesk(desks, key).busy || !!watched?.some((m) => m.key === key && m.busy);
+  const waitingOf = (key: string) => asks.some((a) => a.key === key);
+  const stateOf = (key: string) =>
+    baseOf(key) === "main" ? "" : waitingOf(key) ? "needs you" : busyOf(key) ? "working" : "idle";
   const planAll = (max: number) => planRows(teamView?.boards ?? [], nameOf, activeBase, stateOf, max);
   // main's Jobs screen: every workspace's processes, ids prefixed so two workspaces' "p1" stay apart
   const allJobs = workspaces
@@ -1413,12 +1416,9 @@ export function App({
   // typing reaches the input only in INSERT (jump mode always types the filter)
   const inputLive = !modalOpen && (prefs.vim === "off" || keyMode === "insert" || palette || cmdMode);
 
-  // just where you are: the workspace (with its parent, if it is an ephemeral
-  // one), or the working desk at the main context — the same inherited names
-  // the title bar shows, never derived from a prompt.
-  const contextPath = (
-    focus === 0 ? ["Working Desk"] : wsPath(workspaces, workspaces[focus - 1]!)
-  ).join(" › ");
+  // just where you are: the conversation you are typing into, then the selected workspace (with
+  // its parent, if it is a clone) — inherited names, never derived from a prompt.
+  const contextPath = [worker ?? "Coordinator", ...(focus === 0 ? [] : wsPath(workspaces, workspaces[focus - 1]!))].join(" › ");
 
   const sidebarEl = (
     <Sidebar
@@ -1431,8 +1431,12 @@ export function App({
       unavailable={teamView && !teamView.available ? teamView.error ?? "unknown error" : undefined}
       focus={focus}
       width={prefs.sidebarWidth}
-      running={workspaces.map((w) => getDesk(desks, w.id).busy || !!watched?.some((m) => baseOf(m.key) === w.id && m.busy))}
-      waiting={workspaces.map((w) => asks.some((a) => baseOf(a.key) === w.id))}
+      workers={workerList.map((k) => ({ key: k, busy: busyOf(k), waiting: waitingOf(k) }))}
+      worker={worker}
+      onWorker={(k) => {
+        setFocus(0);
+        setWorker(k);
+      }}
       onFocus={(f) => {
         setFocus(f);
       }}
@@ -1511,7 +1515,7 @@ export function App({
           ) : planView ? (
             <PlanScreen rows={planAll(Infinity)} width={contentWidth} onClose={() => setView("agent")} />
           ) : doneView ? (
-            <DoneScreen tasks={doneTasks(teamView?.boards ?? [], nameOf, activeBase)} main={focus === 0} onClose={() => setView("agent")} />
+            <DoneScreen tasks={doneTasks(teamView?.boards ?? [], nameOf, activeBase)} main={!worker} onClose={() => setView("agent")} />
           ) : filesView ? (
             <Files
               root={hello().cwd}
@@ -1524,9 +1528,8 @@ export function App({
             <>
             <DeskTitle
               // the title is inherited, never derived from the first prompt:
-              // the main desk is the working desk, a workspace desk is
-              // the workspace, an ephemeral one is its own agent name
-              title={focus === 0 ? "Working Desk" : workspaces[focus - 1]!.name}
+              // the Coordinator, or the worker's own name
+              title={worker ?? "Coordinator"}
               description={watched?.find((m) => m.key === activeKey)?.description}
               busy={busy}
               width={contentWidth}
@@ -1535,7 +1538,7 @@ export function App({
             <Transcript
               width={contentWidth}
               names={nameOf}
-              to={focus === 0 ? "main" : workspaces[focus - 1]!.name}
+              to={worker ?? "Coordinator"}
               keys={
                 modalOpen
                   ? "off"

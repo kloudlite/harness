@@ -29,7 +29,7 @@ If you need only one simple command and all of its output, make one plain call. 
 | `tools.read({ path })` | The text of the file. | |
 | Any call | | A call that is blocked or has bad arguments rejects with an `Error`. |
 
-The main desk has `bash`. A workspace desk does not have `bash`. It has `exec`. Use the shell that is in your tool list. Do not guess.
+The coordinator has `bash`, for its scratch folder only. A worker does not have `bash`. Code in a workspace runs with `exec`. Use the shell that is in your tool list. Do not guess.
 
 ## Rules
 

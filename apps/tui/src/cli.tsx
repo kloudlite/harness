@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
-// The pod's TUI: a client of the bench daemon (the Kode runtime), through a relay. The agent lives in the daemon, not here, so closing this terminal (ttyd tab,
-// reload) leaves a running turn going and the next TUI finds it busy.
+// The pod's TUI: a client of the bench daemon (the Kode runtime), through a relay. The agent lives in the daemon, not here, so closing this terminal (a browser
+// terminal tab, a reload) leaves a running turn going and the next TUI finds it busy.
 import { fileURLToPath } from "node:url";
 import { connect } from "./wire/index.ts";
 import { boot } from "./hello.ts";

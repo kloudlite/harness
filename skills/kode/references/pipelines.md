@@ -1,6 +1,6 @@
 # Pipelines
 
-A pipeline is a versioned JSON definition of jobs in a graph. Each job runs its steps in its own capsule. A run starts one version by hand, on a schedule, from a webhook, or after another pipeline. A saved pipeline is a declared artifact: a Worker with the pipeline authoring brief (`worker-templates.md`) writes and saves it, and the Coordinator adds the schedule or the webhook after it reads the definition.
+A pipeline is a versioned JSON definition of jobs in a graph. Each job runs its steps in its own capsule. A run starts one version by hand, on a schedule, from a webhook, or after another pipeline. A saved pipeline is a declared artifact: a worker with the pipeline authoring brief (`worker-templates.md`) writes and saves it, and the coordinator adds the schedule or the webhook after it reads the definition.
 
 Every pipeline tool takes `owner`: the user's handle, or the team slug for a team. When the host has files, keep each definition in the user's repository (`pipelines/ci.json`) and send its text to `pipeline` action `save`.
 
@@ -69,7 +69,7 @@ A trigger run takes every input's default. A required input with no default plus
 | `packages` | `[]` | `attr` or `attr@version`; exclusive with `image` |
 | `image` | base image with `git` | A container image |
 | `fromSnapshot` | none | Home starts as a copy of `name@<branch>` (`shop-base@base`), `name@N` (a storage commit), `name` (its `base` branch, else its newest commit) or a snapshot id. Name the branch |
-| `saveTo` | none | A literal volume name; on exit 0 the home is the next storage commit, on no branch (a Coordinator moves `base` to it with `volume` `branch`); not with `matrix` |
+| `saveTo` | none | A literal volume name; on exit 0 the home is the next storage commit, on no branch (a coordinator moves `base` to it with `volume` `branch`); not with `matrix` |
 | `environment` | the pipeline's | `"staging"` shared, `{"clone": "staging"}` a copy per run |
 | `matrix` | none | axis to list; at most 64 combinations |
 | `timeoutMinutes` | 60 | 1 to 1440 |

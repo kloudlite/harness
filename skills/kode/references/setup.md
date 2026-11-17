@@ -16,9 +16,12 @@ Read your row.
 
 | Host | Tools | Local commands | Local files | Who works |
 |---|---|---|---|---|
-| Claude Code with the plugin (remote server) | `mcp__plugin_kode_kd__*`, without `web_fetch`, `web_search` and `scratch_*` | yes | yes | the one agent |
-| MCP client with `kode mcp` | server `kd`, all scopes in one list | only with a shell tool | only with file tools | the one agent |
-| Remote connector (claude.ai, ChatGPT) | `/mcp` over OAuth | no | no | the one agent |
-| Kode runtime (shared) | split by role: main, workspace, subagent | no | no | the role skills |
+| Claude Code with the plugin (remote server) | `mcp__plugin_kode_kd__*`, without `web_fetch`, `web_search` and `scratch_*` | yes | yes | one agent, the coordinator |
+| MCP client with `kode mcp` | server `kd`, all scopes in one list | only with a shell tool | only with file tools | one agent, the coordinator |
+| Remote connector (claude.ai, ChatGPT) | `/mcp` over OAuth | no | no | one agent, the coordinator |
+| Kode runtime (shared) | split by role: the coordinator holds `worker_ask`, a worker holds `report` | the coordinator's scratch folder only | no | a coordinator and its workers; the role skills `coordinator` and `worker` |
 
-A call acts in the desk named by its `desk` argument (id or name, on the laptop door and the remote server, the plugin and a remote connector); a door refuses a call without it. Only the harness drives one fixed desk, which it supplies itself.
+- **The desk argument.** A call acts in the desk named by its `desk` argument (id or name) on the laptop door, the remote server, the plugin and a remote connector; a door refuses a call without it. `team` names which of the teams you connected.
+- **The harness.** The harness drives one fixed desk, which it supplies itself: its agents pass no `desk`, `workspace` `create` always lands in that desk, and a task that needs another desk is for the user to open. Its tools are served by the bench, the process that serves your own tools on the desk: `desk` `stop` stops it too, so say so first and make it your last call.
+- **MCP doors.** `kode mcp` (the laptop door) and `https://dev.kodespace.io/mcp` (the remote door) serve the same tools; a door's default `soft_ms` is 5 s and a `wait` is cut at 20 s (`tools.md`).
+- **No tool.** Connecting a provider (the web console) and `kode env`, the tunnel to the laptop: give the user the exact command, or run it only on a host with a shell.

@@ -10,7 +10,7 @@ export const commands: SlashCommand[] = [
   { name: "/tools", description: "List registered tools" },
   { name: "/clear", description: "Clear the transcript" },
   { name: "/compact", description: "Compact the context now; text after it says what to keep" },
-  { name: "/desk", description: "Name or continue a main desk", hasOptions: true },
+  { name: "/desk", description: "Name or continue a Coordinator conversation", hasOptions: true },
   { name: "/model", description: "Set this desk's model", hasOptions: true },
   { name: "/theme", description: "Switch theme", hasOptions: true },
   { name: "/login", description: "Log in to a provider", hasOptions: true },
@@ -29,7 +29,7 @@ type MenuContext = {
   logins: { provider: string; type: string; label: string }[];
   /** flat option rows for /settings, hint marks the current value */
   settings: { key: string; value: string; hint: string }[];
-  /** this environment's main desks, newest first */
+  /** the Coordinator's named conversations, newest first */
   desks: { id: string; label: string; hint: string }[];
   /** Connected providers that cannot run inference: one row each, Enter reconnects. Their models are not in `models`. */
   blocked?: { provider: string; reason: string; ago: string }[];

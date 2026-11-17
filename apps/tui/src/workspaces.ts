@@ -12,13 +12,13 @@ export type Workspace = {
   owner: string;
   status: WorkspaceStatus;
   /**
-   * Parent workspace id — set only on ephemeral workspaces. The hierarchy is
-   * exactly three levels: main desk › workspaces › ephemeral workspaces
-   * (spun off a workspace to test something, like a git worktree). The flat
-   * list stays in tree order, so a workspace's ephemerals follow it directly.
+   * Parent workspace id — set only on clones. The list is two levels:
+   * workspaces › their clones (spun off a workspace to test something, like a
+   * git worktree). The flat list stays in tree order, so a workspace's clones
+   * follow it directly.
    */
   parent?: string;
-  /** Ephemeral only: what the agent in it is doing. */
+  /** Clone only: what it is being used for. */
   task?: string;
   /** Clone progress, e.g. "42%" — only meaningful while status is "cloning". */
   progress?: string;
@@ -58,9 +58,9 @@ export type Service = {
 };
 
 /**
- * An environment is somewhere a working desk can plug in: its services, and
+ * An environment is somewhere a desk can plug in: its services, and
  * nothing else. **Workspaces do not belong to an environment** — they belong to
- * the working desk, which carries them whole when it connects elsewhere, so
+ * the desk, which carries them whole when it connects elsewhere, so
  * another environment's workspaces can never appear in this desk's list.
  */
 export type Environment = {
@@ -78,14 +78,14 @@ export type Environment = {
 };
 
 /**
- * The workspace an ephemeral one should hang off: a workspace parents itself,
- * an ephemeral hands its own parent over, so nothing nests deeper than one.
+ * The workspace a clone should hang off: a workspace parents itself,
+ * a clone hands its own parent over, so nothing nests deeper than one.
  */
 export function parentFor(workspaces: Workspace[], w: Workspace): string {
   return w.parent && workspaces.some((p) => p.id === w.parent) ? w.parent : w.id;
 }
 
-/** The workspace, preceded by its parent when it is an ephemeral one. */
+/** The workspace, preceded by its parent when it is a clone. */
 export function wsPath(workspaces: Workspace[], w: Workspace): string[] {
   const parent = w.parent ? workspaces.find((p) => p.id === w.parent) : undefined;
   return parent ? [parent.name, w.name] : [w.name];

@@ -2,12 +2,12 @@ import type { Entry } from "./components/Transcript.tsx";
 import { DEFAULT_MODEL, type ModelRef } from "./models.ts";
 
 /**
- * Hierarchical desks: a working desk has main desks (orchestrators)
- * and every workspace has its own — both can be named and kept side by side.
- * Turns keep running in whichever desk started them, regardless of what the
- * user is currently looking at. The connected environment is a property of the
- * desk, not part of its address, so `/env` moves the whole desk across
- * without swapping any transcript.
+ * One conversation per key, of two kinds: the COORDINATOR (`main`, and named
+ * ones `main:<id>`), which talks to the person and plans, and WORKERS, keyed by
+ * the name the coordinator gave them when it started them (`worker_ask`). A
+ * workspace is a tool either kind uses, never a conversation of its own.
+ * Turns keep running in whichever conversation started them, regardless of
+ * what the user is currently looking at.
  */
 export type Desk = {
   entries: Entry[];
@@ -33,7 +33,8 @@ export type QueuedMessage = { text: string; kind: "steer" | "followUp" };
 
 const emptyDesk: Desk = { entries: [], busy: false, history: [], model: DEFAULT_MODEL, queued: [] };
 
-/** The workspace a desk key belongs to: `main`, `ws-…`; `ws-…:agent-<hex>` belongs to `ws-…`. */
+/** The base of a key: `main:<id>` is `main`; a worker's name is its own base. Keys from older
+ * desks (a workspace id, `{ws}:agent-<hex>`) parse the same way and are simply other workers. */
 export function baseOf(key: string): string {
   return key.split(":")[0]!;
 }
@@ -54,13 +55,11 @@ export function deskIdOf(base: string, key: string): string {
   return key === base ? "main" : key.slice(base.length + 1);
 }
 
-/** A clone's row has no desk of its own, only its subagent's (`<clone>:agent-<hex>`): the id of
- * the newest one, or undefined when the base has a regular desk or no agent one. */
-export function pickAgentDesk(base: string, desks: { key: string; updated: number }[]): string | undefined {
-  const mine = desks.filter((s) => s.key === base || s.key.startsWith(`${base}:`));
-  if (mine.some((s) => !s.key.includes(":agent-"))) return undefined;
-  const newest = mine.reduce<{ key: string; updated: number } | undefined>((a, s) => (!a || s.updated > a.updated ? s : a), undefined);
-  return newest && deskIdOf(base, newest.key);
+/** The worker conversations among `keys`: every key that is not the coordinator's, sorted and
+ * once each. An older desk's workspace-id and `:agent-` keys land here too, shown by their key,
+ * so nothing they hold disappears. */
+export function workerKeys(keys: Iterable<string>): string[] {
+  return [...new Set([...keys].filter((k) => k && baseOf(k) !== "main"))].sort();
 }
 
 export type DeskMap = Record<string, Desk>;

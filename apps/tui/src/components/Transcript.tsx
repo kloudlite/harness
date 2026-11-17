@@ -297,7 +297,7 @@ function Row({
         return (
           <box flexDirection="column" paddingLeft={1} marginTop={1}>
             <text fg={theme.muted}>
-              <span fg={theme.accent}>◆</span> {names?.(card.from) ?? card.from} → {to ?? "main"}
+              <span fg={theme.accent}>◆</span> {names?.(card.from) ?? card.from} → {to ?? "Coordinator"}
               {card.kind ? <span fg={kindTone(card.kind)}> · {card.kind}</span> : ""}
             </text>
             <box paddingLeft={2}><Md text={card.body} /></box>
@@ -622,11 +622,11 @@ export function Transcript({
           {(
             [
               ["/", "commands"],
-              ["^p", "jump to a workspace"],
-              ["^1-9", "jump to workspace · ^0 main"],
-              ["^j ^k", "cycle workspaces"],
+              ["^p", "jump to a conversation or workspace"],
+              ["^1-9", "jump to workspace · ^0 Coordinator"],
+              ["^j ^k", "cycle conversations and workspaces"],
               ["^f", "files, then processes & their logs"],
-              ["^b", "back to the main context"],
+              ["^b", "back to the Coordinator"],
             ] as const
           ).map(([key, label]) => (
             <box key={key} flexDirection="row" height={1} flexShrink={0} overflow="hidden">

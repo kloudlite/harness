@@ -65,7 +65,7 @@ export function HintBar({
         {normal ? (
           <>
             <box onMouseDown={click("type")}><text selectable={false} fg={theme.fg}>i <span fg={theme.muted}>type</span></text></box>
-            {!compact && <text selectable={false} fg={theme.fg}>j k <span fg={theme.muted}>workspaces</span></text>}
+            {!compact && <text selectable={false} fg={theme.fg}>j k <span fg={theme.muted}>switch</span></text>}
             {!compact && <box onMouseDown={click("jump")}><text selectable={false} fg={theme.fg}>p <span fg={theme.muted}>jump</span></text></box>}
             {inWorkspace && <box onMouseDown={click("files")}><text selectable={false} fg={theme.fg}>f <span fg={theme.muted}>files</span></text></box>}
             <box onMouseDown={click("plan")}><text selectable={false} fg={theme.fg}>^g <span fg={theme.muted}>plan</span></text></box>

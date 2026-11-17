@@ -13,8 +13,22 @@ test("the kode skill has its name, a description under 1024 chars with a Not for
   const fm = t.match(/^---\nname: (.+)\ndescription: (.+)\n---\n/)!;
   expect(fm[1]).toBe("kode");
   expect(fm[2]!.length).toBeLessThan(1024);
-  expect(fm[2]).toContain("Not for");
+  expect(fm[2]).toMatch(/\bnot for\b/i);
   expect(t.split("\n").length).toBeLessThanOrEqual(220);
+});
+
+// the runtime's two roles: each a short skill an agent can start from, with a short description
+test("the coordinator and worker skills have their names, a two-sentence description and stay short", () => {
+  for (const role of ["coordinator", "worker"]) {
+    const t = read(role, "SKILL.md");
+    const fm = t.match(/^---\nname: (.+)\ndescription: (.+)\n---\n/)!;
+    expect(fm[1]).toBe(role);
+    expect(fm[2]!.split(/(?<=\.) /).length).toBeLessThanOrEqual(2);
+    expect(t.split("\n").length).toBeLessThanOrEqual(80);
+  }
+  // the old role names are gone from every skill (spelled in pieces so a grep for them finds none here)
+  const OLD = new RegExp(["main[ .-]desk", "workspace[ .-]desk", "sub" + "agent", "main_" + "tell", "workspace_" + "ask"].join("|"), "i");
+  for (const f of ["kode/SKILL.md", "coordinator/SKILL.md", "worker/SKILL.md"]) expect(read(f)).not.toMatch(OLD);
 });
 
 test("the kode skill names no skill that does not exist, and every reference file it names exists", () => {

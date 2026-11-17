@@ -1,6 +1,6 @@
 # Use cases
 
-Each case names the topology, the Worker template (`worker-templates.md`), the steps as tool calls and the end state. Find the nearest case, then adapt it. The last section shows how to compose a new one. The examples use the team `acme`, the environment `shop` with the services `web`, `api`, `worker` and `db`, the workspace volume `shop-base` and the environment volume `shop-env`.
+Each case names the topology, the worker template (`worker-templates.md`), the steps as tool calls and the end state. Find the nearest case, then adapt it. The last section shows how to compose a new one. The examples use the team `acme`, the environment `shop` with the services `web`, `api`, `worker` and `db`, the workspace volume `shop-base` and the environment volume `shop-env`.
 
 Every case starts and ends the same way, so the cases do not repeat it. **Start** (convention 15 of the skill): read the memory, find the volume by its label, `workspace` `restore` from `shop-base@base` (a checkout of `base`), then `ttl`, then pull. **End** (convention 16): stop each intercept, push, snapshot the main workspace as the next storage commit of its volume (plain when the state is good, so `base` advances; with `branch: "wip-<topic>"` when it is not), `memory` `write`, delete each workspace and each environment copy. "Main workspace" is the one restored from the project volume; a clone, a capsule and a copy of an environment are deleted without a snapshot.
 
@@ -24,32 +24,32 @@ Every case starts and ends the same way, so the cases do not repeat it. **Start*
 ## 1. Build a multi-service system from zero
 
 **Situation.** A new product needs `api`, `worker`, `web` and a `db`.
-**Steps.** Coordinator: `quota`. `env` `create` with the services as data, `db` with a mount for its data, and `ttl_secs`. `desk` `create` connected to it. `workspace` `create`, one for each service, each with its packages, then `ttl`. One Solo brief for each workspace, each with the intercept of its own service granted. Workers: write, run the code as a detached process, verify through the intercept, commit, push, `REPORT.md`. Coordinator: read the reports, then brief one Desk verification Worker for the end-to-end run.
+**Steps.** Coordinator: `quota`. `env` `create` with the services as data, `db` with a mount for its data, and `ttl_secs`. `desk` `create` connected to it. `workspace` `create`, one for each service, each with its packages, then `ttl`. One Solo worker for each workspace (`worker_ask` with that workspace), each with the intercept of its own service granted. Workers: write, run the code as a detached process, verify through the intercept, commit, push, `REPORT.md`. Coordinator: read the reports, then brief one Desk verification worker for the end-to-end run.
 **End.** Coordinator: `env` `snapshot` with `volume: "shop-env"`, a `description`, `labels: ["shop"]` and a `message`: the first commit of a volume makes `base`. One workspace that holds the repositories is snapshotted the same way as `shop-base`. `memory` `write`: the two volumes and `@base`, the repositories, how to run. The workspaces and the environment deleted. A later `env` `create` with `source: "shop-env@base"` starts from it.
 
 ## 2. Repair one bug against real data
 
-**Steps.** Coordinator: `workspace` `restore` from `shop-base@base`, then `ttl`. Solo Worker: pull. Reproduce in a capsule with `from_workspace`. Repair. Run the test in a capsule again. Commit and push. `REPORT.md`.
+**Steps.** Coordinator: `workspace` `restore` from `shop-base@base`, then `ttl`. Solo worker: pull. Reproduce in a capsule with `from_workspace`. Repair. Run the test in a capsule again. Commit and push. `REPORT.md`.
 **End.** The standard end. The pushed fix is in the new commit, so `base` advances to it. If the repair is not finished and cannot go to git, snapshot with `branch: "wip-<bug>"` and `open-work` names that branch (case 12).
 
 ## 3. Try N approaches, keep the best
 
-**Steps.** Coordinator: `quota` gives N. `workspace` `create` with `source`, N clones of the main workspace, each with a `task` that names its approach and a short TTL. N Throwaway briefs with the same success command. Each Worker runs, writes `REPORT.md`, hands it back and deletes its workspace. The Coordinator compares the reports, picks one and briefs a Solo Worker to do the winner correctly in the main workspace.
+**Steps.** Coordinator: `quota` gives N. `workspace` `create` with `source`, N clones of the main workspace, each with a `task` that names its approach and a short TTL. N Throwaway workers, one clone each, with the same success command. Each worker runs and writes `REPORT.md`. The coordinator compares the reports, deletes the clones, picks one approach and gives a Solo worker the main workspace to do the winner correctly.
 **End.** No clone stays and none is snapshotted: a clone is detached, so its commit would sit on the base volume with no branch. The standard end for the main workspace.
 
 ## 4. Change frontend and backend together
 
-**Steps.** One desk, two workspaces `frontend` and `backend` (the main workspace and a clone of it, or two restores). `intercept` `start` for `web` to `frontend` and for `api` to `backend`. A request to `web` goes through the two changes against the real `db` and `worker`. Solo when one session can hold the two; Delegation with two Solo Workers when not, each with one intercept granted.
+**Steps.** One desk, two workspaces `frontend` and `backend` (the main workspace and a clone of it, or two restores). `intercept` `start` for `web` to `frontend` and for `api` to `backend`. A request to `web` goes through the two changes against the real `db` and `worker`. Solo when one session can hold the two; Delegation with two Solo workers when not, each with its own workspace and one intercept granted.
 **End.** The two intercepts stopped, the two branches pushed. The standard end: one workspace pulls the two branches and is snapshotted; the other is deleted.
 
 ## 5. Debug a failing request with live traffic
 
-**Steps.** Solo Worker: run `api` in the workspace as a detached process with a debugger or more logging. `intercept` `start` for `api`. The failing request now arrives in the workspace. Edit, save; the next request runs the new code. `status` each turn confirms that the process runs.
+**Steps.** Solo worker: run `api` in the workspace as a detached process with a debugger or more logging. `intercept` `start` for `api`. The failing request now arrives in the workspace. Edit, save; the next request runs the new code. `status` each turn confirms that the process runs.
 **End.** `intercept` `stop` first, always: a stopped or deleted workspace does not end it. Then commit, push, `REPORT.md`, and the standard end.
 
 ## 6. Review a pull request by running it
 
-**Steps.** Coordinator: `env` `create` with `source` `shop` (a live copy) and `ttl_secs`; `desk` `connect` to the copy; `workspace` `restore` from `shop-base@base`, then `ttl`. Desk verification Worker: check out the branch of the pull request. Intercept the changed service in the copy. Run the suite in a capsule; call the service directly. `REPORT.md` with the end of the log and a verdict.
+**Steps.** Coordinator: `env` `create` with `source` `shop` (a live copy) and `ttl_secs`; `desk` `connect` to the copy; `workspace` `restore` from `shop-base@base`, then `ttl`. Desk verification worker: check out the branch of the pull request. Intercept the changed service in the copy. Run the suite in a capsule; call the service directly. `REPORT.md` with the end of the log and a verdict.
 **End.** The intercept stopped, the environment copy deleted. The workspace holds a branch that is not merged, so it is deleted without moving `base`; take a snapshot only when the review left work to continue.
 
 ## 7. Reproduce a data-dependent bug safely
@@ -59,23 +59,23 @@ Every case starts and ends the same way, so the cases do not repeat it. **Start*
 
 ## 8. Verify a release end to end
 
-**Steps.** The Coordinator clones `shop` one time, with `ttl_secs`. One Desk verification brief for each subsystem, each with its own intercepts in the copy. The Workers run in parallel, and each leaves `REPORT.md`. The Coordinator merges the verdicts.
+**Steps.** The coordinator clones `shop` one time, with `ttl_secs`. One Desk verification brief for each subsystem, each with its own intercepts in the copy. The workers run in parallel, and each leaves `REPORT.md`. The coordinator merges the verdicts.
 **End.** The copy deleted, each clone deleted, one combined report. A release that passed is a good moment for a branch of its own: `volume` `branch` with `branch: "release-12"` on the commit that was tested.
 
 ## 9. Bake a golden toolchain, and refresh it
 
-**Steps, first time.** Coordinator: `workspace` `create` with the full package list and `ttl_secs`. Solo Worker: clone the repositories, install what nixpkgs lacks into the home folder, fill the caches, run one build. Coordinator: `workspace` `snapshot` with `volume: "acme-node-base"`, a `description` that says what is inside and what it is for, `labels` with the project name and a `message`; the first commit makes `base`.
+**Steps, first time.** Coordinator: `workspace` `create` with the full package list and `ttl_secs`. Solo worker: clone the repositories, install what nixpkgs lacks into the home folder, fill the caches, run one build. Coordinator: `workspace` `snapshot` with `volume: "acme-node-base"`, a `description` that says what is inside and what it is for, `labels` with the project name and a `message`; the first commit makes `base`.
 **Steps, refresh.** A base is refreshed, never edited in place. `workspace` `restore` from `acme-node-base@base`, then `ttl`. Pull the latest code. `packages` `update`. Run one build or one test: a state that does not build never goes on `base`. `workspace` `snapshot` with a `message` that says what changed, and a new `description` when the contents changed: `base` advances to the new commit. A build that fails goes on `branch: "wip-refresh"` instead. Refresh when the pull or the package update costs each session more than a few minutes.
 **End.** The workspace deleted, each time. `memory` `write`: the volume, what is inside, `@base`. The commit that `base` left is on no branch: it expires 30 days after its last use, or delete it now with `snapshot` `delete` when nothing needs it.
 
 ## 10. Make a repeated check automatic
 
-**Steps.** Pipeline authoring Worker: write the definition with one job for each step, `permissions` `git: "read"` for the code, the secrets by reference, and `fromSnapshot: "shop-base@base"` when the job needs the ready toolchain. `pipeline` `save`. `run` `start` by hand, `run` `wait`, `run` `logs`. `REPORT.md` with the definition and the run id.
-**End.** The draft workspace deleted (it holds nothing that git does not). The Coordinator reads the definition, then saves a new version with a schedule or a webhook.
+**Steps.** Pipeline authoring worker: write the definition with one job for each step, `permissions` `git: "read"` for the code, the secrets by reference, and `fromSnapshot: "shop-base@base"` when the job needs the ready toolchain. `pipeline` `save`. `run` `start` by hand, `run` `wait`, `run` `logs`. `REPORT.md` with the definition and the run id.
+**End.** The draft workspace deleted (it holds nothing that git does not). The coordinator reads the definition, then saves a new version with a schedule or a webhook.
 
 ## 11. Scheduled integration test
 
-**Steps.** No session. A saved pipeline with a schedule. Each job runs in a capsule against the environment, reaches the services by name and ends. A failed run is what calls a Coordinator.
+**Steps.** No session. A saved pipeline with a schedule. Each job runs in a capsule against the environment, reaches the services by name and ends. A failed run is what calls a coordinator.
 **End.** Nothing to remove: the capsules end by themselves. A commit that a job saves with `saveTo` is on no branch and expires after 30 days like any other; a job that reads `name@base` keeps using the commit that `base` points at.
 
 ## 12. Continue the unfinished work of yesterday
@@ -87,20 +87,20 @@ Every case starts and ends the same way, so the cases do not repeat it. **Start*
 ## 13. Bring a new repository into Kode (the first session)
 
 **Situation.** The memory is empty and `volume` `list` with the project label finds nothing.
-**Steps.** Coordinator: read the compose file or the manifests of the repository. `env` `create` with them as services, a mount for each service that keeps data, and `ttl_secs`. `desk` `create` connected to it. `workspace` `create` with the packages that the repository needs, then `ttl`. Solo Worker: clone, run the app as a detached process, call it, close the gaps. Write `KODE.md` at the root of the repository: the environment, the packages and the run command, for the next agent. Push.
+**Steps.** Coordinator: read the compose file or the manifests of the repository. `env` `create` with them as services, a mount for each service that keeps data, and `ttl_secs`. `desk` `create` connected to it. `workspace` `create` with the packages that the repository needs, then `ttl`. Solo worker: clone, run the app as a detached process, call it, close the gaps. Write `KODE.md` at the root of the repository: the environment, the packages and the run command, for the next agent. Push.
 **End.** Coordinator: `env` `snapshot` with `volume: "shop-env"` and `workspace` `snapshot` with `volume: "shop-base"`, each with a `description`, `labels` with the project name and a `message`; each first commit makes `base`. `memory` `write`: `volumes` and `environments` (each volume with `@base`), `run` (the repository and the commands), `conventions`. The workspace and the environment deleted.
 
 ## 14. Two agents test their changes against each other
 
-**Steps.** Coordinator: two desks on one shared environment, one workspace in each, and it says which service each takes before the intercepts start: `web` to one, `api` to the other. Two Solo Workers. A request to `web` goes through the two workspaces.
-**End.** The two intercepts stopped before anything else. The Coordinator confirms with `env` `get` that no service has `interceptedBy`. The two branches pushed. One workspace pulls the two and gets the standard end; the other is deleted.
+**Steps.** Coordinator: two desks on one shared environment, one workspace in each, and it says which service each takes before the intercepts start: `web` to one, `api` to the other. Two Solo workers. A request to `web` goes through the two workspaces.
+**End.** The two intercepts stopped before anything else. The coordinator confirms with `env` `get` that no service has `interceptedBy`. The two branches pushed. One workspace pulls the two and gets the standard end; the other is deleted.
 
 ## Compose a new use case
 
 Answer four questions in order.
 
 1. What is the unit of isolation: a capsule (one command), a workspace (one change), a desk (a piece of work with many workspaces) or a copy of an environment (data that you will break)?
-2. Who does the work: one session, one session over many machines, or many Workers?
+2. Who does the work: one session, one session over many machines, or many workers?
 3. Which artifact outlives the session (a git branch, a storage commit and the branch on it, a saved pipeline), and who names it?
 4. What is the end state of everything else: snapshotted then deleted, or deleted?
 

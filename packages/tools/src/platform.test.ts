@@ -85,7 +85,7 @@ test("packages_add merges by attr, packages_remove errors on unknown", async () 
   expect(calls.length).toBe(n + 1); // the GET only, no PATCH
 });
 
-test("a workspace desk has the slice its token reaches, folded; main keeps today's subset and all adds the workspace-only tools", async () => {
+test("the workspace slice is what a workspace token reaches, folded; main keeps today's subset and all adds the workspace-only tools", async () => {
   const slice = platformTools("workspace", "w1");
   expect(slice.map((x) => x.name)).toEqual(["workspace", "env", "desk", "service", "packages", "intercept"]);
   const actions = (t: ReturnType<typeof platformTools>, n: string) => (tool(t, n).inputSchema as any).properties.action.enum;
@@ -131,7 +131,7 @@ test("service add/update/remove PATCH the whole list; duplicates and strangers e
   await expect(tool(t, "service_remove").run({ env: "e1", name: "q" })).rejects.toThrow("no such service");
 });
 
-test("workspace desks default env through the workspace's desk", async () => {
+test("the workspace slice defaults env through the workspace's desk", async () => {
   const t = platformTools("workspace", "w1");
   routes["GET /v1/workspaces/w1"] = json({ team: "acme", desk: "desk-1", environment: "e9", packages: [] });
   routes["GET /v1/environments/e9"] = json({ services: [] });
@@ -226,7 +226,7 @@ test("request_create sends only the kind's own payload; requests_list filters by
   expect(calls.at(-1)!.url).toBe("/v1/requests?owner=acme");
 });
 
-test("service_logs reads the api route, defaulting env in a workspace desk", async () => {
+test("service_logs reads the api route, defaulting env in the workspace slice", async () => {
   const lines = (...l: string[]) => json({ lines: l, pod: "web-0", truncated: false });
   routes["GET /v1/environments/e1"] = json({ id: "env-e1" });
   routes["GET /v1/environments/e1/services/web/logs?tail=50&previous=true"] = lines("a", "b");
@@ -404,7 +404,7 @@ for (const [name, args, method, url, body] of CASES) {
   });
 }
 
-test("the component tools are in main and all, never in a workspace desk", () => {
+test("the component tools are in main and all, never in the workspace slice", () => {
   const names = ["capsule", "volume", "snapshot", "pipeline", "run", "workspace_vars", "webhook_rotate", "secret_set", "secret_list", "secret_delete", "connector_list"];
   for (const k of ["main", "all"] as const) for (const n of names) expect(platformTools(k, "w1").map((t) => t.name)).toContain(n);
   for (const n of names) expect(platformTools("workspace", "w1").map((t) => t.name)).not.toContain(n);

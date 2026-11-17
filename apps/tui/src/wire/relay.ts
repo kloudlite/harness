@@ -1,4 +1,4 @@
-//! What the pod's browser TUI (ttyd -> cli.tsx) spawns: a dumb pipe
+//! What the pod's browser-terminal TUI (cli.tsx) spawns: a dumb pipe
 //! between this process's stdio and the bench daemon's socket (./daemon). A relay and not the
 //! backend itself because the daemon outlives every connection: one agent per desk key, so one
 //! writer per desk file, and a turn keeps running when this pipe goes away. The daemon may still

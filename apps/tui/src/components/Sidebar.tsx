@@ -57,9 +57,14 @@ function Row({
   );
 }
 
+/** One worker conversation as the sidebar shows it. */
+export type WorkerRow = { key: string; busy: boolean; waiting: boolean };
+
 /**
- * Desk header, WORKSPACES (each with its ephemeral workspaces under a guide
- * rail; the task plan lives in the Work panel of the desk, not here), and a pinned Environment block at the bottom — the connected
+ * The Coordinator header (the top-level conversation), WORKERS (the other
+ * conversations, one line each), WORKSPACES (resources the agents use, each
+ * with its clones under a guide rail; the task plan lives in its own panel,
+ * not here), and a pinned Environment block at the bottom — the connected
  * environment with the services that belong to it directly under it.
  */
 export function Sidebar({
@@ -70,8 +75,9 @@ export function Sidebar({
   user,
   unavailable,
   snapshot,
-  running,
-  waiting,
+  workers = [],
+  worker,
+  onWorker,
   focus,
   width,
   onFocus,
@@ -87,11 +93,13 @@ export function Sidebar({
   unavailable?: string;
   /** The restore point the environment is on, if the agent switched to one. */
   snapshot?: string;
-  /** Per-workspace: its desk has a turn running */
-  running: boolean[];
-  /** Per-workspace: a permission card or question is waiting for the user */
-  waiting: boolean[];
-  /** 0 = the desk, 1..N = workspace */
+  /** The worker conversations, in display order. */
+  workers?: WorkerRow[];
+  /** The open worker's key; undefined = the Coordinator is open. */
+  worker?: string;
+  /** Open a conversation: a worker's key, or undefined for the Coordinator. */
+  onWorker?: (key?: string) => void;
+  /** 0 = no workspace selected, 1..N = workspace */
   focus: number;
   width: number;
   onFocus?: (focus: number) => void;
@@ -99,30 +107,51 @@ export function Sidebar({
 }) {
   const inner = width - 4; // padding + row padding
   const wheel = useWheelAccel();
-  // the tree counts workspaces, not their ephemeral children
+  // the count is workspaces, not their clones
   const count = workspaces.filter((w) => !w.parent).length;
 
   return (
     <box flexDirection="column" width={width} height="100%" flexShrink={0} backgroundColor={theme.sidebarBg}>
-      {/* desk header: the product mark, then what we're connected to */}
+      {/* the Coordinator: the top-level conversation, the one that talks to the person */}
       <box
         flexDirection="row"
         height={3}
         alignItems="center"
         paddingLeft={2}
-        backgroundColor={focus === 0 ? theme.surfaceRaised : theme.surface}
-        onMouseDown={onFocus ? () => onFocus(0) : undefined}
+        backgroundColor={focus === 0 && !worker ? theme.surfaceRaised : theme.surface}
+        onMouseDown={onWorker ? () => onWorker(undefined) : undefined}
       >
         <text selectable={false}>
           <span fg={theme.accent}>✦ </span>
-          <span fg={theme.fg} attributes={TextAttributes.BOLD}>Working</span>
-          <span fg={theme.muted}> Desk</span>
+          <span fg={theme.fg} attributes={TextAttributes.BOLD}>Coordinator</span>
         </text>
       </box>
 
       <scrollbox flexGrow={1} flexBasis={0} flexShrink={1} paddingLeft={1} paddingRight={1} scrollbarOptions={{ visible: false }} scrollAcceleration={wheel}>
         <box flexDirection="column" flexShrink={0}>
-          <Heading count={count} width={width - 2} flush>Workspaces</Heading>
+          {workers.length > 0 && (
+            <>
+              <Heading count={workers.length} width={width - 2} flush>Workers</Heading>
+              {workers.map((w) => {
+                const on = focus === 0 && worker === w.key;
+                const tag = w.waiting ? "needs you" : w.busy ? "working" : "";
+                return (
+                  <Row
+                    key={w.key}
+                    on={on}
+                    onMouseDown={onWorker ? () => onWorker(w.key) : undefined}
+                    left={
+                      <span fg={on ? theme.accent : theme.fg} attributes={on ? TextAttributes.BOLD : undefined}>
+                        {clip(w.key, inner - 1 - tag.length)}
+                      </span>
+                    }
+                    right={<span fg={w.waiting ? theme.warning : theme.accent}>{tag}</span>}
+                  />
+                );
+              })}
+            </>
+          )}
+          <Heading count={count} width={width - 2} flush={workers.length === 0}>Workspaces</Heading>
           {unavailable && <Row left={<span fg={theme.muted}>{clip(`platform not reachable: ${unavailable}`, inner - 2)}</span>} />}
           {!unavailable && workspaces.length === 0 && (
             <Row left={<span fg={theme.muted}>none yet — a to create one</span>} />
@@ -135,10 +164,8 @@ export function Sidebar({
             if (w.parent) {
               // last child of its workspace closes the branch
               const last = !workspaces.some((o, j) => j > i && o.parent === w.parent);
-              // an ephemeral workspace: branch glyph, short name, and the
-              // same one state word its parent gets — these are running agents,
-              // so they must read as plainly as the workspace above them
-              const tag = waiting[i] ? "needs you" : running[i] ? "working" : "";
+              // a clone: branch glyph, short name, and its running jobs
+              const tag = jobs(w);
               return (
                 <Row
                   key={w.id}
@@ -152,23 +179,13 @@ export function Sidebar({
                       </span>
                     </span>
                   }
-                  right={
-                    <span
-                      fg={waiting[i] ? theme.warning : running[i] ? theme.accent : theme.muted}
-                    >
-                      {tag}
-                    </span>
-                  }
+                  right={<span fg={theme.muted}>{tag}</span>}
                 />
               );
             }
 
             // one word on the right, and only when it earns the room
-            const stateTag = waiting[i]
-              ? "needs you"
-              : running[i]
-              ? "working"
-              : w.status === "cloning"
+            const stateTag = w.status === "cloning"
                 ? w.progress ?? "cloning"
                 : jobs(w)
                 ? jobs(w)
@@ -190,13 +207,7 @@ export function Sidebar({
                     </span>
                   </span>
                 }
-                right={
-                  <span
-                    fg={waiting[i] ? theme.warning : running[i] ? theme.accent : theme.muted}
-                  >
-                    {stateTag}
-                  </span>
-                }
+                right={<span fg={theme.muted}>{stateTag}</span>}
               />
             );
           })}

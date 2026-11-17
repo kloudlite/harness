@@ -30,10 +30,16 @@ const tick = () => new Promise((r) => setTimeout(r, 60));
  * it explicitly — `vim` defaults to "off", where typing always reaches the
  * prompt and the commands live on ctrl+<letter>.
  */
-async function mount(opts?: { vim?: "on" | "off" }) {
+async function mount(opts?: { vim?: "on" | "off"; desks?: { key: string; busy?: boolean }[] }) {
   // width too: a resize test would otherwise leak its narrow sidebar into
   // every later mount through the shared temp config
   writeSettings({ vim: opts?.vim ?? "on", sidebarWidth: 42 });
+  if (opts?.desks) {
+    // the bench's pushed conversation list: the Workers section reads it
+    const b = backend() as any;
+    const list = opts.desks.map((d) => ({ key: d.key, updated: 0, busy: !!d.busy }));
+    b.desks = { ...b.desks, watch: async (cb: (l: unknown[]) => void) => (cb(list), () => {}) };
+  }
   const setup = await testRender(<App />, {
     width: COLS,
     height: ROWS,
@@ -65,7 +71,7 @@ async function mount(opts?: { vim?: "on" | "off" }) {
 test("sidebar renders", async () => {
   const t = await mount();
   const f = await t.frame();
-  expect(f).toContain("Working Desk");
+  expect(f).toContain("Coordinator");
   expect(f).toContain("api-gateway");
   expect(f).toContain("NORMAL"); // modal keyboard starts in NORMAL
   t.done();
@@ -89,7 +95,7 @@ test("card keeps its shape after submit", async () => {
   t.mockInput.pressKey("RETURN");
   const f = await t.frame();
   expect(f.trimEnd().split("\n").length).toBeLessThanOrEqual(ROWS);
-  expect(f).toContain("Working Desk"); // desk row still in place
+  expect(f).toContain("Coordinator"); // conversation row still in place
   expect(f).toContain("hi"); // user turn in the transcript
   t.done();
 });
@@ -148,32 +154,32 @@ test("shift+enter inserts a newline instead of submitting", async () => {
   t.done();
 });
 
-test("input history is per desk and recalled with arrows", async () => {
-  const t = await mount();
+test("input history is per conversation and recalled with arrows", async () => {
+  const t = await mount({ desks: [{ key: "main" }, { key: "fix-login" }] });
   await t.insert();
   await t.mockInput.typeText("first prompt");
   await t.frame();
   t.mockInput.pressKey("RETURN");
   await t.frame();
 
-  // main desk: up recalls
+  // the Coordinator: up recalls
   t.mockInput.pressKey("ARROW_UP");
   expect(await t.frame()).toContain("first prompt");
   t.mockInput.pressKey("ARROW_DOWN"); // back to empty
   await t.frame();
 
-  // workspace desk has its own (empty) history — up recalls nothing
+  // a worker has its own (empty) history — up recalls nothing
   t.mockInput.pressKey("ESCAPE"); // INSERT → NORMAL
   await t.frame();
-  t.mockInput.pressKey("j");
+  t.mockInput.pressKey("j"); // the ring: Coordinator, then the workers
   await t.frame();
   t.mockInput.pressKey("i"); // history recall needs INSERT
   await t.frame();
   t.mockInput.pressKey("ARROW_UP");
   const f = await t.frame();
-  expect(await t.path()).toContain("api-gateway"); // in workspace
-  // the prompt card shows no recalled text (transcript may still show the turn)
-  expect(f).not.toContain("Agent · first prompt");
+  expect(await t.path()).toContain("fix-login"); // in the worker
+  // neither the prompt nor the worker's empty transcript shows the Coordinator's turn
+  expect(f).not.toContain("first prompt");
   t.done();
 });
 
@@ -212,7 +218,7 @@ test("/desk name names the desk you are in", async () => {
   await t.frame();
   t.mockInput.pressKey("RETURN");
   const f = await t.frame();
-  expect(f).toContain("rate limits"); // hint bar path: the main desk alone
+  expect(f).toContain("rate limits"); // the info line naming the Coordinator conversation
   expect(f).toContain("rate limits"); // sidebar root row is the desk
   t.done();
 });
@@ -285,13 +291,14 @@ test("processes view: section headers with counts, crashed row, filter, follow",
   t.done();
 });
 
-test("sidebar: desk header, workspaces with their ephemerals, environment with its services", async () => {
+test("sidebar: Coordinator header, workspaces with their clones, environment with its services", async () => {
   const t = await mount();
   const f = await t.frame();
-  expect(f).toContain("✦ "); // desk header (title depends on earlier prompts)
+  expect(f).toContain("✦ Coordinator"); // the top-level conversation
+  expect(f).not.toContain("Workers"); // no worker yet, no section
   expect(f).toContain("Workspaces");
   expect(f).toContain("api-gateway");
-  expect(f).toMatch(/├ rate-limits-probe/); // ephemeral workspaces branch off it
+  expect(f).toMatch(/├ rate-limits-probe/); // clones branch off it
   expect(f).toMatch(/└ load-test/); // short names, not their task text
   expect(f).not.toContain("Review bc5a5062"); // the task prompt never reaches a row
   expect(f).not.toContain("IMPL"); // no phase tags
@@ -304,7 +311,7 @@ test("sidebar: desk header, workspaces with their ephemerals, environment with i
   t.done();
 });
 
-test("clicking an ephemeral row enters that workspace", async () => {
+test("clicking a clone row selects that workspace", async () => {
   const t = await mount();
   const lines = (await t.frame()).split("\n");
   const row = lines.findIndex((l) => l.includes("└ load-test"));
@@ -313,22 +320,41 @@ test("clicking an ephemeral row enters that workspace", async () => {
   t.done();
 });
 
-test("desk title bar: the title is inherited, never derived from a prompt", async () => {
-  const t = await mount();
-  // the main context is the working desk
-  expect((await t.frame()).split("\n")[1]).toContain("Working Desk");
-  t.mockInput.pressKey("1"); // api-gateway — the workspace names its desk
-  expect((await t.frame()).split("\n")[1]).toContain("api-gateway");
-  t.mockInput.pressKey("2"); // its ephemeral agent names its own
-  expect((await t.frame()).split("\n")[1]).toContain("rate-limits-probe");
+test("title bar: the conversation's name, never a workspace's or a prompt's", async () => {
+  const t = await mount({ desks: [{ key: "main" }, { key: "fix-login" }] });
+  // the title is the left of row 1; the sidebar header shares the row on the right
+  const title = async () => (await t.frame()).split("\n")[1]!.slice(0, 100);
+  expect(await title()).toContain("Coordinator");
+  t.mockInput.pressKey("1"); // selecting a workspace opens no conversation
+  expect(await title()).toContain("Coordinator");
+  expect(await t.path()).toContain("Coordinator › api-gateway");
+  // a worker is opened from its row
+  const lines = (await t.frame()).split("\n");
+  const row = lines.findIndex((l) => l.includes("fix-login"));
+  await t.mockMouse.click(lines[row]!.indexOf("fix-login") + 1, row);
+  expect(await title()).toContain("fix-login");
   // asking something does not rename the title bar
   await t.insert();
   t.mockInput.typeText("why is the rate limiter dropping requests");
   await t.frame();
   t.mockInput.pressKey("\r");
   const f = await t.frame();
-  expect(f.split("\n")[1]).toContain("rate-limits-probe");
+  expect(f.split("\n")[1]!.slice(0, 100)).toContain("fix-login");
   expect(f).not.toMatch(/· \d+ changed/); // no derived subtitle either
+  t.done();
+});
+
+test("Workers lists every non-Coordinator conversation, old desks' keys included, with working", async () => {
+  const t = await mount({
+    desks: [{ key: "main" }, { key: "main:b" }, { key: "api-tests", busy: true }, { key: "fix-login" }, { key: "w1:agent-1f" }],
+  });
+  const f = await t.frame();
+  expect(f).toContain("Workers  3");
+  const rowOf = (k: string) => f.split("\n").find((l) => l.includes(k)) ?? "";
+  expect(rowOf("api-tests")).toContain("working");
+  expect(rowOf("fix-login")).not.toContain("working");
+  expect(rowOf("w1:agent-1f")).toContain("w1:agent-1f"); // an old key, by its key
+  expect(f).not.toContain("main:b"); // a named Coordinator conversation is not a worker
   t.done();
 });
 

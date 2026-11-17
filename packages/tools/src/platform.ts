@@ -1,8 +1,9 @@
 //! Platform API tools: the model's hands on /v1 (workspaces, environments, volumes, desks).
 //! The bearer is a short-lived tool token (rotates every 900 s) in a file, so it is read on
 //! EVERY call, never cached. Non-2xx comes back as text for the model, never a throw.
-//! Main desks get the whole table; a workspace desk gets the subset its own token's
-//! route list allows (WORKSPACE_TOOL_ROUTES), with its workspace fixed and `env` defaulted.
+//! `kind` is the TOKEN's reach, not an agent role: `main` is the whole table (what the coordinator
+//! and its workers use); `workspace` is the subset a workspace's own token's route list allows
+//! (WORKSPACE_TOOL_ROUTES), with that workspace fixed and `env` defaulted.
 //! `all` (the laptop MCP door, backend/src/mcp.ts) is main's table plus the workspace-only tools,
 //! each aimed by a required `workspace`/`env`.
 import { ensureRunning } from "./ensure.ts";
@@ -329,7 +330,7 @@ const single = (name: string, description: string, a: Action) => def(name, descr
 
 /** The platform table. Resource tools take an `action`; the rest are single-purpose. `main` and `all` list
  * everything except what only a workspace does (packages edits, intercept); `workspace` is the slice a workspace's own token reaches, with its workspace fixed and `env`
- * defaulted to its desk's. `noStop` drops `workspace stop` (a subagent never stops its workspace). */
+ * defaulted to its desk's. `noStop` drops `workspace stop` (for a caller that must not stop the workspace it runs in). */
 export function platformTools(kind: "main" | "workspace" | "all", wsId?: string, tickMs = 5000, noStop = false): ToolDef[] {
   const ws = kind === "workspace";
   const W = ws ? `/v1/workspaces/${seg(wsId!)}` : "";
@@ -341,7 +342,7 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
   /** An action that needs the main-only `workspace` argument. */
   const mact = (props: Props, req: string[], run: (a: any) => Promise<string>) => act({ workspace: WS, ...props }, ["workspace", ...req], run);
 
-  /** `env` for a workspace desk: the environment its desk connects it to (the workspace doc carries it, resolved through the desk). */
+  /** `env` for the workspace slice: the environment its desk connects it to (the workspace doc carries it, resolved through the desk). */
   const envOf = async (a: any): Promise<{ env: string } | { err: string }> => {
     if (a.env) return { env: a.env };
     if (!ws) return { err: "error: env is required" };
@@ -608,7 +609,7 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
     }),
   );
 
-  // ---- intercept (a workspace desk intercepts for itself only: no `workspace` argument); not the orchestrator's
+  // ---- intercept (the workspace slice intercepts for its own workspace only: no `workspace` argument); not in `main`
   if (kind !== "main") tools.push(
     resource("intercept", "Send an environment service's traffic to a workspace. Actions: start (`wait` until the proxy is ready), stop (the service goes back to its own pod).", {
       start: eact(

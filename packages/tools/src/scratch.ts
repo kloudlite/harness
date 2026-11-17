@@ -1,16 +1,17 @@
-//! The MAIN desk's hands: `bash`, `read`, `write`, confined to one scratch folder. Main has no
-//! workspace pod, yet codemode scripts need a shell and a place for files. The confinement keeps the
+//! The hands of a conversation that runs outside any workspace pod (the coordinator's `main` key):
+//! `bash`, `read`, `write`, confined to one scratch folder, since codemode scripts need a shell and a
+//! place for files. The confinement keeps the
 //! bench's home, the owner's keys and every other desk out of reach: paths are checked against the
 //! real (symlink-resolved) root, and bash runs in fresh namespaces where only that folder is visible.
-//! Workspace desks never get these; they have the pod's tools (pod.ts).
+//! Work inside a workspace uses the pod's tools (pod.ts) instead.
 import { spawn } from "node:child_process";
 import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import { guarded } from "./args.ts";
 import type { ToolDef } from "./index.ts";
 
-// ponytail: folders live until the bench restarts (/tmp is an emptyDir) and nothing deletes a main
-// desk today; remove `scratchRoot(key)` where main desks get dropped once that path exists.
+// ponytail: folders live until the bench restarts (/tmp is an emptyDir) and nothing deletes a
+// coordinator conversation today; remove `scratchRoot(key)` where one is dropped once that path exists.
 export const scratchRoot = (key: string) => `/tmp/kl-main/${key.replace(/[^A-Za-z0-9_-]/g, "_")}`;
 
 const READ_CAP = 256 * 1024;
