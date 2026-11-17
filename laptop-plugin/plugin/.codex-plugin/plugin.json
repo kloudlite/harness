@@ -1,0 +1,36 @@
+{
+  "name": "kode",
+  "version": "0.12.3",
+  "description": "Kode workspaces, environments and desks from Codex and ChatGPT: the remote kd MCP server and the skills; sign in in the browser on the first tool call.",
+  "author": {
+    "name": "Kloudlite"
+  },
+  "homepage": "https://github.com/kloudlite/harness",
+  "repository": "https://github.com/kloudlite/harness",
+  "license": "Proprietary",
+  "keywords": [
+    "kode",
+    "workspaces",
+    "mcp",
+    "desks"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Kode",
+    "shortDescription": "Agent workspaces, environments and desks on Kode",
+    "longDescription": "Gives the agent the Kode tools (the remote kd MCP server) and the kode skill: make isolated workspaces, compose environments, intercept services, snapshot and discard.",
+    "developerName": "Kloudlite",
+    "category": "Coding",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/kloudlite/harness",
+    "composerIcon": "./.claude-plugin/icon.png",
+    "logo": "./.claude-plugin/icon.png",
+    "defaultPrompt": [
+      "List my Kode desks and workspaces"
+    ]
+  }
+}

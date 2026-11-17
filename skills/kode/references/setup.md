@@ -4,7 +4,7 @@ Give these steps to the user when no Kode tool is present. Never run the install
 
 1. Install `kode` (macOS, Linux; WSL on Windows): `curl -fsSL https://dev.kodespace.io/install.sh | sh`
 2. Sign in (opens the browser): `kode login`
-3. Connect the agent. Claude Code with the plugin (tools and skills; needs no `kode` binary): `/plugin marketplace add kloudlite/harness`, then `/plugin install kode@kode`; the first tool call opens the browser sign-in, and the consent page picks the teams; the agent lists or creates the desk. Another MCP client: `claude mcp add kd -- kode mcp`, or the JSON `{"mcpServers": {"kd": {"command": "kode", "args": ["mcp"]}}}`; for another team or desk, `["mcp", "TEAM", "--desk", "DESK"]`. A client that cannot start a program uses the remote URL `https://dev.kodespace.io/mcp` with OAuth.
+3. Connect the agent. Claude Code with the plugin (tools and skills; needs no `kode` binary): `/plugin marketplace add kloudlite/harness`, then `/plugin install kode@kode`; the first tool call opens the browser sign-in, and the consent page picks the teams; the agent lists or creates the desk. Codex (ChatGPT) with the same plugin: `codex plugin marketplace add kloudlite/harness`, then install Kode from `/plugins`; sign-in works the same way. Another MCP client: `claude mcp add kd -- kode mcp`, or the JSON `{"mcpServers": {"kd": {"command": "kode", "args": ["mcp"]}}}`; for another team or desk, `["mcp", "TEAM", "--desk", "DESK"]`. A client that cannot start a program uses the remote URL `https://dev.kodespace.io/mcp` with OAuth.
 4. Make a desk: `desk` `create` (with `environment` to connect one), or open one once with `kode -s NAME`. Every call then names it in `desk`.
 5. Restart the client. It then lists the server `kd`.
 
@@ -18,6 +18,7 @@ Read your row.
 |---|---|---|---|---|
 | Claude Code with the plugin (remote server) | `mcp__plugin_kode_kd__*`, without `web_fetch`, `web_search` and `scratch_*` | yes | yes | one agent, the coordinator |
 | MCP client with `kode mcp` | server `kd`, all scopes in one list | only with a shell tool | only with file tools | one agent, the coordinator |
+| Codex with the plugin (remote server) | the `kd` MCP tools, without `web_fetch`, `web_search` and `scratch_*` | yes | yes | one agent, the coordinator |
 | Remote connector (claude.ai, ChatGPT) | `/mcp` over OAuth | no | no | one agent, the coordinator |
 | Kode runtime (shared) | split by role: the coordinator holds `worker_ask`, a worker holds `report` | the coordinator's scratch folder only | no | a coordinator and its workers; the role skills `coordinator` and `worker` |
 

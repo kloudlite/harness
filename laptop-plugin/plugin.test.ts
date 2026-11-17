@@ -27,3 +27,17 @@ test("the root marketplace names the plugin, its source is the plugin dir, and t
   // one marketplace only: a second file with another source would drift
   expect(existsSync(join(root, "laptop-plugin/.claude-plugin"))).toBe(false);
 });
+
+test("the Codex manifest and marketplace match the Claude manifest", () => {
+  const root = join(import.meta.dir, "..");
+  const claude = JSON.parse(readFileSync(join(PLUGIN, ".claude-plugin/plugin.json"), "utf8"));
+  const codex = JSON.parse(readFileSync(join(PLUGIN, ".codex-plugin/plugin.json"), "utf8"));
+  expect(codex.name).toBe(claude.name);
+  expect(codex.version).toBe(claude.version);
+  expect(readdirSync(join(PLUGIN, ".codex-plugin"))).toEqual(["plugin.json"]);
+  for (const f of [codex.skills, codex.mcpServers, codex.interface.logo]) expect(existsSync(join(PLUGIN, f))).toBe(true);
+  const market = JSON.parse(readFileSync(join(root, ".agents/plugins/marketplace.json"), "utf8"));
+  expect(market.plugins.length).toBe(1);
+  expect(market.plugins[0].name).toBe(codex.name);
+  expect(join(root, market.plugins[0].source.path)).toBe(PLUGIN);
+});
