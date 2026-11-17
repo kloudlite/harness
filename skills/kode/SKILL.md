@@ -101,6 +101,7 @@ A checklist of practice. Each rule holds in every topology, and the rest of the 
 17. **Claims.** A claim that something works carries the command, its exit code and the end of its log. "Not verified" is an allowed answer.
 18. **Hand-offs are artifacts:** a pushed branch, `REPORT.md`, a plan file, which the report names. Never the context of a conversation.
 19. **Before you spend.** Read `quota` before a fan-out. Write one plan file with the contracts before parallel work starts (`references/planning.md`). What needs a yes from the person is in invariant 5; do the rest of your own without a question.
+20. **Structure from memory.** Before you plan or change how a project is laid out (a new volume or base, splitting one, an environment, a desk, which base a kind of work starts from), read every section of the `memory`: `volumes`, `environments`, `run`, `conventions`, and `open-work` for a change already proposed or half done. Build on what it names and say where the plan departs from it. A layout it does not name is new: say so to the person. A proposal that is not done yet goes in `open-work`; `volumes` and `environments` change only once the thing exists.
 
 ## Three budgets
 
@@ -123,6 +124,7 @@ A checklist of practice. Each rule holds in every topology, and the rest of the 
 | Keep a ready toolchain | `workspace` `snapshot` with a `volume` name, a `description`, `labels` and a `message` (the first commit makes `base`), then `delete`; later `workspace` `restore` from `name@base` | 1 snapshot slot and the storage of the difference |
 | Point `base` at another commit | `volume` `branch` with `branch: "base"` and the `version` | Nothing; the commit that `base` left starts its 30 days |
 | Pause inside a session | `workspace` `stop`, or `desk` `stop` | Storage and the slot; it is not an end state |
+| Plan or change the layout of a project (volumes, bases, environments, desks) | `memory` `read` of every section first, then propose against it; `memory` `write` when the change exists (convention 20) | Nothing |
 | Leave unfinished work for a later session | `workspace` `snapshot` with `branch: "wip-<topic>"` and a `message` that says what is left, `memory` `write` with `name@wip-<topic>` in `open-work`, then `workspace` `delete` | 1 snapshot slot and the storage of the difference |
 | Repeat work without a person | `pipeline` `save`, with a schedule or a webhook (`references/pipelines.md`) | The capsules of each job of each run |
 | Hand work to another agent | The coordinator's `worker_ask` with the goal and the workspaces; the worker commits, pushes and reports | The context to read the report; no live context is shared |

@@ -20,6 +20,7 @@ You talk to the person. You own the plan, the quota, the lifecycle of every work
    - Parallel streams: one workspace each, usually a clone of the base (`workspace` `create` with `source`, a `task` and `ttl_secs`). Ask for a commit first: a clone copies the current state.
    - Never two workers on one workspace: they overwrite each other. Only when they must share one, give each its own files and say so in both briefs.
    - A worker may hold several workspaces (a frontend and a backend, a test runner beside the code).
+   - Before you add or change a volume, base, environment or desk, check the plan against the memory's `volumes`, `environments` and `conventions`, and against any change `open-work` already proposes: reuse what is named, and say where the plan departs from it (the `kode` skill, convention 20).
 4. When streams must fit together, write the contract first (endpoints, payloads, errors, ports, service names, variables) to your scratch folder as `contract-<feature>.md`, `v1`, and send the full text with each ask. Only you change it: raise the version and send it to every worker it touches.
 
 Small work you may do yourself on a workspace (the `kode` skill's Solo quick path). Once a worker holds a workspace, leave its code to it.

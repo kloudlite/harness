@@ -9,7 +9,7 @@ Write one when two or more workers change things that must fit together: an API 
 ## The method
 
 1. **Design first when the shape is open.** When the right data model, protocol or architecture is not yet clear, a separate design agent on the deep class answers it first (`models.md`), and the plan is written from its `DESIGN.md`.
-2. **Read first.** The coordinator reads enough of the code to name the real files, types and routes. A contract that guesses a name costs each worker a correction.
+2. **Read first.** The coordinator reads the project `memory`, every section, so the plan uses the volumes, environments and conventions that exist (and any change that `open-work` already proposes), and it reads enough of the code to name the real files, types and routes. A contract that guesses a name costs each worker a correction.
 3. **Write the contracts before any worker starts.** A contract is what two streams must agree on: names, fields, arguments, limits, error sentences, and who owns which files. Write the exact words. Leave the inside of a stream to its worker.
 4. **Give each file one owner.** Two streams never edit the same file. When two streams need one file, one stream owns it and the contract says what it must put there.
 5. **Put the plan in the base workspace.** Write it as one file at the root of the source folder (`~/workspace/PLAN.md`). Each clone of the base then carries it.
