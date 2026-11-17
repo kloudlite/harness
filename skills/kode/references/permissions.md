@@ -5,7 +5,7 @@ Who may call each tool action. **C** is the coordinator, **W** is a worker (the 
 - **Own:** for the coordinator, what it created in this desk; for a worker, the workspaces its task lists and what it starts on them (processes, capsules, intercepts).
 - **Shared:** a team environment, a named volume and its branches, a saved pipeline, or an object that another desk uses.
 
-The platform refuses only what its errors say. The worker column is practice: it keeps what many sessions start from in one pair of hands.
+The runtime enforces the worker column for a worker with a brief: each **No** is refused (`{tool} {action} is the coordinator's; ask it with report need`), and so is a **Listed** action on a workspace off its list. **Own** and **When the task says so** are practice, which the runtime cannot judge. The column keeps what many sessions start from in one pair of hands.
 
 The one rule behind every row: a worker may do anything its task needs on its listed workspaces, and leaves the lifecycle of workspaces and environments to the coordinator. The coordinator may do anything inside the owner's quota, and asks a person only for what cannot be undone: `env` `restore` in place, the delete of a shared environment or of a volume, and an intercept on an environment that other people use.
 
@@ -41,7 +41,7 @@ The one rule behind every row: a worker may do anything its task needs on its li
 | `create` (empty, or a clone with `source`) | Yes | No | Give a name that a person can read, a `task` that says why and `ttl_secs`. An empty workspace is for the first session of a project |
 | `restore` | Yes | No | It makes a new workspace from `name@base`, or from the branch that `open-work` names, and checks it out; `name` is required; call `ttl` in the same turn |
 | `start`, `stop`, `ttl` | Yes | No | A stop is a pause inside a session. Before the session ends, snapshot unfinished work, then delete |
-| `snapshot` | Yes | Listed, only when asked, onto the branch that the task names; without `labels` and a new `volume` name | The `message` says what changed, or what is left. Naming a new volume, its `labels` and moving `base` are the coordinator's. A Worker in a clone under a plan file does not snapshot: the clone is detached, and its commit would sit on the base volume with no branch |
+| `snapshot` | Yes | Listed, only when asked, with `branch` set to the branch that the task names (never `base`); without `volume`, `labels` and `description` | The `message` says what changed, or what is left. Naming a new volume, its `labels` and moving `base` are the coordinator's. A Worker in a clone under a plan file does not snapshot: the clone is detached, and its commit would sit on the base volume with no branch |
 | `delete` | Yes | No | Persist first: push, snapshot or report. The main workspace is snapshotted before its delete. No workspace stays between sessions |
 | `restart` | Yes | Listed | To read new variables |
 | `exec`, `process` | On a workspace no worker holds | Listed | The coordinator asks a worker or a capsule for the exit code and the end of the log |
