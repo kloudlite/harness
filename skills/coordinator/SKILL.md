@@ -44,7 +44,7 @@ Answers arrive later as turns that start with `[from <worker>]`. Do not wait, sl
 
 ## Integrate and end
 
-When every stream reports `done` on the current contract, send the integration ask (the provider serves with an intercept, the consumer tests against it). Then merge the branches in a fixed order into the base workspace and run the whole test set once. End the session as convention 16 of the `kode` skill says: intercepts stopped, work pushed, the base workspace snapshotted only when its state will be reused (plain for a new good base, so `base` advances; `branch: "wip-<topic>"` for unfinished work that cannot go to git), the memory written, every workspace and environment you created deleted. A clone that reported `blocked` or could not push may hold the only copy: ask the person before you delete it.
+When every stream reports `done` on the current contract, send the integration ask (the provider serves with an intercept, the consumer tests against it). Then merge the branches in a fixed order into the base workspace and run the whole test set once. End the session as convention 16 of the `kode` skill says: intercepts stopped, work pushed and merged, the memory written, every workspace and environment you created deleted: `workspace` `delete` saves first, so the base workspace, on the clean merged default branch with a passing build, is deleted plainly (`base` advances), unfinished work that cannot go to git with `branch: "wip-<topic>"`, a clone with `skip_snapshot: true`. A clone that reported `blocked` or could not push may hold the only copy: ask the person before you delete it.
 
 ## Rules
 

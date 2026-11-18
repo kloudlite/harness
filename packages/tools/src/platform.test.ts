@@ -319,11 +319,11 @@ test("in a desk, workspace_create and workspace_delete go through the desk; with
   routes["POST /v1/desks/desk-1/workspaces"] = json({ id: "ws-2" }, 201);
   routes["DELETE /v1/desks/desk-1/workspaces/w1"] = () => new Response(null, { status: 204 });
   await tool(t, "workspace_create").run({ name: "backend", team: "acme" });
-  await tool(t, "workspace_delete").run({ workspace: "w1" });
+  await tool(t, "workspace_delete").run({ workspace: "w1", skip_snapshot: true });
   process.env.KD_DESK = "desk-1";
   try {
     await tool(t, "workspace_create").run({ name: "backend", team: "acme" });
-    await tool(t, "workspace_delete").run({ workspace: "w1" });
+    await tool(t, "workspace_delete").run({ workspace: "w1", skip_snapshot: true });
   } finally {
     delete process.env.KD_DESK;
   }
@@ -337,6 +337,64 @@ test("in a desk, workspace_create and workspace_delete go through the desk; with
   ]);
   // The desk already names the owner: a `team` would only contradict it.
   expect(calls[3].body).toEqual({ name: "backend" });
+});
+
+test("workspace delete saves onto the checked-out branch, onto `branch`, or nothing with skip_snapshot, and deletes nothing it could not save", async () => {
+  const t = tool(platformTools("main"), "workspace");
+  const del = (extra: any = {}) => t.run({ action: "delete", workspace: "w1", ...extra });
+  const deletes = () => calls.filter((c) => c.method === "DELETE").length;
+  routes["GET /v1/workspaces/w1"] = json({ id: "w1", name: "shop", volume: "vol-1", branch: "base" });
+  routes["GET /v1/volumes"] = json([{ id: "vol-1", name: "shop", branches: { base: 2 } }]);
+  routes["GET /v1/volumes/vol-1/history"] = json([]);
+  routes["DELETE /v1/workspaces/w1"] = () => new Response(null, { status: 204 });
+  routes["POST /v1/workspaces/w1/snapshots"] = json({ id: "s3", phase: "ready", volume: "vol-1", name: "shop", version: 3, branch: "base" }, 202);
+  // the default: a plain push (no `branch`), which advances the checkout, then the delete
+  const out = JSON.parse(await del());
+  expect(calls.filter((c) => c.method === "POST").map((c) => c.body)).toEqual([{ message: "before delete of shop" }]);
+  expect(out.saved).toBe('base is now v3 (was v2) of volume shop; the next session restores it with snapshot_id "shop@base"');
+  expect(deletes()).toBe(1);
+  // `branch` saves elsewhere
+  routes["POST /v1/workspaces/w1/snapshots"] = json({ id: "s4", phase: "ready", volume: "vol-1", name: "shop", version: 4, branch: "wip-x" }, 202);
+  expect(JSON.parse(await del({ branch: "wip-x" })).saved).toStartWith("wip-x is now v4 of volume shop");
+  expect(calls.filter((c) => c.method === "POST").at(-1)!.body).toEqual({ message: "before delete of shop", branch: "wip-x" });
+  // a moved branch: detached, said plainly with the one call that fixes it, still deleted once ready
+  routes["POST /v1/workspaces/w1/snapshots"] = json({ id: "s6", phase: "ready", volume: "vol-1", name: "shop", version: 6, branch: null, detached: "branch base moved to v5 since this workspace was made from v2" }, 202);
+  const moved = JSON.parse(await del()).saved;
+  expect(moved).toStartWith("branch base moved to v5 since this workspace was made from v2, so v6 of volume shop is detached, NOT on base");
+  expect(moved).toEndWith('volume branch (volume "shop", branch "base", version 6)');
+  expect(deletes()).toBe(3);
+  // skip_snapshot: nothing saved; with a place to save it is refused
+  const posts = calls.filter((c) => c.method === "POST").length;
+  expect(JSON.parse(await del({ skip_snapshot: true })).saved).toBe("nothing (skip_snapshot)");
+  await expect(del({ skip_snapshot: true, branch: "x" })).rejects.toThrow("saves nothing");
+  // a failed snapshot deletes nothing
+  routes["POST /v1/workspaces/w1/snapshots"] = json({ error: "snapshots: 5 of 5 in use; request more under Quota" }, 409);
+  await expect(del()).rejects.toThrow("snapshots: 5 of 5 in use; request more under Quota; nothing was deleted; pass `skip_snapshot: true`");
+  // no branch checked out and no option: refused, nothing saved or deleted
+  routes["GET /v1/workspaces/w1"] = json({ id: "w1", name: "shop", volume: "vol-1", branch: null });
+  await expect(del()).rejects.toThrow("has no branch checked out");
+  expect(calls.filter((c) => c.method === "POST").length).toBe(posts + 1);
+  expect(deletes()).toBe(4);
+  // a capsule is deleted as before
+  routes["GET /v1/workspaces/cap-1"] = json({ id: "cap-1" });
+  routes["DELETE /v1/workspaces/cap-1"] = () => new Response(null, { status: 204 });
+  expect(JSON.parse(await t.run({ action: "delete", workspace: "cap-1" })).state).toBe("deleted");
+});
+
+test("a delete handed back while its snapshot is written is finished by the next call with no second snapshot", async () => {
+  const t = tool(platformTools("main"), "workspace");
+  routes["GET /v1/workspaces/w1"] = json({ id: "w1", name: "shop", volume: "vol-1", branch: "base" });
+  routes["GET /v1/volumes"] = json([{ id: "vol-1", name: "shop", branches: { base: 2 } }]);
+  routes["GET /v1/volumes/vol-1/history"] = json([]);
+  routes["DELETE /v1/workspaces/w1"] = () => new Response(null, { status: 204 });
+  routes["POST /v1/workspaces/w1/snapshots"] = json({ id: "s3", phase: "writing", volume: "vol-1", name: "shop", version: 3, branch: "base" }, 202);
+  const first = JSON.parse(await t.run({ action: "delete", workspace: "w1", soft_ms: 1500 }));
+  expect([first.promoted, first.deleted, first.snapshot.id]).toEqual([true, false, "s3"]);
+  routes["GET /v1/volumes/vol-1/history"] = json([{ id: "s3", phase: "ready", version: 3, message: "before delete of shop", createdAt: new Date().toISOString(), branches: ["base"] }]);
+  const second = JSON.parse(await t.run({ action: "delete", workspace: "w1", soft_ms: 1500 }));
+  expect(second.saved).toStartWith("base is now v3 (was v2) of volume shop");
+  expect(calls.filter((c) => c.method === "POST").length).toBe(1);
+  expect(calls.filter((c) => c.method === "DELETE").length).toBe(1);
 });
 
 test("the push tools pass the volume name and the restore tool the team", async () => {

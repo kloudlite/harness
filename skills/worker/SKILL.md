@@ -44,7 +44,7 @@ When the work crosses components, the ask carries a contract with a version. Bui
 3. Each service is in the state the ask named: serving and intercepted, or stopped.
 4. Every intercept you started is stopped, unless you were asked to keep it.
 
-Then leave the workspaces as they are: the coordinator snapshots and deletes them.
+Then leave the workspaces as they are: the coordinator deletes them, which saves them where it chooses.
 
 ## Running a service
 

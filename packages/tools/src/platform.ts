@@ -320,6 +320,71 @@ async function capsuleWait(path: string, limitMs: number, limit?: () => string):
   }
 }
 
+// ---- workspace delete: the end of a session, so it SAVES first (owner, 2026-11-18). The Rust port is
+// bins/runtime/src/tools/platform/ws_delete.rs, which says why each rule is what it is.
+const SKIP_SNAPSHOT = { type: "boolean", description: "Delete with no snapshot: a throwaway workspace, nothing saved. Without it, delete first snapshots onto the checked-out branch (usually `base`, which becomes the new base: so delete from the clean merged default branch with a passing build, or pass `branch: \"wip-<topic>\"`), waits until the commit is ready and only then deletes. A snapshot that fails deletes nothing." };
+const DEL_BRANCH = { type: "string", description: "The branch to save onto instead of the checked-out one, such as `wip-<topic>` for unfinished work: created or moved there." };
+const DEL_VOLUME = { type: "string", description: "The name its snapshot gives a volume that has none yet (else it takes the workspace's name)." };
+const DEL_MESSAGE = { type: "string", description: "The message of its snapshot, default `before delete of <workspace name>`: a repeated delete finds the snapshot an earlier call handed back by it." };
+const DEL_SOFT_MS = { type: "number", description: "How long it waits for its snapshot to be ready; past it the answer has `promoted: true` and nothing is deleted: call delete again, which takes no second snapshot." };
+const SKIP_HINT = "nothing was deleted; pass `skip_snapshot: true` to delete without a snapshot";
+/** A commit an earlier delete cut and handed back is reused for this long: an older one may predate work done since. */
+const REUSE_MS = 1_800_000;
+
+const sentence = (m: string) => {
+  const e = /^(\d{3}): (\{.*\})$/s.exec(m);
+  try { if (e && typeof JSON.parse(e[2]!)?.error === "string") return `${e[1]}: ${JSON.parse(e[2]!).error}`; } catch {}
+  return m;
+};
+const vlabel = (s: any) => (typeof s?.version === "number" ? `v${s.version}` : String(s?.id ?? "?"));
+
+type DeleteSave = { saved: string; snapshot?: any; writing?: any };
+
+/** Snapshot `doc` onto `branch` or its checked-out branch and wait for it; any refusal or failure throws, so nothing is deleted. */
+async function saveBeforeDelete(a: any, doc: any, settle: (s: any, ms: number) => Promise<any>): Promise<DeleteSave> {
+  if (a.skip_snapshot && (a.branch !== undefined || a.volume !== undefined || a.message !== undefined)) throw new Error("`skip_snapshot: true` saves nothing, so it takes no `branch`, `volume` or `message`: drop them, or drop `skip_snapshot` to save first");
+  const id: string = doc?.id ?? a.workspace;
+  if (id.startsWith("cap-") || doc?.device) return { saved: "nothing: a capsule or device workspace is deleted without a snapshot" };
+  if (a.skip_snapshot) return { saved: "nothing (skip_snapshot)" };
+  const name: string = doc?.name ?? id;
+  const rows = await apiJson<any[]>("GET", "/v1/volumes").catch(() => undefined);
+  const row = Array.isArray(rows) ? rows.find((r) => r?.id === doc?.volume) : undefined;
+  const target: string | undefined = a.branch || doc?.branch || undefined;
+  if (!target) {
+    const unnamed = !row?.name && a.volume === undefined ? " (its volume has no name yet: it takes this workspace's name unless you pass `volume`)" : "";
+    throw new Error(`workspace ${name} has no branch checked out (a clone, a detached restore or one made empty), so delete does not know where to save it; nothing was saved or deleted. Pass \`branch: "wip-<topic>"\` (or another branch) to save it there${unnamed}, or \`skip_snapshot: true\` to delete it without a snapshot.`);
+  }
+  const was = row?.branches?.[target];
+  const message: string = a.message ?? `before delete of ${name}`;
+  let snapshot: any;
+  if (doc?.volume) {
+    const h = await apiJson<any>("GET", `/v1/volumes/${seg(doc.volume)}/history`).catch(() => undefined);
+    const hist: any[] = Array.isArray(h) ? h : Array.isArray(h?.history) ? h.history : [];
+    const fresh = hist.filter((r) => r?.message === message && r?.phase !== "error" && Date.now() - Date.parse(r?.createdAt) < REUSE_MS);
+    const last = fresh.sort((x, y) => String(y.createdAt).localeCompare(String(x.createdAt)))[0];
+    if (last) snapshot = { ...last, volume: doc.volume };
+  }
+  if (!snapshot) {
+    try {
+      snapshot = JSON.parse(await api("POST", `/v1/workspaces/${seg(id)}/snapshots`, strip({ message, volume: a.volume, branch: a.branch })));
+    } catch (e) {
+      const m = sentence((e as Error).message);
+      throw new Error(`${m}; ${SKIP_HINT}${/volume/.test(m) && a.volume === undefined ? "; `volume` names the volume" : ""}`);
+    }
+  }
+  snapshot = await settle(snapshot, softMs(a));
+  if (snapshot?.phase !== "ready") {
+    const { note: _n, ...s } = snapshot ?? {};
+    return { saved: "", writing: { promoted: true, workspace: id, deleted: false, snapshot: s, hint: `snapshot ${vlabel(s)} is still being written, so nothing was deleted yet. Call delete again with the same arguments: it finds this snapshot instead of taking another, and deletes once it is ready.` } };
+  }
+  const vol: string = snapshot.name ?? row?.name ?? "?";
+  const on: string | undefined = snapshot.branch ?? (snapshot.detached === undefined && Array.isArray(snapshot.branches) && snapshot.branches.includes(target) ? target : undefined);
+  if (on) return { snapshot, saved: `${on} is now ${vlabel(snapshot)}${on === target && typeof was === "number" ? ` (was v${was})` : ""} of volume ${vol}; the next session restores it with snapshot_id "${vol}@${on}"` };
+  const why = typeof snapshot.detached === "string" ? `${snapshot.detached}, so ` : "";
+  const expires = snapshot.expires_at ? `at ${snapshot.expires_at}` : "with the volume's default expiry";
+  return { snapshot, saved: `${why}${vlabel(snapshot)} of volume ${vol} is detached, NOT on ${target}; it expires ${expires} unless a branch is put on it. To make it ${target}: volume branch (volume "${vol}", branch "${target}", version ${snapshot.version ?? "N"})` };
+}
+
 /** Read the object, run the removal, answer the object as last read with `state: "deleted"`. */
 async function deleting(readPath: string, remove: () => Promise<unknown>): Promise<string> {
   const doc = JSON.parse(await api("GET", readPath));
@@ -414,17 +479,18 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
   const stopAct = act(WAITING, [], async (a) => thenWaitWs(await api("POST", `${W}/stop`), a, { stopped: true, ws: wsId }));
   /** The workspace as it is after the snapshot, with the snapshot's own answer under `snapshot` (its id is the one thing the object does not hold). */
   /** A push answers before its record is `ready`; wait (bounded) so `volume get` right after lists it. */
-  const settled = async (snapshot: any): Promise<any> => {
+  const settled = async (snapshot: any, ms = 25_000): Promise<any> => {
     const id = snapshot?.id; const vol = snapshot?.volume;
     if (!id || !vol || snapshot?.phase === "ready") return snapshot;
-    const until = Date.now() + 25_000;
+    const until = Date.now() + ms;
     // what the push did to a branch is the push answer's alone: a history row must not hide it
     const moved = strip({ branch: snapshot.branch, detached: snapshot.detached });
     while (Date.now() < until) {
       await new Promise((r) => setTimeout(r, 1000));
       const rows = await apiJson<any[]>("GET", `/v1/volumes/${seg(vol)}/history`).catch(() => undefined);
       const row = Array.isArray(rows) ? rows.find((r) => r?.id === id) : undefined;
-      if (row) return { ...snapshot, ...row, ...moved, phase: "ready" };
+      // history also lists cuts still being written: only the row's own phase says ready
+      if (row && (row.phase ?? "ready") === "ready") return { ...snapshot, ...row, ...moved, phase: "ready" };
     }
     return { ...snapshot, note: "still being written; it lists in volume get once ready" };
   };
@@ -435,7 +501,7 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
     catch (e) { return JSON.stringify({ snapshot, note: `saved; the workspace was not re-read: ${(e as Error).message}` }, null, 2); }
   });
   tools.push(
-    resource("workspace", ws ? "This workspace. Actions: stop (snapshots first), snapshot." : "Workspaces: dev machines with a home volume. Actions: list, get, create (clone with `source`), restore, start, stop, restart, delete, wait, ttl, snapshot.",
+    resource("workspace", ws ? "This workspace. Actions: stop (snapshots first), snapshot." : "Workspaces: dev machines with a home volume. Actions: list, get, create (clone with `source`), restore, start, stop, restart, delete (snapshots onto the checked-out branch, usually base, then deletes; pass `skip_snapshot: true` for a throwaway workspace, or `branch: X` to save elsewhere; a workspace with no branch checked out needs one of the two; capsules and device workspaces are deleted without a snapshot), wait, ttl, snapshot.",
       ws
         ? { ...(noStop ? {} : { stop: stopAct }), snapshot: snapAct }
         : {
@@ -473,9 +539,14 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
               const recorded = (d?.restarts?.length ?? 0) > n0 || (lastAt(d) !== undefined && JSON.stringify(lastAt(d)) !== last0);
               return JSON.stringify(recorded ? { ...d, restart: lastAt(d), hint: "restarted; restart_required is still set" } : { ...d, restart: null, hint: "the restart was accepted; its record follows on the next get" });
             }),
-            delete: mact({}, [], async (a) => {
+            delete: mact({ skip_snapshot: SKIP_SNAPSHOT, branch: DEL_BRANCH, volume: DEL_VOLUME, message: DEL_MESSAGE, soft_ms: DEL_SOFT_MS }, [], async (a) => {
               const ses = process.env.KD_DESK;
-              return deleting(`/v1/workspaces/${seg(a.workspace)}`, () => api("DELETE", ses ? `/v1/desks/${seg(ses)}/workspaces/${seg(a.workspace)}` : `/v1/workspaces/${seg(a.workspace)}`));
+              const path = `/v1/workspaces/${seg(a.workspace)}`;
+              const doc: any = JSON.parse(await api("GET", path));
+              const saved = await saveBeforeDelete(a, doc, (s, ms) => settled(s, ms));
+              if (saved.writing) return JSON.stringify(saved.writing, null, 2);
+              await api("DELETE", ses ? `/v1/desks/${seg(ses)}/workspaces/${seg(a.workspace)}` : path);
+              return JSON.stringify({ ...doc, state: "deleted", ...strip({ snapshot: saved.snapshot }), saved: saved.saved }, null, 2);
             }),
             wait: mact({ timeout_ms: TIMEOUT }, [], async (a) => pollUntil(() => api("GET", `/v1/workspaces/${seg(a.workspace)}`), wsAny, timeoutMs(a), tickMs)),
             ttl: mact({ ttl_secs: TTL, clear: CLEAR }, [], async (a) => { const b = ttlBody(a); return typeof b === "string" ? b : (await api("PUT", `/v1/workspaces/${seg(a.workspace)}/ttl`, b), api("GET", `/v1/workspaces/${seg(a.workspace)}`)); }),

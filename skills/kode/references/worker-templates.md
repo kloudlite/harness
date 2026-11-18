@@ -37,7 +37,7 @@ Commits go back by `git push` when the worker can push. When it cannot: `git for
 | Purpose | One bounded change: a feature, a fix, a refactor |
 | Scope | The workspaces the task lists. The desk's environment is read-only unless the task grants an intercept |
 | Tools | Each worker tool of `permissions.md` |
-| End state | Commit and push, or hand the commits back as a file. Unfinished work that cannot go to git, when the workspace is not a clone: `workspace` `snapshot` onto the branch the task names (`branch: "wip-<topic>"`), a `message` that says what is left, and `name@wip-<topic>` in the report. `REPORT.md`. The coordinator snapshots and deletes the workspace |
+| End state | Commit and push, or hand the commits back as a file. Unfinished work that cannot go to git, when the workspace is not a clone: `workspace` `snapshot` onto the branch the task names (`branch: "wip-<topic>"`), a `message` that says what is left, and `name@wip-<topic>` in the report. `REPORT.md`. The coordinator deletes the workspace, which saves it onto the branch the coordinator chooses |
 | Must not | Use a workspace the task does not list; create, clone, stop, delete or restore a workspace; create or clone an environment or a desk; name a volume; move `base` or a branch the task does not name |
 
 ## 2. Throwaway experiment
