@@ -12,7 +12,7 @@ export const POD_TOOLS = ["read", "write", "edit", "glob", "grep", "exec", "proc
 /** The tools the pod serves one per verb, folded here into one tool per resource: `{action}` -> the pod's own tool.
  * The pod keeps `patch` and `process_close_stdin` for its HTTP users; `close_stdin` stays an action, `patch` is not forwarded. */
 const FOLDED: Record<string, { description: string; pod: Record<string, string> }> = {
-  process: { description: "Detached processes of a workspace (a long exec job becomes one). Actions: list, output, wait, write, close_stdin, kill. An exited process is never restarted; one killed by a workspace stop is relaunched unless the exec passed `relaunch: false` (state `killed_by_restart`).", pod: { list: "process_list", output: "process_output", wait: "process_wait", write: "process_write", close_stdin: "process_close_stdin", kill: "process_kill" } },
+  process: { description: "The processes of a workspace: every exec, container build and watch command is one, and one still running when its call answers runs on in the background. Actions: list (with `kind`), output, wait, write, close_stdin, kill (the whole tree). A finished process is never restarted; one killed by a workspace stop is relaunched only if its exec passed `relaunch: true`, else listed as `killed_by_restart`.", pod: { list: "process_list", output: "process_output", wait: "process_wait", write: "process_write", close_stdin: "process_close_stdin", kill: "process_kill" } },
   watch: { description: "Watch paths of a workspace for changes. Actions: start, poll, stop.", pod: { start: "watch", poll: "watch_poll", stop: "watch_stop" } },
 };
 
@@ -191,7 +191,7 @@ export async function podTools(ws: string, o: { ensure?: typeof ensureRunning } 
         try {
           const j = JSON.parse(text);
           built = j;
-          // every detached or promoted exec is registered (default on_failure): the watch reports only these, never a plain exec that exited 1
+          // every exec answered with an id (a background process, detached or past its wait) is registered (default on_failure): the watch reports only these, never a plain exec that exited 1
           if (name === "exec" && typeof j?.id === "string") processNotify.set(`${id}/${j.id}`, notify ?? "on_failure");
           if (name === "process_kill" && typeof args?.id === "string") processNotify.set(`${id}/${args.id}`, "never");
           out = JSON.stringify(j, null, 2);
@@ -244,7 +244,7 @@ export async function podTools(ws: string, o: { ensure?: typeof ensureRunning } 
     return {
       name,
       description: t?.description ? `${t.description} (This tool runs in workspace ${ws}.)` : `This tool runs in workspace ${ws}.`,
-      inputSchema: name === "exec" ? { ...sch, properties: { ...sch.properties, notify: { type: "string", enum: NOTIFY, description: "Report a detached or promoted process that ends: `on_failure` (default) tells you on a non-zero exit, `always` also on a clean one, `never` stays silent." } } } : sch,
+      inputSchema: name === "exec" ? { ...sch, properties: { ...sch.properties, notify: { type: "string", enum: NOTIFY, description: "Report a background process that ends: `on_failure` (default) tells you on a non-zero exit, `always` also on a clean one, `never` stays silent." } } } : sch,
       run: (args: any) => call(name, args),
     };
   });
