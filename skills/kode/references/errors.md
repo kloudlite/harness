@@ -24,6 +24,8 @@ The status comes first; the body is one sentence. Report it as it is, then take 
 | `409 this volume is named X, not Y (this workspace is a clone of that volume…)` | Drop `volume` or pass X: a clone or a restore saves into its source's volume. |
 | `409 volume {name} already exists; delete it first` | Ask for another name. |
 | `409 volume {name} is used by {readers}` | A pipeline reads it. Tell the user. |
+| `409 volume name {to} is taken` | A volume of the owner already has that name. Ask for another name. |
+| `404` or `405` with no sentence on `volume` `rename`, or `volume rename is not available on this platform's api yet` | The platform does not have rename yet. Nothing was renamed; tell the user. |
 | `404 volume {name} has no commit {n}` / `has no branch {b}` / `has no ready version` | Read `volume` `get`: it lists the commits and the branches. A `base` that is gone means that nobody put a good commit on it: ask which commit is good. |
 | `422 branch: "X" must be lowercase letters, digits and hyphens (at most 32), and not a number or "latest"` | Pick another branch name. |
 | `422 labels: …` / `branches: at most 16 on one volume` | Fix the list; delete a branch that nobody uses with `volume` `delete_branch`. |

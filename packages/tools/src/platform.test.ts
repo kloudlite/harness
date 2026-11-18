@@ -966,8 +966,8 @@ test("volume describe PATCHes the name under its owner, sends only what was give
   routes["PATCH /v1/volumes/acme/pg"] = json({ error: "labels: at most 8" }, 422);
   await expect(tool(t, "volume_describe").run({ volume: "pg", owner: "acme", labels: ["a"] })).rejects.toThrow("422: labels: at most 8");
   const v = t.find((x) => x.name === "volume")!;
-  expect((v.inputSchema as any).properties.action.enum).toEqual(["list", "get", "describe", "branch", "delete_branch", "delete"]);
-  expect(v.description).toBe("Volumes: the stored state of workspaces and environments, each with a name, a description, labels and numbered storage commits; a branch is a movable name on one commit (`name@<branch>`) that a snapshot advances. Actions: list (filter by `label`), get (history with each commit's branches, and the newest commit), describe (set `description` and `labels`), branch (create a branch or move it onto a commit), delete_branch, delete a detached volume.");
+  expect((v.inputSchema as any).properties.action.enum).toEqual(["list", "get", "describe", "branch", "delete_branch", "rename", "delete"]);
+  expect(v.description).toBe("Volumes: the stored state of workspaces and environments, each with a name, a description, labels and numbered storage commits; a branch is a movable name on one commit (`name@<branch>`) that a snapshot advances. Actions: list (filter by `label`), get (history with each commit's branches, and the newest commit), describe (set `description` and `labels`), branch (create a branch or move it onto a commit), delete_branch, rename (give the volume another name `to`: every commit, branch and the history stay, the old name stops resolving, so update references to it such as `old@base` in notes or scripts), delete a detached volume.");
 });
 
 test("volume branch PUTs one target under the owner and the name; delete_branch DELETEs the same path", async () => {
@@ -1004,4 +1004,27 @@ test("volume branch PUTs one target under the owner and the name; delete_branch 
   }
   await expect(tool(t, "volume_branch").run({ volume: "pg", branch: "base", version: 1 })).rejects.toThrow("`owner` is required");
   await expect(tool(t, "volume_delete_branch").run({ volume: "pg", branch: "base" })).rejects.toThrow("`owner` is required");
+});
+
+test("volume rename POSTs `to` under the owner and the name, and says so when the api has no such route", async () => {
+  const t = platformTools("main");
+  const doc = { id: "ws-ab12", name: "kode-platform-base", branches: { base: 3 }, latest_version: 3 };
+  routes["POST /v1/volumes/acme/kode-rust/rename"] = json(doc);
+  process.env.KD_TEAM = "acme";
+  try {
+    // the answer is the renamed volume the api answers, under the owner defaulting to the desk's team
+    expect(JSON.parse(await tool(t, "volume_rename").run({ volume: "kode-rust", to: "kode-platform-base" }))).toEqual(doc);
+    expect(calls.filter((c) => c.method === "POST").map((c) => [c.url, c.body])).toEqual([["/v1/volumes/acme/kode-rust/rename", { to: "kode-platform-base" }]]);
+    await expect(tool(t, "volume_rename").run({ volume: "kode-rust" })).rejects.toThrow("to");
+    // the api's sentences come back as written
+    routes["POST /v1/volumes/acme/kode-rust/rename"] = json({ error: "volume name kode-ops is taken" }, 409);
+    await expect(tool(t, "volume_rename").run({ volume: "kode-rust", to: "kode-ops" })).rejects.toThrow("409: volume name kode-ops is taken");
+    routes["POST /v1/volumes/acme/kode-rust/rename"] = () => new Response("volume kode-rust does not exist", { status: 404 });
+    await expect(tool(t, "volume_rename").run({ volume: "kode-rust", to: "x-base" })).rejects.toThrow("404: volume kode-rust does not exist");
+    // an api from before the route: its router's bare 404 is not "no such volume"
+    routes["POST /v1/volumes/acme/kode-rust/rename"] = () => new Response("", { status: 404 });
+    await expect(tool(t, "volume_rename").run({ volume: "kode-rust", to: "x-base" })).rejects.toThrow("not available on this platform's api yet");
+  } finally {
+    delete process.env.KD_TEAM;
+  }
 });

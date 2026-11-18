@@ -14,6 +14,8 @@ import { resource, type Action } from "./actions.ts";
 import type { ToolDef } from "./index.ts";
 
 const UNAVAILABLE = "platform tools unavailable: KD_API_URL / KD_TOOL_KEY_FILE not set";
+/** An api from before the rename route answers its router's bare 404 or 405, which is not "no such volume". */
+const NO_RENAME = "volume rename is not available on this platform's api yet; nothing was renamed";
 
 type Raw = { unavailable: true } | { unavailable?: false; status: number; text: string; data: any };
 
@@ -685,7 +687,7 @@ function mainOnly(tickMs: number): ToolDef[] {
         return JSON.stringify({ ...doc, state: "deleted" }, null, 2);
       }),
     }),
-    resource("volume", "Volumes: the stored state of workspaces and environments, each with a name, a description, labels and numbered storage commits; a branch is a movable name on one commit (`name@<branch>`) that a snapshot advances. Actions: list (filter by `label`), get (history with each commit's branches, and the newest commit), describe (set `description` and `labels`), branch (create a branch or move it onto a commit), delete_branch, delete a detached volume.", {
+    resource("volume", "Volumes: the stored state of workspaces and environments, each with a name, a description, labels and numbered storage commits; a branch is a movable name on one commit (`name@<branch>`) that a snapshot advances. Actions: list (filter by `label`), get (history with each commit's branches, and the newest commit), describe (set `description` and `labels`), branch (create a branch or move it onto a commit), delete_branch, rename (give the volume another name `to`: every commit, branch and the history stay, the old name stops resolving, so update references to it such as `old@base` in notes or scripts), delete a detached volume.", {
       list: act({ kind: S, owner: S, label: { type: "string", description: "Keep only volumes that carry this label." } }, [], async (a) => api("GET", `/v1/volumes${qs({ kind: a.kind, owner: a.owner, label: a.label })}`)),
       get: act({ volume: { type: "string", description: "The volume's id or its given name." } }, ["volume"], async (a) => {
         // /history and /refs are keyed by the volume id; a name given at a snapshot is a claim on the list row
@@ -712,6 +714,12 @@ function mainOnly(tickMs: number): ToolDef[] {
         return api("PUT", `/v1/volumes/${seg(nameOwner(a))}/${seg(a.volume)}/branches/${seg(a.branch)}`, strip({ version: a.version, snapshot: a.snapshot }));
       }),
       delete_branch: act({ volume: NAMED_VOLUME, owner: OWNER_DEFAULT, branch: BRANCH }, ["volume", "branch"], async (a) => (await api("DELETE", `/v1/volumes/${seg(nameOwner(a))}/${seg(a.volume)}/branches/${seg(a.branch)}`), JSON.stringify({ volume: a.volume, branch: a.branch, state: "deleted" }, null, 2))),
+      rename: act({ volume: NAMED_VOLUME, owner: OWNER_DEFAULT, to: { type: "string", description: "The new name, by the rules of a first snapshot's volume name. Every commit, branch and the history stay; the old name stops resolving, so references to it (`old@base` in notes or scripts) must be updated." } }, ["volume", "to"], async (a) => {
+        const r = await raw("POST", `/v1/volumes/${seg(nameOwner(a))}/${seg(a.volume)}/rename`, { to: a.to });
+        // the api's own refusals always carry a sentence; an empty 404/405 is a router without the route
+        if (!r.unavailable && (r.status === 404 || r.status === 405) && !r.text.trim()) throw new Error(NO_RENAME);
+        return show(r);
+      }),
       delete: act({ volume: S }, ["volume"], async (a) => (await api("DELETE", `/v1/volumes/${seg(a.volume)}`), JSON.stringify({ volume: a.volume, state: "deleted" }, null, 2))),
     }),
     resource("snapshot", "Snapshots of a volume. Action: delete one.", {

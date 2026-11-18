@@ -48,6 +48,7 @@ One word, one meaning. All work runs in the context of one team: a person's own 
 | `git checkout base` | `workspace` `restore` from `name@base` (an environment: `env` `create` with `source`) |
 | commit on the checked-out branch / `git switch -c wip-auth` + commit | `snapshot` (the branch advances) / `snapshot` with `branch: "wip-auth"` |
 | `git branch -f base v7` / `git branch -d wip-auth` | `volume` `branch` / `volume` `delete_branch` |
+| renaming the repository | `volume` `rename` with `to`: every commit, branch and the history stay; the old name stops resolving, so update `memory` and every note or script that spells `old@…` |
 | detached HEAD | made from `name@N`, `name@latest`, or as a clone: no branch moves |
 
 Three facts decide every topology choice:
@@ -194,7 +195,7 @@ The example app: a shop with `web`, `api`, `worker`, `db` (Postgres) and `cache`
 
 ## Tools
 
-The tools act on one desk. Most tools are one per resource: `action` picks the verb. Every code, run, package and image tool takes `workspace`, the id of a `ready` workspace. `references/tools.md` lists every tool with its actions and arguments, and the ids and states of each object; `references/permissions.md` says who may call each action. Tools take the id or the name; write the name to the user. `volume` `get` takes the id or the name; `branch`, `delete_branch` and `describe` take the name. Workspace `restore` takes a reference in `snapshot_id`. Env `create` takes in `source` an environment (cloned live) or a snapshot reference; an environment of that name wins, which is why a volume never has the name of an environment (convention 2). Workspace `create` `source` is a workspace to clone, never a snapshot.
+The tools act on one desk. Most tools are one per resource: `action` picks the verb. Every code, run, package and image tool takes `workspace`, the id of a `ready` workspace. `references/tools.md` lists every tool with its actions and arguments, and the ids and states of each object; `references/permissions.md` says who may call each action. Tools take the id or the name; write the name to the user. `volume` `get` takes the id or the name; `branch`, `delete_branch`, `describe` and `rename` take the name. Workspace `restore` takes a reference in `snapshot_id`. Env `create` takes in `source` an environment (cloned live) or a snapshot reference; an environment of that name wins, which is why a volume never has the name of an environment (convention 2). Workspace `create` `source` is a workspace to clone, never a snapshot.
 
 ## Reads, lifecycle and deletes
 

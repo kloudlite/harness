@@ -76,6 +76,7 @@ The one rule behind every row: a worker may do anything its task needs on its li
 | `snapshot` `delete` | Yes | No | Only a commit that no branch points at and nothing needs. Refused for a branch head and for the commit a live workspace was built from. Never the last commit: the volume goes with it |
 | `volume` `describe` | Yes | No | It sets the `description` and the `labels` of a named volume. A given value replaces the stored one |
 | `volume` `branch`, `delete_branch` | Yes | No | `branch` creates a branch or moves it to another commit. `base` goes only onto a state where a build or a test passed |
+| `volume` `rename` | Yes, after a yes from the person | No | Every reference that spells the old name stops resolving. Update `memory` and the notes and scripts that name it in the same session |
 | `volume` `delete` | Yes, after a yes from the person | No | It removes each snapshot of a detached volume for good. Never a way to end a session: a volume stays |
 | `memory` `write` | Yes | No | It names only what lasts: volumes (name, contents, labels, the branch to start from), repositories, how to run, conventions, open work with its branch. Never a workspace, a desk or a running environment |
 
