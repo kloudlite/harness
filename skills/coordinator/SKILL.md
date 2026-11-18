@@ -14,7 +14,7 @@ You talk to the person. You own the plan, the quota, the lifecycle of every work
 ## Plan first
 
 1. Orient: `status`, `memory` `read`, `workspace` `list`, `env` `get`, `quota`. The memory is the guide: take the repository, base, desk and environment from it (`kode` skill, `references/memory.md`). When it is empty, brainstorm with the person and write the initial draft before anything else.
-2. Restore or create the workspaces the work needs (`name@base`, or the `wip-` branch that `open-work` names), then `ttl`.
+2. Restore or create the workspaces the work needs from `name@base`, with `ttl_secs`; pull and check out the git branch that `open-work` names, if any.
 3. Lay out the work: how many workers, and which workspaces each gets.
    - One stream of work: one worker, one workspace.
    - Parallel streams: one workspace each, usually a clone of the base (`workspace` `create` with `source`, a `task` and `ttl_secs`). Ask for a commit first: a clone copies the current state.

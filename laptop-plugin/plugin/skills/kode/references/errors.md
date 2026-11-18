@@ -29,7 +29,7 @@ The status comes first; the body is one sentence. Report it as it is, then take 
 | `404 volume {name} has no commit {n}` / `has no branch {b}` / `has no ready version` | Read `volume` `get`: it lists the commits and the branches. A `base` that is gone means that nobody put a good commit on it: ask which commit is good. |
 | `422 branch: "X" must be lowercase letters, digits and hyphens (at most 32), and not a number or "latest"` | Pick another branch name. |
 | `422 labels: …` / `branches: at most 16 on one volume` | Fix the list; delete a branch that nobody uses with `volume` `delete_branch`. |
-| A snapshot answers `detached: "branch {B} moved …"` | Another session committed on that branch since you checked it out; your commit is on no branch. Say so, then put it on its own branch with `volume` `branch`, or move `B` to it when yours is the one to keep (convention 9). |
+| A snapshot answers `detached: "branch {B} moved …"` | Another session moved that branch since you checked it out; your commit is on no branch, and volumes do not merge. Let go: push the code, `snapshot` `delete` your commit, and when the structural change is still needed, redo it on a fresh restore of `{B}` and save that. Never move `{B}` back to yours (convention 9). |
 | `no git connector of {owner} covers {host}/{repo}` | The user connects the code host in the web console. |
 | `link your GitHub account to push: …` / `your GitHub link has expired; link it again` | The person links GitHub in the web console (Settings, Connectors). Until then the work is an unfinished snapshot, not a push. |
 | `connector {name} can only read` | The connector's GitHub App has no write on contents. Tell the user; leave the work as an unfinished snapshot. |
