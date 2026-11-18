@@ -2,7 +2,7 @@
 
 Each case names the topology, the worker template (`worker-templates.md`), the steps as tool calls and the end state. Find the nearest case, then adapt it. The last section shows how to compose a new one. The examples use the team `acme`, the environment `shop` with the services `web`, `api`, `worker` and `db`, the workspace volume `shop-base` and the environment volume `shop-env`.
 
-Every case starts and ends the same way, so the cases do not repeat it. **Start** (convention 15 of the skill): read the memory, find the volume by its label, `workspace` `restore` from `shop-base@base` (a checkout of `base`), then `ttl`, then pull. **End** (convention 16): stop each intercept, push, snapshot the main workspace only when its state will be reused (plain when it is the new good base, so `base` advances; with `branch: "wip-<topic>"` when unfinished work cannot go to git), `memory` `write`, delete each workspace and each environment copy. "Main workspace" is the one restored from the project volume; a clone, a capsule and a copy of an environment are deleted without a snapshot.
+Every case starts and ends the same way, so the cases do not repeat it. **Start** (convention 15 of the skill): read the memory, find the volume by its label, `workspace` `restore` from `shop-base@base` (a checkout of `base`), then `ttl`, then pull. **End** (convention 16): stop each intercept, push and merge, refresh the base when the work is merged (convention 8: the default branch checked out, its build or test passed, a plain snapshot, so `base` advances); with `branch: "wip-<topic>"` instead when unfinished work cannot go to git; `memory` `write`, delete each workspace and each environment copy. "Main workspace" is the one restored from the project volume; a clone, a capsule and a copy of an environment are deleted without a snapshot.
 
 | # | Use case | Topology | Template | Environment slots | Workspace slots |
 |---|---|---|---|---|---|
@@ -30,7 +30,7 @@ Every case starts and ends the same way, so the cases do not repeat it. **Start*
 ## 2. Repair one bug against real data
 
 **Steps.** Coordinator: `workspace` `restore` from `shop-base@base`, then `ttl`. Solo worker: pull. Reproduce in a capsule with `from_workspace`. Repair. Run the test in a capsule again. Commit and push. `REPORT.md`.
-**End.** The standard end: the fix is pushed, so no snapshot is needed; `base` takes it at its next refresh. If the repair is not finished and cannot go to git, snapshot with `branch: "wip-<bug>"` and `open-work` names that branch (case 12).
+**End.** The standard end: once the fix is merged, the base is refreshed from the default branch (convention 8). If the repair is not finished and cannot go to git, snapshot with `branch: "wip-<bug>"` and `open-work` names that branch (case 12).
 
 ## 3. Try N approaches, keep the best
 
@@ -40,7 +40,7 @@ Every case starts and ends the same way, so the cases do not repeat it. **Start*
 ## 4. Change frontend and backend together
 
 **Steps.** One desk, two workspaces `frontend` and `backend` (the main workspace and a clone of it, or two restores). `intercept` `start` for `web` to `frontend` and for `api` to `backend`. A request to `web` goes through the two changes against the real `db` and `worker`. Solo when one session can hold the two; Delegation with two Solo workers when not, each with its own workspace and one intercept granted.
-**End.** The two intercepts stopped, the two branches pushed. The standard end: both workspaces are deleted, with nothing to snapshot.
+**End.** The two intercepts stopped, the two branches pushed. The standard end: the main workspace refreshes the base once the branches are merged; the other is deleted without a snapshot.
 
 ## 5. Debug a failing request with live traffic
 
@@ -50,7 +50,7 @@ Every case starts and ends the same way, so the cases do not repeat it. **Start*
 ## 6. Review a pull request by running it
 
 **Steps.** Coordinator: `env` `create` with `source` `shop` (a live copy) and `ttl_secs`; `desk` `connect` to the copy; `workspace` `restore` from `shop-base@base`, then `ttl`. Desk verification worker: check out the branch of the pull request. Intercept the changed service in the copy. Run the suite in a capsule; call the service directly. `REPORT.md` with the end of the log and a verdict.
-**End.** The intercept stopped, the environment copy deleted. The workspace holds a branch that is not merged, so it is deleted without moving `base`; take a snapshot only when the review left work to continue.
+**End.** The intercept stopped, the environment copy deleted. The workspace holds a branch that is not merged, so nothing is merged and `base` does not move; take a snapshot only when the review left work to continue.
 
 ## 7. Reproduce a data-dependent bug safely
 
