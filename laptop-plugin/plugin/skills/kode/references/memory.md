@@ -12,11 +12,11 @@ Eight sections belong to the team, in reading order; `open-work` is yours alone.
 | `sources` | Each repository: its URL, default branch, path in a workspace (`~/workspace/<repo>`), submodules, the components it holds, how a change leaves it (push or pull request) and the order in which repositories that depend on each other are changed. | Tokens, commit ids. |
 | `run` | For each component: the packages, then the commands to build, test, run and ship it, the ports, and the traps (`export CC=gcc`). | Logs of one run. |
 | `environments` | Each environment: the `volume@branch` it starts from, each service with its image, port and mounts, the seed data, what is safe to reset and how, and which services are usually intercepted. | Who is connected now; live state. |
-| `volumes` | Each volume: what is inside, its packages, labels, the branch to start from (`shop-api-base@base`), the secrets its variables reference (by name), and how `base` is kept fresh. | Credentials, commit numbers. |
+| `volumes` | Each volume: what is inside, its packages, labels, the branch to start from (`shop-api@base`), the secrets its variables reference (by name), and how `base` is kept fresh. | Credentials, commit numbers. |
 | `desks` | The layout of work: each kind of desk, the work it is for, the workspaces on it (`name` from `volume@branch`), the environment it connects to, and how work that spans components is placed. | Live desks, workspaces or ids. |
 | `conventions` | The team's rules: names, branches, commits, reviews, migrations, how to ship, where credentials live, and what needs a yes from the person. | A decision about one task. |
 | `plan` | The plan the team agreed: its goal, each step with its state (`todo`, `doing`, `done`) and owner, the decisions, and the open questions. Removed when the plan is done. | A proposal not yet agreed (that is `open-work`). |
-| `open-work` (yours) | Each unfinished item: the branch to resume from (`shop-api-base@wip-auth`) and what is left; a proposal waiting for the person's yes. | Anything the team relies on. |
+| `open-work` (yours) | Each unfinished item: the branch to resume from (`shop-api@wip-auth`) and what is left; a proposal waiting for the person's yes. | Anything the team relies on. |
 
 ## Starting a task from the memory
 
@@ -111,16 +111,16 @@ A shop with a Next.js storefront, a Go API and a Python worker, in two repositor
 
 **`volumes`**
 ```markdown
-- `shop-api-base` (label `shop`): `shop-api` with Go modules and the build cache warm. Start from `@base`. Variables reference `GITHUB_TOKEN`. Refreshed nightly by the pipeline `refresh-shop-api-base`.
-- `shop-web-base` (label `shop`): `shop-web` with `node_modules`. Start from `@base`.
+- `shop-api` (label `shop`): `shop-api` with Go modules and the build cache warm. Start from `@base`. Variables reference `GITHUB_TOKEN`. Refreshed nightly by the pipeline `refresh-shop-api`.
+- `shop-web` (label `shop`): `shop-web` with `node_modules`. Start from `@base`.
 - `shop-env` (label `shop`): the data of `shop-dev`. `@base` is the seeded catalogue with no orders.
 - `shop-test` (labels `shop`, `test`): the fixture for the end-to-end suite.
 ```
 
 **`desks`**
 ```markdown
-- `api` desk: a workspace `shop-api` from `shop-api-base@base`, connected to `shop-dev`; intercept `api` or `worker` to test. Backend and worker work.
-- `web` desk: a workspace `shop-web` from `shop-web-base@base`, connected to `shop-dev`; intercept `web`. Frontend work.
+- `api` desk: a workspace `shop-api` from `shop-api@base`, connected to `shop-dev`; intercept `api` or `worker` to test. Backend and worker work.
+- `web` desk: a workspace `shop-web` from `shop-web@base`, connected to `shop-dev`; intercept `web`. Frontend work.
 - Work across both (an endpoint and its page): one `api` desk holding both workspaces; the API is done and intercepted before the page starts.
 ```
 
@@ -136,12 +136,12 @@ A shop with a Next.js storefront, a Go API and a Python worker, in two repositor
 ```markdown
 Payments, agreed with the person:
 1. done: `api` `POST /payments` against the provider stub.
-2. doing: `worker` retries failed captures (`shop-api-base@wip-capture-retry`).
+2. doing: `worker` retries failed captures (`shop-api@wip-capture-retry`).
 3. todo: `web` checkout page.
 Open: are refunds in scope?
 ```
 
 **`open-work`** (yours)
 ```markdown
-- `shop-api-base@wip-capture-retry`: retries pass their tests; the dead-letter queue is left.
+- `shop-api@wip-capture-retry`: retries pass their tests; the dead-letter queue is left.
 ```

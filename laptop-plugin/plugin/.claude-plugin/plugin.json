@@ -1,7 +1,7 @@
 {
   "name": "kode",
   "displayName": "Kode",
-  "version": "0.12.15",
+  "version": "0.12.16",
   "description": "Kode workspaces, environments and desks from Claude Code: the remote kd MCP server and the skills; sign in in the browser on the first tool call.",
   "author": { "name": "Kloudlite" },
   "homepage": "https://github.com/kloudlite/harness",
