@@ -32,6 +32,23 @@ Every pipeline tool takes `owner`: the user's handle, or the team slug for a tea
 3. `run` {"action": "start", "owner": "acme", "pipeline": "api-ci", "wait": true}, then `run` `wait` and `run` `logs` (`job` is the index of the job). `run` `get` gives `failedStep` and `exitCode` of a failed run.
 4. To go back, `pipeline` `get` an old `version` and save its definition again as the newest. `run` `cancel` stops a run that you started.
 
+## Refresh a base volume
+
+A nightly job that starts from a base branch, pulls, builds, and moves the branch only on success:
+
+```json
+{"name": "rust-base-refresh", "triggers": {"schedule": ["17 21 * * *"]},
+ "jobs": {"refresh": {"fromSnapshot": "rust-base@base", "saveTo": "rust-base@base",
+   "packages": ["git", "cargo", "rustc", "gcc"], "permissions": {"git": "read"}, "env": {"CC": "gcc"}, "timeoutMinutes": 240,
+   "steps": [{"name": "pull", "cwd": "payments", "run": "git checkout main && git pull --ff-only origin main && git submodule update --init"},
+             {"name": "build", "cwd": "payments", "run": "cargo build -j 1 && cargo test --no-run -j 1"}]}}}
+```
+
+- The home is the volume's files, the clone included; the workspace's package profile is not, so list the job's `packages`.
+- `origin` and every submodule URL must be `https://github.com/...` (or `gitlab.com`) with no user name or token in it, so the credential helper answers; `permissions.git: read` gives it a read credential.
+- A job capsule has 1 CPU and 2 GiB: build with `-j 1`.
+- `run` `get` shows `saved.branch: base` when it moved. A `detail` naming the branch means someone moved it meanwhile; the commit is kept on no branch.
+
 ## Pipeline
 
 | Key | Default | Rule |
@@ -69,7 +86,7 @@ A trigger run takes every input's default. A required input with no default plus
 | `packages` | `[]` | `attr` or `attr@version`; exclusive with `image` |
 | `image` | base image with `git` | A container image |
 | `fromSnapshot` | none | Home starts as a copy of `name@<branch>` (`shop-base@base`), `name@N` (a storage commit), `name` (its `base` branch, else its newest commit) or a snapshot id. Name the branch |
-| `saveTo` | none | A literal volume name; on exit 0 the home is the next storage commit, on no branch (a coordinator moves `base` to it with `volume` `branch`); not with `matrix` |
+| `saveTo` | none | A literal volume name, or `name@<branch>`; on exit 0 the home is the next storage commit. `name` moves no branch. `name@<branch>` fast-forwards that branch onto it when the save is ready, only if the branch still points at the commit the home started from (else the commit stays on no branch and the job `detail` says why; the job still succeeds). Never `name@N`, `name@latest` or an id; not with `matrix`. A pipeline that saves to a name blocks a rename of that volume |
 | `environment` | the pipeline's | `"staging"` shared, `{"clone": "staging"}` a copy per run |
 | `matrix` | none | axis to list; at most 64 combinations |
 | `timeoutMinutes` | 60 | 1 to 1440 |
