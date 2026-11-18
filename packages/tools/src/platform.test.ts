@@ -354,6 +354,9 @@ test("the push tools pass the volume name and the restore tool the team", async 
   expect(post(1)).toEqual({ volume: "pg" });
   await tool(platformTools("main"), "workspace_restore").run({ name: "w2", snapshot_id: "pg@2", team: "acme" });
   expect(post(2)).toEqual({ name: "w2", snapshot_id: "pg@2", team: "acme" });
+  // a restore takes its own ttl in the same call, as a create does
+  await tool(platformTools("main"), "workspace_restore").run({ name: "w3", snapshot_id: "pg@2", ttl_secs: 3600 });
+  expect(post(3)).toEqual({ name: "w3", snapshot_id: "pg@2", ttl_secs: 3600 });
 });
 
 // ---- component tools: one test per tool (route, args, error mapping)
@@ -905,7 +908,7 @@ test("workspace and env create set ttl_secs on the new object in the same call",
   // a refused ttl fails the answer and names what was made
   routes["PUT /v1/workspaces/w9/ttl"] = json({ error: "ttl_secs: 600 to 2592000" }, 422);
   await expect(tool(t, "workspace_create").run({ name: "a", ttl_secs: 3600 })).rejects.toThrow("created w9, but `ttl_secs` was refused");
-  expect((t.find((x) => x.name === "workspace")!.inputSchema as any).properties.ttl_secs.description).toContain("(create, ttl)");
+  expect((t.find((x) => x.name === "workspace")!.inputSchema as any).properties.ttl_secs.description).toContain("(create, restore, ttl)");
 });
 
 test("every argument that names a snapshot says it takes a name, name@N, name@<branch> or an id", () => {

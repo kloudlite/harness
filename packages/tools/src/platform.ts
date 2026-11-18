@@ -206,10 +206,10 @@ const SBX = { type: "string", description: "The capsule id or name." };
 const SES = { type: "string", description: "The desk id, name or `team/name`." };
 const PIPE = { type: "string", description: "The pipeline name." };
 const RUN = { type: "string", description: "The run id (the `id` of a run from `run list` or `run start`)." };
-const TIMEOUT = { type: "number", description: "Milliseconds this call waits before it answers (default 5000, maximum 20000 on a remote connector; default 25000, maximum 900000 in the harness). At the limit the answer has `timed_out: true`: call again." };
+const TIMEOUT = { type: "number", description: "Milliseconds this call waits before it answers (default and maximum 20000 on a remote connector; default 25000, maximum 900000 in the harness). At the limit the answer has `timed_out: true`: call again." };
 const WAITING = {
   wait: { type: "boolean", description: "Wait for the object to settle instead of answering at once." },
-  soft_ms: { type: "number", description: "With `wait`: the call answers within this many milliseconds, handing off with `promoted: true` if the work is not done (default 5000, maximum 20000 on a remote connector; default 25000, maximum 600000 in the harness). Resume with the `wait` action named by `kind`." },
+  soft_ms: { type: "number", description: "With `wait`: the call waits for the object to settle and answers within this many milliseconds, handing off with `promoted: true` if the work is not done (default and maximum 20000 on a remote connector; default 25000, maximum 600000 in the harness). Resume with the `wait` action named by `kind`." },
 };
 const MINE = { type: "boolean", description: "Your own secret in the team `owner` (any active member), not the team's shared one." };
 const TTL = { type: "integer", description: "Seconds of unused time before it is deleted, 600 to 2592000." };
@@ -254,11 +254,12 @@ const timeoutMs = (a: any): number => {
   return clamp(Number(ms) || 25_000, 900_000);
 };
 /** Where a `wait: true` action hands off. */
-/** The polling bound for `soft_ms`: 5 s short of it, so the hand-off (and the MCP answer) lands INSIDE the client's own deadline of `soft_ms`
- * (a 60 s call answered at 61.6 s, after the client gave up, 2026-11-04). A `soft_ms` of 5 s or less has no margin to give and is kept. */
+/** The polling bound for `soft_ms`: past 20 s, 5 s short of it, so the hand-off (and the MCP answer) lands INSIDE the client's own deadline
+ * of `soft_ms` (a 60 s call answered at 61.6 s, after the client gave up, 2026-11-04). Up to 20 s (a remote door's cap and default) it is kept
+ * whole, as the runtime's `soft_ms` does (bins/runtime/src/tools/call.rs). */
 const softMs = (a: any): number => {
   const s = clamp(Number(a.soft_ms) || 25_000, 600_000);
-  return s <= 5_000 ? s : Math.max(5_000, s - 5_000);
+  return s <= 20_000 ? s : Math.max(20_000, s - 5_000);
 };
 /** The answer of a call that handed off: nothing keeps running in the bench, the platform does the work, so there is no output offset. */
 const promoted = (id: unknown, kind: string) => JSON.stringify({ promoted: true, id, kind, next: 0, next_err: 0, poll_after_ms: 2000 }, null, 2);
@@ -447,8 +448,8 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
               const ses = process.env.KD_DESK;
               return thenWaitWs(await ttlAfter(a, "/v1/workspaces", ses ? await api("POST", `/v1/desks/${seg(ses)}/workspaces`, strip(body)) : await api("POST", "/v1/workspaces", strip({ team: a.team, ...body }))), a);
             }),
-            restore: act({ name: S, snapshot_id: { type: "string", description: `What to restore: ${SNAP_REF}.` }, team: S, image: S, packages: SL, ...WAITING }, ["name", "snapshot_id"], async (a) =>
-              thenWaitWs(await api("POST", "/v1/workspaces/restore", strip({ name: a.name, snapshot_id: a.snapshot_id, team: a.team, image: a.image, packages: a.packages })), a)),
+            restore: act({ name: S, snapshot_id: { type: "string", description: `What to restore: ${SNAP_REF}.` }, team: S, image: S, packages: SL, ttl_secs: TTL, ...WAITING }, ["name", "snapshot_id"], async (a) =>
+              thenWaitWs(await api("POST", "/v1/workspaces/restore", strip({ name: a.name, snapshot_id: a.snapshot_id, team: a.team, image: a.image, packages: a.packages, ttl_secs: a.ttl_secs })), a)),
             start: mact(WAITING, [], async (a) => thenWaitWs(await api("POST", `/v1/workspaces/${seg(a.workspace)}/start`), a, { ws: a.workspace, reread: true })),
             stop: mact(WAITING, [], async (a) => thenWaitWs(await api("POST", `/v1/workspaces/${seg(a.workspace)}/stop`), a, { stopped: true, ws: a.workspace })),
             restart: mact({ soft_ms: WAITING.soft_ms }, [], async (a) => {
