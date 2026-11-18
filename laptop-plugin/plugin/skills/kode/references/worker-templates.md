@@ -19,7 +19,7 @@ The branch or commit, or "nothing persisted". The files touched, one per line.
 The command, its exit code and the last 20 lines of its output. "Not verified" is an allowed answer. A claim without this section is not.
 
 ## Resources left
-Each storage commit or pipeline saved: the volume, the branch it is on (`name@wip-auth`) and its number, whether it is good or what is left, and what is inside. Each process or intercept still running, only when the task asked to keep it. Empty means nothing is left running.
+Each storage commit or pipeline saved: the volume, the branch it is on (`name@node-22`) and its number, whether it is good or what is left, and what is inside. Each process or intercept still running, only when the task asked to keep it. Empty means nothing is left running.
 
 ## Budget spent
 The model that ran (its class), the capsules used at the peak, the snapshots taken, the context used (approximately).
@@ -37,7 +37,7 @@ Commits go back by `git push` when the worker can push. When it cannot: `git for
 | Purpose | One bounded change: a feature, a fix, a refactor |
 | Scope | The workspaces the task lists. The desk's environment is read-only unless the task grants an intercept |
 | Tools | Each worker tool of `permissions.md` |
-| End state | Commit and push, or hand the commits back as a file. Unfinished work that cannot go to git, when the workspace is not a clone: `workspace` `snapshot` onto the branch the task names (`branch: "wip-<topic>"`), a `message` that says what is left, and `name@wip-<topic>` in the report. `REPORT.md`. The coordinator deletes the workspace, which saves it onto the branch the coordinator chooses |
+| End state | Commit and push (unfinished work on a git branch on origin), or hand the commits back as a file. A code change alone is no reason for a volume commit: code reaches the next session through git (pushed to origin, unfinished work on a git branch; the next workspace pulls it). Environment state the task asks to keep, when the workspace is not a clone: `workspace` `snapshot` onto the branch the task names, a `message` that says what changed, and `name@<branch>` in the report. `REPORT.md`. The coordinator deletes the workspace |
 | Must not | Use a workspace the task does not list; create, clone, stop, delete or restore a workspace; create or clone an environment or a desk; name a volume; move `base` or a branch the task does not name |
 
 ## 2. Throwaway experiment
@@ -83,7 +83,7 @@ One short block, in this order:
 5. The budget: capsules, and a time limit.
 6. What is granted beyond the template, such as one named intercept.
 7. The model class (`models.md`): standard for a clear task, light for mechanical work, one class up after a failed attempt.
-8. Where the work goes at the end: "push the branch", "hand the commits back as a file", or "a snapshot onto `wip-<topic>`, named in the report".
+8. Where the work goes at the end: "push the branch" (unfinished work too, on its own git branch) or "hand the commits back as a file"; a snapshot only when the task changes environment state, onto the branch the brief names.
 9. When the work is split under a plan file (`planning.md`): the path of the plan, the files that this worker owns, and its branch.
 
 A task that does not say what "done" means goes back to the coordinator.

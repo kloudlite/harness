@@ -2,7 +2,7 @@
 
 Each case names the topology, the worker template (`worker-templates.md`), the steps as tool calls and the end state. Find the nearest case, then adapt it. The last section shows how to compose a new one. The examples use the team `acme`, the environment `shop` with the services `web`, `api`, `worker` and `db`, the workspace volume `shop-code` and the environment volume `shop-env`.
 
-Every case starts and ends the same way, so the cases do not repeat it. **Start** (convention 15 of the skill): read the memory, find the volume by its label, `workspace` `restore` from `shop-code@base` (a checkout of `base`), then `ttl`, then pull. **End** (convention 16): stop each intercept, push and merge, `memory` `write`, delete each workspace and each environment copy. `workspace` `delete` saves first: the main workspace refreshes the base when the work is merged (convention 8: the clean default branch checked out, its build or test passed, then `delete` with no option, so `base` advances); unfinished work that cannot go to git is deleted with `branch: "wip-<topic>"`; one on an unmerged git branch with `skip_snapshot: true`. "Main workspace" is the one restored from the project volume; a clone (`skip_snapshot: true`), a capsule and a copy of an environment are deleted without a snapshot.
+Every case starts and ends the same way, so the cases do not repeat it. **Start** (convention 15 of the skill): read the memory, find the volume by its label, `workspace` `restore` from `shop-code@base` (a checkout of `base`), then `ttl`, then pull. **End** (convention 16): stop each intercept, push and merge, `memory` `write`, delete each workspace and each environment copy. A code change alone is no reason for a volume commit: code reaches the next session through git (pushed to origin, unfinished work on a git branch; the next workspace pulls it). `workspace` `delete` takes no snapshot by default. The main workspace refreshes the base only when the environment changed (a dependency, toolchain, package or variable, a new repository, a warmed cache; convention 8: the clean merged default branch checked out, its build or test passed, then `delete` with `save: true`, so `base` advances). A plain delete refuses, naming the difference, when packages, image or variables changed since the base: `save: true` keeps them, `skip_snapshot: true` drops them. Unfinished code is pushed to a git branch on origin and `open-work` names it. "Main workspace" is the one restored from the project volume; a clone, a capsule and a copy of an environment are deleted without a snapshot.
 
 | # | Use case | Topology | Template | Environment slots | Workspace slots |
 |---|---|---|---|---|---|
@@ -30,7 +30,7 @@ Every case starts and ends the same way, so the cases do not repeat it. **Start*
 ## 2. Repair one bug against real data
 
 **Steps.** Coordinator: `workspace` `restore` from `shop-code@base`, then `ttl`. Solo worker: pull. Reproduce in a capsule with `from_workspace`. Repair. Run the test in a capsule again. Commit and push. `REPORT.md`.
-**End.** The standard end: once the fix is merged, the base is refreshed from the default branch (convention 8). If the repair is not finished and cannot go to git, `workspace` `delete` with `branch: "wip-<bug>"` and `open-work` names that branch (case 12).
+**End.** The standard end: once the fix is merged, the base is refreshed from the default branch (convention 8). If the repair is not finished, its commits go to a git branch on origin and `open-work` names that branch (case 12).
 
 ## 3. Try N approaches, keep the best
 
@@ -40,7 +40,7 @@ Every case starts and ends the same way, so the cases do not repeat it. **Start*
 ## 4. Change frontend and backend together
 
 **Steps.** One desk, two workspaces `frontend` and `backend` (the main workspace and a clone of it, or two restores). `intercept` `start` for `web` to `frontend` and for `api` to `backend`. A request to `web` goes through the two changes against the real `db` and `worker`. Solo when one session can hold the two; Delegation with two Solo workers when not, each with its own workspace and one intercept granted.
-**End.** The two intercepts stopped, the two branches pushed. The standard end: the main workspace refreshes the base through its `delete` once the branches are merged; the other is deleted with `skip_snapshot: true`.
+**End.** The two intercepts stopped, the two branches pushed. The standard end: the main workspace pulls the merged branches and is deleted (with `save: true` only when the environment changed); the other is deleted plainly.
 
 ## 5. Debug a failing request with live traffic
 
@@ -50,7 +50,7 @@ Every case starts and ends the same way, so the cases do not repeat it. **Start*
 ## 6. Review a pull request by running it
 
 **Steps.** Coordinator: `env` `create` with `source` `shop` (a live copy) and `ttl_secs`; `desk` `connect` to the copy; `workspace` `restore` from `shop-code@base`, then `ttl`. Desk verification worker: check out the branch of the pull request. Intercept the changed service in the copy. Run the suite in a capsule; call the service directly. `REPORT.md` with the end of the log and a verdict.
-**End.** The intercept stopped, the environment copy deleted. The workspace holds a branch that is not merged, so it is deleted with `skip_snapshot: true` and `base` does not move; with `branch: "wip-<topic>"` instead when the review left work to continue.
+**End.** The intercept stopped, the environment copy deleted. The workspace holds a git branch that is not merged: it is pushed to origin, the workspace is deleted plainly and `base` does not move; `open-work` names the git branch when the review left work to continue.
 
 ## 7. Reproduce a data-dependent bug safely
 
@@ -65,13 +65,13 @@ Every case starts and ends the same way, so the cases do not repeat it. **Start*
 ## 9. Bake a golden toolchain, and refresh it
 
 **Steps, first time.** Coordinator: `workspace` `create` with the full package list and `ttl_secs`. Solo worker: clone the repositories, install what nixpkgs lacks into the home folder, fill the caches, run one build. Coordinator: `workspace` `snapshot` with `volume: "acme-node"`, a `description` that says what is inside and what it is for, `labels` with the project name and a `message`; the first commit makes `base`.
-**Steps, refresh.** A base is refreshed, never edited in place. `workspace` `restore` from `acme-node@base`, then `ttl`. Pull the latest code. `packages` `update`. Run one build or one test: a state that does not build never goes on `base`. `volume` `describe` with a new `description` when the contents changed, then `workspace` `delete` with a `message` that says what changed: it snapshots onto the checked-out `base`, which advances to the new commit, then deletes. A build that fails is deleted with `branch: "wip-refresh"` instead. Refresh when the pull or the package update costs each session more than a few minutes.
+**Steps, refresh.** A base is refreshed, never edited in place. `workspace` `restore` from `acme-node@base`, then `ttl`. Pull the latest code. `packages` `update`. Run one build or one test: a state that does not build never goes on `base`. `volume` `describe` with a new `description` when the contents changed, then `workspace` `delete` with `save: true` and a `message` that says what changed: it snapshots onto the checked-out `base`, which advances to the new commit, then deletes. A build that fails moves no base: delete with `skip_snapshot: true` and say so in `open-work`. Refresh when the pull or the package update costs each session more than a few minutes.
 **End.** The workspace deleted, each time. `memory` `write`: the volume, what is inside, `@base`. The commit that `base` left is on no branch: it expires 30 days after its last use, or delete it now with `snapshot` `delete` when nothing needs it.
 
 ## 10. Make a repeated check automatic
 
 **Steps.** Pipeline authoring worker: write the definition with one job for each step, `permissions` `git: "read"` for the code, the secrets by reference, and `fromSnapshot: "shop-code@base"` when the job needs the ready toolchain. `pipeline` `save`. `run` `start` by hand, `run` `wait`, `run` `logs`. `REPORT.md` with the definition and the run id.
-**End.** The draft workspace deleted with `skip_snapshot: true` (it holds nothing that git does not). The coordinator reads the definition, then saves a new version with a schedule or a webhook.
+**End.** The draft workspace deleted plainly (it holds nothing that git does not). The coordinator reads the definition, then saves a new version with a schedule or a webhook.
 
 ## 11. Scheduled integration test
 
@@ -80,9 +80,9 @@ Every case starts and ends the same way, so the cases do not repeat it. **Start*
 
 ## 12. Continue the unfinished work of yesterday
 
-**Steps.** Yesterday's session ended with a line in `open-work` of the memory with `shop-code@wip-auth` and what is left, and `workspace` `delete` with `branch: "wip-auth"` (the `message` says what is left). `base` still points at the last good commit. Coordinator today: `status`, `memory` `read`, `volume` `get` of `shop-code` to see that `wip-auth` is there, `workspace` `restore` from `shop-code@wip-auth` (a checkout of `wip-auth`), then `ttl`. A Solo brief that names the workspace. Worker: read `REPORT.md` in the home, pull, continue.
-**End.** Finished: push, snapshot (`wip-auth` advances to the good commit), then `volume` `branch` with `branch: "base"` and that commit's `version`, `volume` `delete_branch` of `wip-auth`, remove the line from `open-work`, delete the workspace. Not finished: snapshot again (`wip-auth` advances), update `open-work`, delete the workspace. No workspace stays stopped overnight.
-**Which volume.** A workspace saves into the volume that it came from: restored from `shop-code`, its snapshot is the next commit of `shop-code`, and another `volume` name is refused with a `409`. That is why unfinished work is a `wip-` branch and not a second volume. A `wip-` branch keeps its commit; delete the branch when the work is done or dropped.
+**Steps.** Yesterday's session ended with its commits pushed to the git branch `feat/auth` on origin (with `REPORT.md` committed there), a line in `open-work` of the memory naming the repository, that git branch and what is left, and a plain `workspace` `delete`. A code change alone is no reason for a volume commit: code reaches the next session through git (pushed to origin, unfinished work on a git branch; the next workspace pulls it). `base` still points at the last good environment. Coordinator today: `status`, `memory` `read`, `workspace` `restore` from `shop-code@base`, then `ttl`. A Solo brief that names the workspace and the git branch. Worker: pull, `git checkout feat/auth`, read `REPORT.md`, continue.
+**End.** Finished: merge, remove the line from `open-work`, delete the workspace (with `save: true` only when the environment changed). Not finished: push again, update `open-work`, delete the workspace. No workspace stays stopped overnight.
+**Which volume.** A workspace saves into the volume that it came from: restored from `shop-code`, its snapshot is the next commit of `shop-code`, and another `volume` name is refused with a `409`. A branch other than `base` (`node-22`) is for environment state that is not ready for every session yet; delete it when it is merged into `base` or dropped.
 
 ## 13. Bring a new repository into Kode (the first session)
 

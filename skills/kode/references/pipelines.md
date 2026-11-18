@@ -86,7 +86,7 @@ A trigger run takes every input's default. A required input with no default plus
 | `packages` | `[]` | `attr` or `attr@version`; exclusive with `image` |
 | `image` | base image with `git` | A container image |
 | `fromSnapshot` | none | Home starts as a copy of `name@<branch>` (`shop-code@base`), `name@N` (a storage commit), `name` (its `base` branch, else its newest commit) or a snapshot id. Name the branch |
-| `saveTo` | none | A literal volume name, or `name@<branch>`; on exit 0 the home is the next storage commit. `name` moves no branch. `name@<branch>` fast-forwards that branch onto it when the save is ready, only if the branch still points at the commit the home started from (else the commit stays on no branch and the job `detail` says why; the job still succeeds). Never `name@N`, `name@latest` or an id; not with `matrix`. A pipeline that saves to a name blocks a rename of that volume |
+| `saveTo` | none | A literal volume name, or `name@<branch>`; on exit 0 the home is the next storage commit, whose message is generated: `pipeline {pipeline} run #{n}, job {key}, from {start}` (`start` is `name@N` of the commit the home was cloned from, else its id, or `an empty home`). `name` moves no branch. `name@<branch>` fast-forwards that branch onto it when the save is ready, only if the branch still points at the commit the home started from (else the commit stays on no branch and the job `detail` says why; the job still succeeds). Never `name@N`, `name@latest` or an id; not with `matrix`. A pipeline that saves to a name blocks a rename of that volume |
 | `environment` | the pipeline's | `"staging"` shared, `{"clone": "staging"}` a copy per run |
 | `matrix` | none | axis to list; at most 64 combinations |
 | `timeoutMinutes` | 60 | 1 to 1440 |

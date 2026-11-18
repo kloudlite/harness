@@ -129,7 +129,7 @@ const DESCRIPTION = { type: "string", description: "What the volume holds and wh
 const LABELS = { type: "array", items: S, description: "Up to 8 short labels on the volume, for finding it (lowercase letters, digits, hyphens), such as the project name and `test`. A later value replaces the set." };
 /** A branch is a movable name on ONE storage commit of a volume, as a git branch is: `shop@base`. A push advances the
  * branch its source has checked out, so the argument is only for naming another one. */
-const SNAP_BRANCH = { type: "string", description: "The branch this storage commit goes on, such as `base` or `wip-auth` (read as `name@<branch>`): created or moved here, and checked out from then on. Omit it to advance the branch this was made from; if someone else moved that branch, the commit stays detached and the answer's `detached` says so. A volume's first commit makes `base`." };
+const SNAP_BRANCH = { type: "string", description: "The branch this storage commit goes on, such as `base` or `node-22` (read as `name@<branch>`): created or moved here, and checked out from then on. Omit it to advance the branch this was made from; if someone else moved that branch, the commit stays detached and the answer's `detached` says so. A volume's first commit makes `base`." };
 const BRANCH = { type: "string", description: "The branch name: lowercase letters, digits and hyphens (at most 32); not a number and not `latest`." };
 const NAMED_VOLUME = { type: "string", description: "The volume's given name." };
 const OBJ = { type: "object" };
@@ -320,16 +320,23 @@ async function capsuleWait(path: string, limitMs: number, limit?: () => string):
   }
 }
 
-// ---- workspace delete: the end of a session, so it SAVES first (owner, 2026-11-18). The Rust port is
+// ---- workspace delete: a plain delete saves nothing, as the REST delete, the SDKs, the CLI and the TTL do (owner,
+// 2026-11-18: "when deleting workspaces we don't need to snapshot every time.. only if there is any substantial change in
+// the dependencies"). A code change alone is no reason for a volume commit: code reaches the next session through git. The Rust port is
 // bins/runtime/src/tools/platform/ws_delete.rs, which says why each rule is what it is.
-const SKIP_SNAPSHOT = { type: "boolean", description: "Delete with no snapshot: a throwaway workspace, nothing saved. Without it, delete first snapshots onto the checked-out branch (usually `base`, which becomes the new base: so delete from the clean merged default branch with a passing build, or pass `branch: \"wip-<topic>\"`), waits until the commit is ready and only then deletes. A snapshot that fails deletes nothing." };
-const DEL_BRANCH = { type: "string", description: "The branch to save onto instead of the checked-out one, such as `wip-<topic>` for unfinished work: created or moved there." };
-const DEL_VOLUME = { type: "string", description: "The name its snapshot gives a volume that has none yet (else it takes the workspace's name)." };
-const DEL_MESSAGE = { type: "string", description: "The message of its snapshot, default `before delete of <workspace name>`: a repeated delete finds the snapshot an earlier call handed back by it." };
-const DEL_SOFT_MS = { type: "number", description: "How long it waits for its snapshot to be ready; past it the answer has `promoted: true` and nothing is deleted: call delete again, which takes no second snapshot." };
-const SKIP_HINT = "nothing was deleted; pass `skip_snapshot: true` to delete without a snapshot";
+const SAVE = { type: "boolean", description: "Snapshot first onto the checked-out branch (usually `base`), wait until the commit is ready, then delete: only when the workspace's environment changed in a way every later session wants (a dependency, toolchain, package or variable, a new repository, a warmed cache), from the clean merged default branch with the build passing. A code change alone is no reason for a volume commit: code reaches the next session through git (pushed to origin, unfinished work on a git branch; the next workspace pulls it). A snapshot that fails deletes nothing." };
+const SKIP_SNAPSHOT = { type: "boolean", description: "Delete with no snapshot even when the workspace's packages, image or variables differ from the commit it was made from (a plain delete refuses then, naming the difference)." };
+const DEL_BRANCH = { type: "string", description: "Save onto this branch of the volume instead of the checked-out one (implies `save`): created or moved there." };
+const DEL_VOLUME = { type: "string", description: "With `save`: the name its snapshot gives a volume that has none yet (else it takes the workspace's name)." };
+const DEL_MESSAGE = { type: "string", description: "With `save`: the message of its snapshot, default `before delete of <workspace name>`: a repeated delete finds the snapshot an earlier call handed back by it." };
+const DEL_SOFT_MS = { type: "number", description: "With `save`: how long it waits for its snapshot to be ready; past it the answer has `promoted: true` and nothing is deleted: call delete again, which takes no second snapshot." };
+const SKIP_HINT = "nothing was deleted; drop `save` and `branch` to delete without a snapshot";
 /** A commit an earlier delete cut and handed back is reused for this long: an older one may predate work done since. */
 const REUSE_MS = 1_800_000;
+/** Every storage commit has a message (owner, 2026-11-18): the api fills one for an older client, an agent says its own. */
+const SNAP_MESSAGE = { type: "string", description: "What this storage commit holds and why, in a few words, such as `add ripgrep; warm the cargo cache` (required: every commit has a message)." };
+const NO_MESSAGE = "error: a snapshot needs a `message`: say in a few words what this storage commit holds and why (such as `add ripgrep; warm the cargo cache`); nothing was saved";
+const blank = (m: unknown) => typeof m !== "string" || !m.trim();
 
 const sentence = (m: string) => {
   const e = /^(\d{3}): (\{.*\})$/s.exec(m);
@@ -338,24 +345,64 @@ const sentence = (m: string) => {
 };
 const vlabel = (s: any) => (typeof s?.version === "number" ? `v${s.version}` : String(s?.id ?? "?"));
 
+/** What differs between the workspace now (`cur`) and the frozen state of the commit it was made from (`base`): one
+ * clause per kind, variables by NAME only (a value may be a secret's). `env` undefined on either side is not compared. */
+export function drift(cur: { image?: string; packages?: string[]; env?: Record<string, string> }, base: any, since: string): string[] {
+  const out: string[] = [];
+  const have = new Set(cur.packages ?? []), had = new Set<string>(Array.isArray(base?.packages) ? base.packages : []);
+  const pk = [...[...have].filter((p) => !had.has(p)).map((p) => `+${p}`), ...[...had].filter((p) => !have.has(p)).map((p) => `-${p}`)];
+  if (pk.length) out.push(`packages (${pk.join(", ")})`);
+  if (typeof base?.image === "string" && cur.image !== undefined && cur.image !== base.image) out.push(`image (${base.image} -> ${cur.image})`);
+  if (cur.env && base?.env && typeof base.env === "object") {
+    const names = [...new Set([...Object.keys(cur.env), ...Object.keys(base.env)])].filter((k) => cur.env![k] !== base.env[k]).sort();
+    if (names.length) out.push(`variables (${names.join(", ")})`);
+  }
+  return out.length ? [`changed since ${since}: ${out.join("; ")}`] : [];
+}
+
+/** The guard of a plain delete: a refusal when the workspace drifted from its base commit, a note when it could not tell. */
+async function baseGuard(doc: any, volName: string | undefined): Promise<{ refuse?: string; note?: string }> {
+  const n = doc?.based_on_version;
+  if (typeof n !== "number" || !doc?.volume) return {};
+  const skipped = (why: string) => ({ note: `the comparison with its base commit was skipped (${why})` });
+  const h = await apiJson<any>("GET", `/v1/volumes/${seg(doc.volume)}/history`).catch(() => undefined);
+  if (h === undefined) return skipped("the volume history could not be read");
+  const rows: any[] = Array.isArray(h) ? h : Array.isArray(h?.history) ? h.history : [];
+  const state = rows.find((r) => r?.version === n)?.state;
+  if (state?.kind !== "workspace") return skipped(`v${n} carries no frozen workspace state`);
+  const env = (await apiJson<any>("GET", `/v1/workspaces/${seg(doc.id)}/env`).catch(() => undefined))?.env;
+  const since = `${volName ?? doc.volume}${doc.branch ? `@${doc.branch}` : ""} v${n}`;
+  const d = drift({ image: doc.image, packages: doc.packages, env: env && typeof env === "object" ? env : undefined }, state, since);
+  if (!d.length) return {};
+  const keep = doc.branch ? `\`save: true\` to keep them on ${doc.branch}` : "`save: true` with `branch` to keep them";
+  return { refuse: `workspace ${doc.name ?? doc.id} ${d[0]}; nothing was deleted: pass ${keep}, or \`skip_snapshot: true\` to drop them` };
+}
+
 type DeleteSave = { saved: string; snapshot?: any; writing?: any };
 
-/** Snapshot `doc` onto `branch` or its checked-out branch and wait for it; any refusal or failure throws, so nothing is deleted. */
+/** Snapshot `doc` onto `branch` or its checked-out branch and wait for it when the call asks to save; else the guard.
+ * Any refusal or failure throws, so nothing is deleted. */
 async function saveBeforeDelete(a: any, doc: any, settle: (s: any, ms: number) => Promise<any>): Promise<DeleteSave> {
-  if (a.skip_snapshot && (a.branch !== undefined || a.volume !== undefined || a.message !== undefined)) throw new Error("`skip_snapshot: true` saves nothing, so it takes no `branch`, `volume` or `message`: drop them, or drop `skip_snapshot` to save first");
+  if (a.skip_snapshot && (a.save || a.branch !== undefined || a.volume !== undefined || a.message !== undefined)) throw new Error("`skip_snapshot: true` saves nothing, so it takes no `save`, `branch`, `volume` or `message`: drop them, or drop `skip_snapshot` to save first");
   const id: string = doc?.id ?? a.workspace;
   if (id.startsWith("cap-") || doc?.device) return { saved: "nothing: a capsule or device workspace is deleted without a snapshot" };
   if (a.skip_snapshot) return { saved: "nothing (skip_snapshot)" };
   const name: string = doc?.name ?? id;
   const rows = await apiJson<any[]>("GET", "/v1/volumes").catch(() => undefined);
   const row = Array.isArray(rows) ? rows.find((r) => r?.id === doc?.volume) : undefined;
+  if (!a.save && !a.branch) {
+    if (a.volume !== undefined || a.message !== undefined) throw new Error("`volume` and `message` describe a save: add `save: true` to snapshot before deleting, or drop them; nothing was deleted");
+    const g = await baseGuard(doc, row?.name);
+    if (g.refuse) throw new Error(g.refuse);
+    return { saved: `nothing: delete takes a snapshot only with \`save: true\`${g.note ? `; ${g.note}` : ""}` };
+  }
   const target: string | undefined = a.branch || doc?.branch || undefined;
   if (!target) {
     const unnamed = !row?.name && a.volume === undefined ? " (its volume has no name yet: it takes this workspace's name unless you pass `volume`)" : "";
-    throw new Error(`workspace ${name} has no branch checked out (a clone, a detached restore or one made empty), so delete does not know where to save it; nothing was saved or deleted. Pass \`branch: "wip-<topic>"\` (or another branch) to save it there${unnamed}, or \`skip_snapshot: true\` to delete it without a snapshot.`);
+    throw new Error(`workspace ${name} has no branch checked out (a clone, a detached restore or one made empty), so \`save: true\` does not know where to save it; nothing was saved or deleted. Pass \`branch\` to save it on that branch of its volume${unnamed}, or drop \`save\` to delete it without a snapshot.`);
   }
   const was = row?.branches?.[target];
-  const message: string = a.message ?? `before delete of ${name}`;
+  const message: string = blank(a.message) ? `before delete of ${name}` : a.message.trim();
   let snapshot: any;
   if (doc?.volume) {
     const h = await apiJson<any>("GET", `/v1/volumes/${seg(doc.volume)}/history`).catch(() => undefined);
@@ -494,14 +541,15 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
     }
     return { ...snapshot, note: "still being written; it lists in volume get once ready" };
   };
-  const snapAct = wact({ message: S, volume: VOLUME, description: DESCRIPTION, labels: LABELS, branch: SNAP_BRANCH }, [], async (a) => {
+  const snapAct = wact({ message: SNAP_MESSAGE, volume: VOLUME, description: DESCRIPTION, labels: LABELS, branch: SNAP_BRANCH }, ["message"], async (a) => {
+    if (blank(a.message)) return NO_MESSAGE;
     const snapshot = await settled(JSON.parse(await api("POST", `${wsPath(a)}/snapshots`, strip({ message: a.message, volume: a.volume, description: a.description, labels: a.labels, branch: a.branch }))));
     // the POST succeeded: a failed re-read must not turn a saved snapshot into an error
     try { return JSON.stringify({ ...JSON.parse(await api("GET", wsPath(a))), snapshot }, null, 2); }
     catch (e) { return JSON.stringify({ snapshot, note: `saved; the workspace was not re-read: ${(e as Error).message}` }, null, 2); }
   });
   tools.push(
-    resource("workspace", ws ? "This workspace. Actions: stop (snapshots first), snapshot." : "Workspaces: dev machines with a home volume. Actions: list, get, create (clone with `source`), restore, start, stop, restart, delete (snapshots onto the checked-out branch, usually base, then deletes; pass `skip_snapshot: true` for a throwaway workspace, or `branch: X` to save elsewhere; a workspace with no branch checked out needs one of the two; capsules and device workspaces are deleted without a snapshot), wait, ttl, snapshot.",
+    resource("workspace", ws ? "This workspace. Actions: stop (snapshots first), snapshot (`message` required)." : "Workspaces: dev machines with a home volume. Actions: list, get, create (clone with `source`), restore, start, stop, restart, delete (no snapshot by default; it refuses, naming the difference, when packages, image or variables changed since the commit the workspace was made from: `save: true` snapshots onto the checked-out branch first, `skip_snapshot: true` drops them; capsules and device workspaces are deleted without a snapshot), wait, ttl, snapshot (`message` required).",
       ws
         ? { ...(noStop ? {} : { stop: stopAct }), snapshot: snapAct }
         : {
@@ -539,7 +587,7 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
               const recorded = (d?.restarts?.length ?? 0) > n0 || (lastAt(d) !== undefined && JSON.stringify(lastAt(d)) !== last0);
               return JSON.stringify(recorded ? { ...d, restart: lastAt(d), hint: "restarted; restart_required is still set" } : { ...d, restart: null, hint: "the restart was accepted; its record follows on the next get" });
             }),
-            delete: mact({ skip_snapshot: SKIP_SNAPSHOT, branch: DEL_BRANCH, volume: DEL_VOLUME, message: DEL_MESSAGE, soft_ms: DEL_SOFT_MS }, [], async (a) => {
+            delete: mact({ save: SAVE, skip_snapshot: SKIP_SNAPSHOT, branch: DEL_BRANCH, volume: DEL_VOLUME, message: DEL_MESSAGE, soft_ms: DEL_SOFT_MS }, [], async (a) => {
               const ses = process.env.KD_DESK;
               const path = `/v1/workspaces/${seg(a.workspace)}`;
               const doc: any = JSON.parse(await api("GET", path));
@@ -556,7 +604,7 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
 
   // ---- environment
   tools.push(
-    resource("env", "Environments: the services of a stack, in the team's region. Actions: list, get, create (clone with `source`), start, stop, delete, wait, ttl, snapshot, restore.",
+    resource("env", "Environments: the services of a stack, in the team's region. Actions: list, get, create (clone with `source`), start, stop, delete, wait, ttl, snapshot (`message` required), restore.",
       ws
         ? {
             get: eact({}, [], async (env) => (await wake(env), envView(env))),
@@ -580,7 +628,8 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
             delete: eact({}, [], async (env) => deleting(`/v1/environments/${env}`, () => api("DELETE", `/v1/environments/${env}`))),
             wait: eact({ timeout_ms: TIMEOUT }, [], async (env, a) => (await wake(env), waitEnv(env, a))),
             ttl: eact({ ttl_secs: TTL, clear: CLEAR }, [], async (env, a) => { const b = ttlBody(a); return typeof b === "string" ? b : (await api("PUT", `/v1/environments/${env}/ttl`, b), envView(env)); }),
-            snapshot: eact({ message: S, volume: VOLUME, description: DESCRIPTION, labels: LABELS, branch: SNAP_BRANCH }, [], async (env, a) => {
+            snapshot: eact({ message: SNAP_MESSAGE, volume: VOLUME, description: DESCRIPTION, labels: LABELS, branch: SNAP_BRANCH }, ["message"], async (env, a) => {
+              if (blank(a.message)) return NO_MESSAGE;
               const snapshot = await settled(JSON.parse(await api("POST", `/v1/environments/${env}/snapshots`, strip({ message: a.message, volume: a.volume, description: a.description, labels: a.labels, branch: a.branch }))));
               try { return JSON.stringify({ ...JSON.parse(await envView(env)), snapshot }, null, 2); }
               catch (e) { return JSON.stringify({ snapshot, note: `saved; the environment was not re-read: ${(e as Error).message}` }, null, 2); }

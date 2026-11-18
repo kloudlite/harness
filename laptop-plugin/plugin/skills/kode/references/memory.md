@@ -16,7 +16,7 @@ Eight sections belong to the team, in reading order; `open-work` is yours alone.
 | `desks` | The layout of work: each kind of desk, the work it is for, the workspaces on it (`name` from `volume@branch`), the environment it connects to, and how work that spans components is placed. | Live desks, workspaces or ids. |
 | `conventions` | The team's rules: names, branches, commits, reviews, migrations, how to ship, where credentials live, and what needs a yes from the person. | A decision about one task. |
 | `plan` | The plan the team agreed: its goal, each step with its state (`todo`, `doing`, `done`) and owner, the decisions, and the open questions. Removed when the plan is done. | A proposal not yet agreed (that is `open-work`). |
-| `open-work` (yours) | Each unfinished item: the branch to resume from (`shop-api@wip-auth`) and what is left; a proposal waiting for the person's yes. | Anything the team relies on. |
+| `open-work` (yours) | Each unfinished item: the repository and git branch on origin to resume from (`shop-api` `feat/auth`) and what is left; a proposal waiting for the person's yes. | Anything the team relies on. |
 
 ## Starting a task from the memory
 
@@ -25,7 +25,7 @@ Eight sections belong to the team, in reading order; `open-work` is yours alone.
 3. `run`: the packages and the commands to build and test it.
 4. `desks`, `volumes` and `environments`: which desk to use, which base to restore each workspace from, and which environment to connect.
 5. `conventions`: the rules for names, branches, commits and what needs a yes.
-6. `plan` and `open-work`: whether the task is a step of an agreed plan, and whether a `wip-` branch already holds part of it.
+6. `plan` and `open-work`: whether the task is a step of an agreed plan, and whether a git branch on origin already holds part of it.
 
 When a section the task needs is empty or wrong, fix the memory first: ask the person what is missing, then write it. That is step zero of the task, never a footnote at its end.
 
@@ -136,12 +136,12 @@ A shop with a Next.js storefront, a Go API and a Python worker, in two repositor
 ```markdown
 Payments, agreed with the person:
 1. done: `api` `POST /payments` against the provider stub.
-2. doing: `worker` retries failed captures (`shop-api@wip-capture-retry`).
+2. doing: `worker` retries failed captures (`shop-api` git branch `feat/capture-retry`).
 3. todo: `web` checkout page.
 Open: are refunds in scope?
 ```
 
 **`open-work`** (yours)
 ```markdown
-- `shop-api@wip-capture-retry`: retries pass their tests; the dead-letter queue is left.
+- `shop-api` git branch `feat/capture-retry` on origin: retries pass their tests; the dead-letter queue is left.
 ```
