@@ -849,6 +849,22 @@ test("stop answers the POST body; wait polls until stopped", async () => {
   expect(JSON.parse(await tool(platformTools("main", undefined, 1), "env_stop").run({ env: "e2", wait: true })).state).toBe("stopped");
 });
 
+test("workspace resize patches the size it is given and answers the API's verdict", async () => {
+  const t = tool(platformTools("main"), "workspace");
+  routes["PATCH /v1/workspaces/w1"] = json({ id: "w1", cpu: 8, memory_gb: 8, resize: { applies: "in_place" } });
+  const out = JSON.parse(await t.run({ action: "resize", workspace: "w1", cpu: 8 }));
+  expect(out.resize.applies).toBe("in_place");
+  expect(calls.map((c) => `${c.method} ${c.url}`)).toEqual(["PATCH /v1/workspaces/w1"]);
+  expect(calls[0].body).toEqual({ cpu: 8 });
+  // nothing to change is refused before any call
+  await expect(t.run({ action: "resize", workspace: "w1" })).rejects.toThrow(/give `cpu`/);
+  expect(calls).toHaveLength(1);
+  // the workspace's own slice has no resize
+  const actionsOf = (k: "main" | "workspace") => (tool(platformTools(k, "w1"), "workspace").inputSchema as any).properties.action.enum;
+  expect(actionsOf("main")).toContain("resize");
+  expect(actionsOf("workspace")).not.toContain("resize");
+});
+
 test("desk stop answers without a second read", async () => {
   routes["POST /v1/desks/s1/stop"] = json({}, 202);
   expect(JSON.parse(await tool(platformTools("main"), "desk_stop").run({ desk: "s1" }))).toEqual({ id: "s1", state: "stopping" });

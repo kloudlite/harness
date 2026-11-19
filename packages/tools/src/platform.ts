@@ -215,6 +215,8 @@ const WAITING = {
 };
 const MINE = { type: "boolean", description: "Your own secret in the team `owner` (any active member), not the team's shared one." };
 const TTL = { type: "integer", description: "Seconds of unused time before it is deleted, 600 to 2592000." };
+const RESIZE_CPU = { type: "integer", description: "Cores of cpu limit, 1 to 8 (a new workspace has 4); the request is an eighth of it. Omit to keep the cpu." };
+const RESIZE_MEM = { type: "integer", description: "GB of memory limit, 1 to 32 (a new workspace has 8); the request is a quarter of it. Omit to keep the memory." };
 const CLEAR = { type: "boolean", description: "`ttl` only: remove the limit instead of setting `ttl_secs`." };
 const TAIL = { type: "integer", description: "Keep only the last N lines (default 200, maximum 2000)." };
 const HEAD = { type: "integer", description: "Keep only the first N lines (applied before `tail`)." };
@@ -549,7 +551,7 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
     catch (e) { return JSON.stringify({ snapshot, note: `saved; the workspace was not re-read: ${(e as Error).message}` }, null, 2); }
   });
   tools.push(
-    resource("workspace", ws ? "This workspace. Actions: stop (snapshots first), snapshot (`message` required)." : "Workspaces: dev machines with a home volume. Actions: list, get, create (an empty one), fork (a new workspace from a live workspace or a storage commit; a fork never merges back), start, stop, restart, delete (no snapshot by default; it refuses, naming the difference, when packages, image or variables changed since the commit the workspace was made from: `save: true` snapshots onto the checked-out branch first, `skip_snapshot: true` drops them; capsules and device workspaces are deleted without a snapshot), wait, ttl, snapshot (`message` required).",
+    resource("workspace", ws ? "This workspace. Actions: stop (snapshots first), snapshot (`message` required)." : "Workspaces: dev machines with a home volume. Actions: list, get, create (an empty one), fork (a new workspace from a live workspace or a storage commit; a fork never merges back), start, stop, restart, delete (no snapshot by default; it refuses, naming the difference, when packages, image or variables changed since the commit the workspace was made from: `save: true` snapshots onto the checked-out branch first, `skip_snapshot: true` drops them; capsules and device workspaces are deleted without a snapshot), wait, ttl, snapshot (`message` required), resize (`cpu` and/or `memory_gb`, within the owner's quota; a running workspace is resized in place, but a memory shrink waits for its restart: the answer's `resize.applies` says which; a snapshot after it keeps the size).",
       ws
         ? { ...(noStop ? {} : { stop: stopAct }), snapshot: snapAct }
         : {
@@ -604,6 +606,10 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
             wait: mact({ timeout_ms: TIMEOUT }, [], async (a) => pollUntil(() => api("GET", `/v1/workspaces/${seg(a.workspace)}`), wsAny, timeoutMs(a), tickMs)),
             ttl: mact({ ttl_secs: TTL, clear: CLEAR }, [], async (a) => { const b = ttlBody(a); return typeof b === "string" ? b : (await api("PUT", `/v1/workspaces/${seg(a.workspace)}/ttl`, b), api("GET", `/v1/workspaces/${seg(a.workspace)}`)); }),
             snapshot: snapAct,
+            resize: mact({ cpu: RESIZE_CPU, memory_gb: RESIZE_MEM }, [], async (a) => {
+              if (a.cpu === undefined && a.memory_gb === undefined) return "error: give `cpu` (cores) and/or `memory_gb` (GB); nothing was changed";
+              return api("PATCH", `/v1/workspaces/${seg(a.workspace)}`, strip({ cpu: a.cpu, memory_gb: a.memory_gb }));
+            }),
           }),
   );
 
