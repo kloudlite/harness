@@ -603,6 +603,35 @@ test("workspace create sends `device` to make a device workspace, and fork with 
   expect(calls.at(-1)).toMatchObject({ url: "/v1/workspaces/w1/clone", body: { name: "d3", snapshot: "dsnap-1" } });
 });
 
+test("create and fork take the size for the job (`cpu`, `memory_gb`) and send it on every route; a snapshot carries none", async () => {
+  const t = platformTools("main");
+  routes["POST /v1/workspaces"] = json({}, 202);
+  routes["POST /v1/workspaces/w1/clone"] = json({}, 202);
+  routes["POST /v1/workspaces/restore"] = json({}, 202);
+  await tool(t, "workspace_create").run({ name: "big", cpu: 8, memory_gb: 16 });
+  expect(calls.at(-1)).toMatchObject({ url: "/v1/workspaces", body: { name: "big", cpu: 8, memory_gb: 16 } });
+  process.env.KD_DESK = "s1";
+  routes["POST /v1/desks/s1/workspaces"] = json({}, 202);
+  await tool(t, "workspace_create").run({ name: "inDesk", cpu: 2 });
+  expect(calls.at(-1)).toMatchObject({ url: "/v1/desks/s1/workspaces", body: { name: "inDesk", cpu: 2 } });
+  delete process.env.KD_DESK;
+  await tool(t, "workspace_fork").run({ name: "c", source: "w1", cpu: 8, memory_gb: 16 });
+  expect(calls.at(-1)).toMatchObject({ url: "/v1/workspaces/w1/clone", body: { name: "c", cpu: 8, memory_gb: 16 } });
+  await tool(t, "workspace_fork").run({ name: "d", snapshot_id: "pg@base", memory_gb: 4 });
+  expect(calls.at(-1)).toMatchObject({ url: "/v1/workspaces/restore", body: { name: "d", snapshot_id: "pg@base", memory_gb: 4 } });
+  // no size given: none sent, and the API answers the default slot
+  await tool(t, "workspace_fork").run({ name: "e", snapshot_id: "pg@base" });
+  expect(calls.at(-1)!.body).toEqual({ name: "e", snapshot_id: "pg@base" });
+  const ws = tool(t, "workspace");
+  const props = (ws.inputSchema as any).properties;
+  for (const k of ["cpu", "memory_gb"]) {
+    expect(props[k].description).toContain("the size for this job; default 4 CPU / 8 GB; a snapshot carries no size");
+    expect(props[k].description).toMatch(/\(create, fork\)/);
+  }
+  expect(ws.description).toContain("A snapshot carries no size");
+  expect(ws.description).not.toContain("keeps the size");
+});
+
 test("fork: `source` forks a live workspace or environment, `snapshot_id` a storage commit, exactly one of them", async () => {
   const t = platformTools("main");
   routes["POST /v1/workspaces/w1/clone"] = json({}, 202);
