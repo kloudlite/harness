@@ -2,7 +2,6 @@ import { expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { spawnSync } from "node:child_process";
 import { scratchTools } from "./scratch.ts";
 
 const setup = () => {
@@ -47,7 +46,12 @@ test("read caps at 256 KiB", async () => {
   expect(out.length).toBeLessThan(257 * 1024);
 });
 
-const capsule = process.platform === "linux" && spawnSync("unshare", ["-Ur", "true"]).status === 0;
+// Whether the capsule works HERE, asked of the tool itself: `unshare -Ur` alone also succeeds in a
+// container (a CI runner pod, a Kode workspace) where the tool's mount and pid namespaces and its
+// inner uid map do not, and the confined test then ran against a capsule that could not start.
+const capsule =
+  process.platform === "linux" &&
+  JSON.parse((await scratchTools(mkdtempSync(join(tmpdir(), "kl-probe-"))).find((d) => d.name === "bash")!.run({ command: "true" })) as string).exit_code === 0;
 
 test.skipIf(capsule)("bash without a capsule says so and does not run the command", async () => {
   const { root, t } = setup();
