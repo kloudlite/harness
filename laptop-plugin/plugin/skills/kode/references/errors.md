@@ -14,7 +14,7 @@ The status comes first; the body is one sentence. Report it as it is, then take 
 | `409 the storage pool is full; retry later or ask an operator` | Tell the user. |
 | `409 a snapshot is already being cut for this workspace` | Wait, read the volume history, do not repeat. |
 | `409 this snapshot is the base of …` / `… is where … stands now (its latest push)` | A live workspace or environment was built from it or last pushed it. Delete that workspace first (after its own snapshot), or keep the commit. |
-| `409 commit {N} is the head of branch {b}; move or delete the branch first` | The commit is protected. Move the branch to another commit with `volume` `branch`, or keep the commit. |
+| `409 commit {N} is the head of branch {b}; move or delete the branch first` | The commit is a lane's head and stays: nothing is removed from the tree (convention 10). Keep it. A lane is retired, with `volume` `delete_branch`, only when the owner says so; never move a branch just to delete a commit. |
 | `409 the volume still has a workspace or environment` | Delete the owner first, if the user asked. |
 | `409 this desk has no environment; connect one…` | `desk` `connect` with `environment`. |
 | `409 conflict, retry` / `the desk changed; retry` / `volume {name} is being changed; retry` | Read again, repeat once. |
