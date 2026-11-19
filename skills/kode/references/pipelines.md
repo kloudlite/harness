@@ -9,7 +9,7 @@ Every pipeline tool takes `owner`: the user's handle, or the team slug for a tea
 - camelCase JSON. Every object refuses an unknown key: `need`, `timeout` or `uses` is an error that names the key. A save reports every problem at once.
 - Pipeline keys: `name` (required, `[a-z0-9-]`, at most 63 characters), `environment`, `triggers`, `inputs`, `jobs` (required). Job keys: `needs`, `if`, `packages`, `image`, `fromSnapshot`, `saveTo`, `environment`, `matrix`, `timeoutMinutes` (default 60, 1 to 1440), `permissions`, `env`, `secrets`, `steps` (required). Step keys: `name`, `run` (required), `env`, `cwd`.
 - Each `run` runs with `sh -e -c`: the first failing command fails the step, and the first failing step stops the job. A step has no `if`.
-- `packages` and `image` are exclusive. With neither, the job gets the base image with `git`. With `packages`, list `git` when a step clones.
+- `packages` and `image` are exclusive. With neither, the job gets the base image with `git`. With `packages`, list `git` when a step forks.
 - `${{ inputs.X }}`, `${{ matrix.X }}`, `${{ needs.JOB.result }}`, `${{ event }}`, `${{ run.number }}` interpolate. A `${{ secrets.NAME }}` must be the whole value of an `env` entry.
 - `webhook.body.*` is readable only in `env` and `if`. Read it into `env`; use `"$NAME"` in `run`.
 - Limits: 50 jobs, 100 steps per job, 64 KiB, 50 pipelines per owner, 100 versions.
@@ -86,7 +86,7 @@ A trigger run takes every input's default. A required input with no default plus
 | `packages` | `[]` | `attr` or `attr@version`; exclusive with `image` |
 | `image` | base image with `git` | A container image |
 | `fromSnapshot` | none | Home starts as a copy of `name@<branch>` (`shop-code@base`), `name@N` (a storage commit), `name` (its `base` branch, else its newest commit) or a snapshot id. Name the branch |
-| `saveTo` | none | A literal volume name, or `name@<branch>`; on exit 0 the home is the next storage commit, whose message is generated: `pipeline {pipeline} run #{n}, job {key}, from {start}` (`start` is `name@N` of the commit the home was cloned from, else its id, or `an empty home`). `name` moves no branch. `name@<branch>` fast-forwards that branch onto it when the save is ready, only if the branch still points at the commit the home started from (else the commit stays on no branch and the job `detail` says why; the job still succeeds). Never `name@N`, `name@latest` or an id; not with `matrix`. A pipeline that saves to a name blocks a rename of that volume |
+| `saveTo` | none | A literal volume name, or `name@<branch>`; on exit 0 the home is the next storage commit, whose message is generated: `pipeline {pipeline} run #{n}, job {key}, from {start}` (`start` is `name@N` of the commit the home was forked from, else its id, or `an empty home`). `name` moves no branch. `name@<branch>` fast-forwards that branch onto it when the save is ready, only if the branch still points at the commit the home started from (else the commit stays on no branch and the job `detail` says why; the job still succeeds). Never `name@N`, `name@latest` or an id; not with `matrix`. A pipeline that saves to a name blocks a rename of that volume |
 | `environment` | the pipeline's | `"staging"` shared, `{"clone": "staging"}` a copy per run |
 | `matrix` | none | axis to list; at most 64 combinations |
 | `timeoutMinutes` | 60 | 1 to 1440 |

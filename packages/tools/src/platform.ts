@@ -110,7 +110,7 @@ export const qs = (p: Record<string, string | undefined>) => {
   const s = u.toString();
   return s ? `?${s}` : "";
 };
-const VOLUME = { type: "string", description: "The name this snapshot gives its volume (volume list shows it; volume get takes it): required on its first push, optional (but equal) after. A clone shares its source's volume and history: its snapshots appear there and take the source's volume name." };
+const VOLUME = { type: "string", description: "The name this snapshot gives its volume (volume list shows it; volume get takes it): required on its first push, optional (but equal) after. A fork shares its source's volume and history: its snapshots appear there and take the source's volume name." };
 const strip = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined));
 
 type Props = Record<string, unknown>;
@@ -399,7 +399,7 @@ async function saveBeforeDelete(a: any, doc: any, settle: (s: any, ms: number) =
   const target: string | undefined = a.branch || doc?.branch || undefined;
   if (!target) {
     const unnamed = !row?.name && a.volume === undefined ? " (its volume has no name yet: it takes this workspace's name unless you pass `volume`)" : "";
-    throw new Error(`workspace ${name} has no branch checked out (a clone, a detached restore or one made empty), so \`save: true\` does not know where to save it; nothing was saved or deleted. Pass \`branch\` to save it on that branch of its volume${unnamed}, or drop \`save\` to delete it without a snapshot.`);
+    throw new Error(`workspace ${name} has no branch checked out (a fork of a live workspace, a fork from a detached commit or one made empty), so \`save: true\` does not know where to save it; nothing was saved or deleted. Pass \`branch\` to save it on that branch of its volume${unnamed}, or drop \`save\` to delete it without a snapshot.`);
   }
   const was = row?.branches?.[target];
   const message: string = blank(a.message) ? `before delete of ${name}` : a.message.trim();
@@ -426,7 +426,7 @@ async function saveBeforeDelete(a: any, doc: any, settle: (s: any, ms: number) =
   }
   const vol: string = snapshot.name ?? row?.name ?? "?";
   const on: string | undefined = snapshot.branch ?? (snapshot.detached === undefined && Array.isArray(snapshot.branches) && snapshot.branches.includes(target) ? target : undefined);
-  if (on) return { snapshot, saved: `${on} is now ${vlabel(snapshot)}${on === target && typeof was === "number" ? ` (was v${was})` : ""} of volume ${vol}; the next session restores it with snapshot_id "${vol}@${on}"` };
+  if (on) return { snapshot, saved: `${on} is now ${vlabel(snapshot)}${on === target && typeof was === "number" ? ` (was v${was})` : ""} of volume ${vol}; the next session forks it with snapshot_id "${vol}@${on}"` };
   const why = typeof snapshot.detached === "string" ? `${snapshot.detached}, so ` : "";
   const expires = snapshot.expires_at ? `at ${snapshot.expires_at}` : "with the volume's default expiry";
   return { snapshot, saved: `${why}${vlabel(snapshot)} of volume ${vol} is detached, NOT on ${target}; it expires ${expires} unless a branch is put on it. To make it ${target}: volume branch (volume "${vol}", branch "${target}", version ${snapshot.version ?? "N"})` };
@@ -549,7 +549,7 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
     catch (e) { return JSON.stringify({ snapshot, note: `saved; the workspace was not re-read: ${(e as Error).message}` }, null, 2); }
   });
   tools.push(
-    resource("workspace", ws ? "This workspace. Actions: stop (snapshots first), snapshot (`message` required)." : "Workspaces: dev machines with a home volume. Actions: list, get, create (clone with `source`), restore, start, stop, restart, delete (no snapshot by default; it refuses, naming the difference, when packages, image or variables changed since the commit the workspace was made from: `save: true` snapshots onto the checked-out branch first, `skip_snapshot: true` drops them; capsules and device workspaces are deleted without a snapshot), wait, ttl, snapshot (`message` required).",
+    resource("workspace", ws ? "This workspace. Actions: stop (snapshots first), snapshot (`message` required)." : "Workspaces: dev machines with a home volume. Actions: list, get, create (an empty one), fork (a new workspace from a live workspace or a storage commit; a fork never merges back), start, stop, restart, delete (no snapshot by default; it refuses, naming the difference, when packages, image or variables changed since the commit the workspace was made from: `save: true` snapshots onto the checked-out branch first, `skip_snapshot: true` drops them; capsules and device workspaces are deleted without a snapshot), wait, ttl, snapshot (`message` required).",
       ws
         ? { ...(noStop ? {} : { stop: stopAct }), snapshot: snapAct }
         : {
@@ -558,14 +558,19 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
             // In a desk (KD_DESK) a workspace is created and deleted THROUGH it, so it is managed: a
             // direct create would be standalone and then refused by this desk's own tools, and a direct
             // delete of a managed one is a 409. The desk already names the owner, so `team` is dropped.
-            create: act({ name: S, image: S, packages: SL, team: S, ttl_secs: TTL, source: { type: "string", description: "A workspace (id or name) to clone instead of creating an empty one." }, task: { type: "string", description: "What the clone is for (at most 200 characters)." }, device: { type: "string", description: "A device id (dev-…, from `kode devices list`): make a device workspace, whose folder is on that machine and whose tools run there. The device must be online and active in this team." }, snapshot: { type: "string", description: "With `source` a device workspace: the id (dsnap-…) of the snapshot of it to clone." }, access: { type: "array", items: { type: "string" }, description: "Device workspaces only: names of extra sandbox access (`xcode`, `user-temp`, `android`, `pty`), defined on the person's own machine (built in, or added with `kode devices access add`). A name the machine does not define keeps the workspace from starting (`AccessUndefined`)." }, ...WAITING }, ["name"], async (a) => {
-              if (a.source) return thenWaitWs(await ttlAfter(a, "/v1/workspaces", await api("POST", `/v1/workspaces/${seg(a.source)}/clone`, strip({ name: a.name, task: a.task, snapshot: a.snapshot }))), a);
+            create: act({ name: S, image: S, packages: SL, team: S, ttl_secs: TTL, device: { type: "string", description: "A device id (dev-…, from `kode devices list`): make a device workspace, whose folder is on that machine and whose tools run there. The device must be online and active in this team." }, access: { type: "array", items: { type: "string" }, description: "Device workspaces only: names of extra sandbox access (`xcode`, `user-temp`, `android`, `pty`), defined on the person's own machine (built in, or added with `kode devices access add`). A name the machine does not define keeps the workspace from starting (`AccessUndefined`)." }, ...WAITING }, ["name"], async (a) => {
               const body = { name: a.name, image: a.image, packages: a.packages, device: a.device, access: a.access };
               const ses = process.env.KD_DESK;
               return thenWaitWs(await ttlAfter(a, "/v1/workspaces", ses ? await api("POST", `/v1/desks/${seg(ses)}/workspaces`, strip(body)) : await api("POST", "/v1/workspaces", strip({ team: a.team, ...body }))), a);
             }),
-            restore: act({ name: S, snapshot_id: { type: "string", description: `What to restore: ${SNAP_REF}.` }, team: S, image: S, packages: SL, ttl_secs: TTL, ...WAITING }, ["name", "snapshot_id"], async (a) =>
-              thenWaitWs(await api("POST", "/v1/workspaces/restore", strip({ name: a.name, snapshot_id: a.snapshot_id, team: a.team, image: a.image, packages: a.packages, ttl_secs: a.ttl_secs })), a)),
+            // A fork is a NEW workspace: from a live one (`source`, a copy of its home as it is now that
+            // joins this desk) or from a storage commit (`snapshot_id`). It never merges back: its work
+            // leaves through git, its environment through a snapshot onto a branch of its own.
+            fork: act({ name: S, source: { type: "string", description: "A workspace (id or name) to fork live: the new one starts from its home as it is now and shares its volume. Give this or `snapshot_id`." }, snapshot_id: { type: "string", description: `A storage commit to fork from: ${SNAP_REF}. Give this or \`source\`.` }, task: { type: "string", description: "With `source`: what the fork is for (at most 200 characters)." }, snapshot: { type: "string", description: "With `source` a device workspace: the id (dsnap-…) of the snapshot of it to fork." }, team: S, image: S, packages: SL, ttl_secs: TTL, ...WAITING }, ["name"], async (a) => {
+              if (!a.source === !a.snapshot_id) throw new Error("fork takes one of `source` (a workspace to fork live) or `snapshot_id` (a storage commit such as `shop@base`)");
+              if (a.source) return thenWaitWs(await ttlAfter(a, "/v1/workspaces", await api("POST", `/v1/workspaces/${seg(a.source)}/clone`, strip({ name: a.name, task: a.task, snapshot: a.snapshot }))), a);
+              return thenWaitWs(await api("POST", "/v1/workspaces/restore", strip({ name: a.name, snapshot_id: a.snapshot_id, team: a.team, image: a.image, packages: a.packages, ttl_secs: a.ttl_secs })), a);
+            }),
             start: mact(WAITING, [], async (a) => thenWaitWs(await api("POST", `/v1/workspaces/${seg(a.workspace)}/start`), a, { ws: a.workspace, reread: true })),
             stop: mact(WAITING, [], async (a) => thenWaitWs(await api("POST", `/v1/workspaces/${seg(a.workspace)}/stop`), a, { stopped: true, ws: a.workspace })),
             restart: mact({ soft_ms: WAITING.soft_ms }, [], async (a) => {
@@ -604,7 +609,7 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
 
   // ---- environment
   tools.push(
-    resource("env", "Environments: the services of a stack, in the team's region. Actions: list, get, create (clone with `source`), start, stop, delete, wait, ttl, snapshot (`message` required), restore.",
+    resource("env", "Environments: the services of a stack, in the team's region. Actions: list, get, create (an empty one, or from `services`), fork (a new environment from a live one or a storage commit; a fork never merges back), start, stop, delete, wait, ttl, snapshot (`message` required), restore (rewinds this environment in place).",
       ws
         ? {
             get: eact({}, [], async (env) => (await wake(env), envView(env))),
@@ -613,15 +618,15 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
         : {
             list: act({ team: S }, [], async (a) => api("GET", `/v1/environments${qs({ owner: a.team })}`)),
             get: eact({}, [], async (env) => (await wake(env), envView(env))),
-            create: act({ name: S, services: { type: "array", items: SERVICE }, team: S, region: S, ttl_secs: TTL, source: { type: "string", description: `An environment (id or name) to clone live, or a snapshot to restore into a new environment: ${SNAP_REF}. Omit it for an empty one. A clone shares its source's volume and history: its snapshots appear there and take the source's volume name.` }, ...WAITING }, ["name"], async (a) => {
+            create: act({ name: S, services: { type: "array", items: SERVICE }, team: S, region: S, ttl_secs: TTL, ...WAITING }, ["name"], async (a) => {
               const services = a.services?.map(withServiceDefaults);
-              if (a.source) {
-                const r = await raw("GET", `/v1/environments/${seg(a.source)}`);
-                if (r.unavailable) throw new Error(UNAVAILABLE);
-                if (r.status === 200) return thenWaitEnv(await ttlAfter(a, "/v1/environments", await api("POST", `/v1/environments/${seg(a.source)}/clone`, strip({ name: a.name, owner: a.team, services, region: a.region }))), a);
-                if (r.status !== 404) throw new Error(httpError(r.status, r.text));
-              }
-              return thenWaitEnv(await ttlAfter(a, "/v1/environments", await api("POST", "/v1/environments", strip({ name: a.name, snapshot_id: a.source, services, owner: a.team }))), a);
+              return thenWaitEnv(await ttlAfter(a, "/v1/environments", await api("POST", "/v1/environments", strip({ name: a.name, services, owner: a.team }))), a);
+            }),
+            fork: act({ name: S, source: { type: "string", description: "An environment (id or name) to fork live: the new one starts from its services and data as they are now and shares its volume. Give this or `snapshot_id`." }, snapshot_id: { type: "string", description: `A storage commit to fork a new environment from: ${SNAP_REF}. Give this or \`source\`.` }, services: { type: "array", items: SERVICE }, team: S, region: S, ttl_secs: TTL, ...WAITING }, ["name"], async (a) => {
+              if (!a.source === !a.snapshot_id) throw new Error("fork takes one of `source` (an environment to fork live) or `snapshot_id` (a storage commit such as `shop-env@base`)");
+              const services = a.services?.map(withServiceDefaults);
+              if (a.source) return thenWaitEnv(await ttlAfter(a, "/v1/environments", await api("POST", `/v1/environments/${seg(a.source)}/clone`, strip({ name: a.name, owner: a.team, services, region: a.region }))), a);
+              return thenWaitEnv(await ttlAfter(a, "/v1/environments", await api("POST", "/v1/environments", strip({ name: a.name, snapshot_id: a.snapshot_id, services, owner: a.team }))), a);
             }),
             start: eact(WAITING, [], async (env, a) => thenWaitEnv(await api("POST", `/v1/environments/${env}/start`), a, env, true)),
             stop: eact(WAITING, [], async (env, a) => thenWaitEnv(await api("POST", `/v1/environments/${env}/stop`), a, env, false, stoppedDone)),
@@ -844,7 +849,7 @@ function mainOnly(tickMs: number): ToolDef[] {
     }),
     resource("snapshot", "Snapshots of a volume. Action: delete one.", {
       delete: act({ volume: S, snapshot: S }, ["volume", "snapshot"], async (a) => {
-        // the route is keyed by the volume id; a display name resolves from the list rows as `volume get` does (a clone shares its source's row)
+        // the route is keyed by the volume id; a display name resolves from the list rows as `volume get` does (a fork shares its source's row)
         const rows: any[] = await apiJson<any[]>("GET", "/v1/volumes").then((r) => (Array.isArray(r) ? r : [])).catch(() => []);
         const byId = rows.some((r) => r?.id === a.volume);
         const named = byId ? [] : rows.filter((r) => r?.name === a.volume).map((r) => r.id);

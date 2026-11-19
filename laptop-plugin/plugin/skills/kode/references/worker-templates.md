@@ -28,7 +28,7 @@ The model that ran (its class), the capsules used at the peak, the snapshots tak
 What the coordinator must decide. Empty is correct.
 ```
 
-Commits go back by `git push` when the worker can push. When it cannot: `git format-patch` or `git bundle create <stream>.bundle <base>..<branch>` in its workspace, `transfer` of that file to the workspace the task names, and the coordinator applies it there (`git am`, or `git fetch <file> <branch>`). A worker in a clone does not snapshot to hand work back: a clone is detached, so its commit would sit on the base volume with no branch.
+Commits go back by `git push` when the worker can push. When it cannot: `git format-patch` or `git bundle create <stream>.bundle <base>..<branch>` in its workspace, `transfer` of that file to the workspace the task names, and the coordinator applies it there (`git am`, or `git fetch <file> <branch>`). A worker in a fork does not snapshot to hand work back: a fork is detached, so its commit would sit on the base volume with no branch.
 
 ## 1. Solo (the default)
 
@@ -37,29 +37,29 @@ Commits go back by `git push` when the worker can push. When it cannot: `git for
 | Purpose | One bounded change: a feature, a fix, a refactor |
 | Scope | The workspaces the task lists. The desk's environment is read-only unless the task grants an intercept |
 | Tools | Each worker tool of `permissions.md` |
-| End state | Commit and push (unfinished work on a git branch on origin), or hand the commits back as a file. A code change alone is no reason for a volume commit: code reaches the next session through git (pushed to origin, unfinished work on a git branch; the next workspace pulls it). Environment state the task asks to keep, when the workspace is not a clone: `workspace` `snapshot` onto the branch the task names, a `message` that says what changed, and `name@<branch>` in the report. `REPORT.md`. The coordinator deletes the workspace |
-| Must not | Use a workspace the task does not list; create, clone, stop, delete or restore a workspace; create or clone an environment or a desk; name a volume; move `base` or a branch the task does not name |
+| End state | Commit and push (unfinished work on a git branch on origin), or hand the commits back as a file. A code change alone is no reason for a volume commit: code reaches the next session through git (pushed to origin, unfinished work on a git branch; the next workspace pulls it). Environment state the task asks to keep, when the workspace is not a fork: `workspace` `snapshot` onto the branch the task names, a `message` that says what changed, and `name@<branch>` in the report. `REPORT.md`. The coordinator deletes the workspace |
+| Must not | Use a workspace the task does not list; create, fork, stop or delete a workspace; create or fork an environment or a desk; name a volume; move `base` or a branch the task does not name |
 
 ## 2. Throwaway experiment
 
 | | |
 |---|---|
 | Purpose | Answer one question: does approach X work, how fast is Y, what breaks if Z |
-| Scope | One clone of a base workspace, made by the coordinator with a short TTL, or one capsule |
+| Scope | One fork of a base workspace, made by the coordinator with a short TTL, or one capsule |
 | Tools | The worker tools without `workspace` `snapshot`, `pipeline` `save` and `container_push`. Nothing that it makes outlives it |
-| End state | The only output is `REPORT.md`. If the code has value, the report says so, and the coordinator gives the work again as a Solo task. The coordinator deletes the clone |
+| End state | The only output is `REPORT.md`. If the code has value, the report says so, and the coordinator gives the work again as a Solo task. The coordinator deletes the fork |
 | Must not | Persist anything; intercept anything |
 
-For a matrix, the coordinator reads `quota`, makes N clones, gives N workers one each and compares N reports.
+For a matrix, the coordinator reads `quota`, makes N forks, gives N workers one each and compares N reports.
 
 ## 3. Desk verification
 
 | | |
 |---|---|
 | Purpose | Prove that a set of changes works end to end against real services |
-| Scope | The workspaces under test, in a desk connected to a clone of the environment that the coordinator made. The shared environment only when the task says so and names the service |
+| Scope | The workspaces under test, in a desk connected to a fork of the environment that the coordinator made. The shared environment only when the task says so and names the service |
 | Tools | The worker tools, `intercept` on the named services, and `capsule` `create` for the test run |
-| End state | Stop each intercept. `REPORT.md` with the end of the full test log. The coordinator deletes the environment clone |
+| End state | Stop each intercept. `REPORT.md` with the end of the full test log. The coordinator deletes the environment fork |
 | Must not | Change code (it reports a failure, it does not repair it); leave an intercept in force |
 
 ## 4. Pipeline authoring

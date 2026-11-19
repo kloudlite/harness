@@ -43,7 +43,7 @@ export const MOCK_WORKSPACES: Workspace[] = [
       { text: "schema at revision 2026_08_31_a" },
     ] },
   ] },
-  { id: "w3", name: "console-web", owner: "karthik", status: "cloning", progress: "42%", ports: [], repo: "kloudlite/console-web", branch: "main", changes: 0, processes: [
+  { id: "w3", name: "console-web", owner: "karthik", status: "forking", progress: "42%", ports: [], repo: "kloudlite/console-web", branch: "main", changes: 0, processes: [
     { id: "p1", name: "vite", command: "bun run dev", status: "starting", startedAt: "2026-10-09T08:25:00Z", logs: [
       { text: "installing dependencies…" },
     ] },
@@ -133,7 +133,7 @@ export function fixtureTeam(): TeamView {
       id: w.id,
       name: w.name,
       owner: w.owner,
-      state: w.status === "stopped" ? "stopped" : w.status === "cloning" ? "creating" : "ready",
+      state: w.status === "stopped" ? "stopped" : w.status === "forking" ? "creating" : "ready",
       repo: w.repo,
       branch: w.branch,
       environment: w.status === "attached" ? "e1" : undefined,

@@ -3,7 +3,7 @@
 //! ./fixtures.ts for tests only.
 import type { TeamView } from "./wire/index.ts";
 
-export type WorkspaceStatus = "running" | "attached" | "stopped" | "cloning";
+export type WorkspaceStatus = "running" | "attached" | "stopped" | "forking";
 
 export type Workspace = {
   id: string;
@@ -12,15 +12,15 @@ export type Workspace = {
   owner: string;
   status: WorkspaceStatus;
   /**
-   * Parent workspace id — set only on clones. The list is two levels:
-   * workspaces › their clones (spun off a workspace to test something, like a
-   * git worktree). The flat list stays in tree order, so a workspace's clones
+   * Parent workspace id — set only on forks. The list is two levels:
+   * workspaces › their forks (spun off a workspace to test something, like a
+   * git worktree). The flat list stays in tree order, so a workspace's forks
    * follow it directly.
    */
   parent?: string;
-  /** Clone only: what it is being used for. */
+  /** Fork only: what it is being used for. */
   task?: string;
-  /** Clone progress, e.g. "42%" — only meaningful while status is "cloning". */
+  /** Fork progress, e.g. "42%" — only meaningful while status is "forking". */
   progress?: string;
   /** Ports the workspace exposes. */
   ports: number[];
@@ -78,14 +78,14 @@ export type Environment = {
 };
 
 /**
- * The workspace a clone should hang off: a workspace parents itself,
- * a clone hands its own parent over, so nothing nests deeper than one.
+ * The workspace a fork should hang off: a workspace parents itself,
+ * a fork hands its own parent over, so nothing nests deeper than one.
  */
 export function parentFor(workspaces: Workspace[], w: Workspace): string {
   return w.parent && workspaces.some((p) => p.id === w.parent) ? w.parent : w.id;
 }
 
-/** The workspace, preceded by its parent when it is a clone. */
+/** The workspace, preceded by its parent when it is a fork. */
 export function wsPath(workspaces: Workspace[], w: Workspace): string[] {
   const parent = w.parent ? workspaces.find((p) => p.id === w.parent) : undefined;
   return parent ? [parent.name, w.name] : [w.name];
@@ -128,7 +128,7 @@ export function procName(cmd: string): string {
 
 /**
  * The backend's view as sidebar rows. Tree order is what Sidebar relies on: each workspace, then
- * its clones. ponytail: the platform has no clone progress and `error` is shown as stopped; add a
+ * its forks. ponytail: the platform has no fork progress and `error` is shown as stopped; add a
  * state when the sidebar learns to colour failures.
  */
 export function fromTeam(v: TeamView): { workspaces: Workspace[]; environments: Environment[]; envIndex: number } {
@@ -137,7 +137,7 @@ export function fromTeam(v: TeamView): { workspaces: Workspace[]; environments: 
     id: w.id,
     name: w.name,
     owner: w.owner,
-    status: w.environment ? "attached" : w.state === "stopped" || w.state === "error" ? "stopped" : w.state === "creating" ? "cloning" : "running",
+    status: w.environment ? "attached" : w.state === "stopped" || w.state === "error" ? "stopped" : w.state === "creating" ? "forking" : "running",
     parent: w.parent,
     task: w.task,
     ports: [],
@@ -155,7 +155,7 @@ export function fromTeam(v: TeamView): { workspaces: Workspace[]; environments: 
     })),
   });
   const by = new Map(v.workspaces.map((w) => [w.id, w]));
-  // the tree is three levels (workspace › task), so a clone of a clone hangs off the root
+  // the tree is three levels (workspace › task), so a fork of a fork hangs off the root
   const rootOf = (w: TeamView["workspaces"][number]): string => {
     for (let i = 0; w.parent && by.has(w.parent) && i < 16; i++) w = by.get(w.parent)!;
     return w.id;

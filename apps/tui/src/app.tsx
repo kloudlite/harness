@@ -1281,7 +1281,7 @@ export function App({
       .filter(({ w }) => w.owner === user)
       .map(({ w, i }) => ({
         label: w.name,
-        hint: w.status === "cloning" ? (w.progress ?? w.status) : w.status,
+        hint: w.status === "forking" ? (w.progress ?? w.status) : w.status,
         group: `Workspaces · ${environment?.name ?? "no environment"}`,
         run: () => setFocus(i + 1),
       })),
@@ -1417,7 +1417,7 @@ export function App({
   const inputLive = !modalOpen && (prefs.vim === "off" || keyMode === "insert" || palette || cmdMode);
 
   // just where you are: the conversation you are typing into, then the selected workspace (with
-  // its parent, if it is a clone) — inherited names, never derived from a prompt.
+  // its parent, if it is a fork) — inherited names, never derived from a prompt.
   const contextPath = [worker ?? "Coordinator", ...(focus === 0 ? [] : wsPath(workspaces, workspaces[focus - 1]!))].join(" › ");
 
   const sidebarEl = (

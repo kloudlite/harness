@@ -38,7 +38,7 @@ bun test -t "sidebar renders"  # single test by name
 
 **Layout must match opencode (sst/opencode) 1:1** — paddings, borders and the prompt card are ported from its source (`src/ui/border.ts` holds the SplitBorder chars). When the UI looks off, diff against opencode's source, not against a screenshot.
 
-**The workspace list is two levels**: workspaces › their clones (spun off a workspace like a git worktree, `parent` set), shown by their short `name` on `├`/`└` branches. Nothing nests deeper — `fromTeam` hangs a clone of a clone off its root, and `parentFor()` does the same in the UI. The list stays flat and in tree order so `focus` keeps indexing it 1..N; `wsPath` gives the context path.
+**The workspace list is two levels**: workspaces › their forks (spun off a workspace like a git worktree, `parent` set), shown by their short `name` on `├`/`└` branches. Nothing nests deeper — `fromTeam` hangs a fork of a fork off its root, and `parentFor()` does the same in the UI. The list stays flat and in tree order so `focus` keeps indexing it 1..N; `wsPath` gives the context path.
 
 **Mock data**: `apps/tui/src/workspaces.ts` is entirely placeholder (environments, workspaces, services, `CURRENT_USER`). Nothing there reflects real kode semantics; expect it to be replaced wholesale.
 

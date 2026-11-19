@@ -53,7 +53,7 @@ const tool = (tools: ReturnType<typeof platformTools>, n: string) => {
   const tweak: Record<string, (i: any) => any> = {
     desk_connect: (i) => ({ action: "connect", environment: i.environment }),
     desk_disconnect: () => ({ action: "connect", environment: null }),
-    workspace_clone: ({ workspace, ...i }) => ({ action: "create", source: workspace, ...i }),
+    workspace_fork_live: ({ workspace, ...i }) => ({ action: "fork", source: workspace, ...i }),
   };
   return { ...r, name: n, run: (i: any) => r.run(tweak[n] ? tweak[n]!(i ?? {}) : { action, ...(i ?? {}) }) };
 };
@@ -189,16 +189,16 @@ test("desk connect sets or clears an environment (null disconnects); desk defaul
   expect(await tool(t, "desk_connect").run({ environment: "e2" })).toContain("ended");
 });
 
-test("env_get folds service_status readiness into services[]; workspace_clone sends task only when given", async () => {
+test("env_get folds service_status readiness into services[]; a live workspace fork sends task only when given", async () => {
   const t = platformTools("main");
   routes["GET /v1/environments/e1"] = json({ services: [{ name: "a" }, { name: "b" }], service_status: [{ name: "a", ready: true }, { name: "b", ready: false, message: "pulling" }] });
   const out = JSON.parse(await tool(t, "env_get").run({ env: "e1" }));
   expect(out.services).toEqual([{ name: "a", ready: true }, { name: "b", ready: false, message: "pulling" }]);
   expect(out.service_status.length).toBe(2);
   routes["POST /v1/workspaces/w1/clone"] = json({}, 202);
-  await tool(t, "workspace_clone").run({ workspace: "w1", name: "c" });
+  await tool(t, "workspace_fork_live").run({ workspace: "w1", name: "c" });
   expect(calls.at(-1)!.body).toEqual({ name: "c" });
-  await tool(t, "workspace_clone").run({ workspace: "w1", name: "c", task: "try x" });
+  await tool(t, "workspace_fork_live").run({ workspace: "w1", name: "c", task: "try x" });
   expect(calls.at(-1)!.body).toEqual({ name: "c", task: "try x" });
 });
 
@@ -356,7 +356,7 @@ test("workspace delete saves only with save: true (onto the checked-out branch o
   // save: a plain push (no `branch`), which advances the checkout, then the delete
   const out = JSON.parse(await del({ save: true }));
   expect(posts().map((c) => c.body)).toEqual([{ message: "before delete of shop" }]);
-  expect(out.saved).toBe('base is now v3 (was v2) of volume shop; the next session restores it with snapshot_id "shop@base"');
+  expect(out.saved).toBe('base is now v3 (was v2) of volume shop; the next session forks it with snapshot_id "shop@base"');
   expect(deletes()).toBe(2);
   // `branch` saves elsewhere, and implies save
   routes["POST /v1/workspaces/w1/snapshots"] = json({ id: "s4", phase: "ready", volume: "vol-1", name: "shop", version: 4, branch: "deps" }, 202);
@@ -436,7 +436,7 @@ test("a delete handed back while its snapshot is written is finished by the next
   expect(calls.filter((c) => c.method === "DELETE").length).toBe(1);
 });
 
-test("the push tools pass the volume name and the restore tool the team", async () => {
+test("the push tools pass the volume name and a fork from a commit the team", async () => {
   routes["POST /v1/workspaces/w1/snapshots"] = json({});
   routes["POST /v1/environments/e1/snapshots"] = json({});
   routes["POST /v1/workspaces/restore"] = json({});
@@ -449,10 +449,10 @@ test("the push tools pass the volume name and the restore tool the team", async 
   expect(post(0)).toEqual({ message: "m", volume: "pg" });
   await tool(platformTools("main"), "env_snapshot").run({ env: "e1", message: "m", volume: "pg" });
   expect(post(1)).toEqual({ message: "m", volume: "pg" });
-  await tool(platformTools("main"), "workspace_restore").run({ name: "w2", snapshot_id: "pg@2", team: "acme" });
+  await tool(platformTools("main"), "workspace_fork").run({ name: "w2", snapshot_id: "pg@2", team: "acme" });
   expect(post(2)).toEqual({ name: "w2", snapshot_id: "pg@2", team: "acme" });
-  // a restore takes its own ttl in the same call, as a create does
-  await tool(platformTools("main"), "workspace_restore").run({ name: "w3", snapshot_id: "pg@2", ttl_secs: 3600 });
+  // a fork from a commit takes its own ttl in the same call, as a create does
+  await tool(platformTools("main"), "workspace_fork").run({ name: "w3", snapshot_id: "pg@2", ttl_secs: 3600 });
   expect(post(3)).toEqual({ name: "w3", snapshot_id: "pg@2", ttl_secs: 3600 });
 });
 
@@ -588,7 +588,7 @@ test("a wait action answers the object with timed_out at timeout_ms; the old spe
   for (const x of platformTools("all", "w1")) for (const k of ["timeout", "timeout_s", "max_wait_ms"]) expect((x.inputSchema as any).properties[k]).toBeUndefined();
 });
 
-test("workspace create sends `device` to make a device workspace, and `snapshot` with `source` clones a device snapshot", async () => {
+test("workspace create sends `device` to make a device workspace, and fork with `source` and `snapshot` forks a device snapshot", async () => {
   const t = platformTools("main");
   routes["POST /v1/workspaces"] = json({}, 202);
   await tool(t, "workspace_create").run({ name: "d1", device: "dev-1" });
@@ -599,22 +599,31 @@ test("workspace create sends `device` to make a device workspace, and `snapshot`
   expect(calls.at(-1)).toMatchObject({ url: "/v1/desks/s1/workspaces", body: { name: "d2", device: "dev-1" } });
   delete process.env.KD_DESK;
   routes["POST /v1/workspaces/w1/clone"] = json({}, 202);
-  await tool(t, "workspace_create").run({ name: "d3", source: "w1", snapshot: "dsnap-1" });
+  await tool(t, "workspace_fork").run({ name: "d3", source: "w1", snapshot: "dsnap-1" });
   expect(calls.at(-1)).toMatchObject({ url: "/v1/workspaces/w1/clone", body: { name: "d3", snapshot: "dsnap-1" } });
 });
 
-test("workspace create with source clones; env create with an environment source clones, else grows from the snapshot", async () => {
+test("fork: `source` forks a live workspace or environment, `snapshot_id` a storage commit, exactly one of them", async () => {
   const t = platformTools("main");
   routes["POST /v1/workspaces/w1/clone"] = json({}, 202);
-  await tool(t, "workspace_create").run({ name: "c", source: "w1", task: "try" });
+  routes["POST /v1/workspaces/restore"] = json({}, 202);
+  await tool(t, "workspace_fork").run({ name: "c", source: "w1", task: "try" });
   expect(calls.at(-1)).toMatchObject({ url: "/v1/workspaces/w1/clone", body: { name: "c", task: "try" } });
-  routes["GET /v1/environments/e1"] = json({ id: "e1" });
+  await tool(t, "workspace_fork").run({ name: "d", snapshot_id: "pg@base" });
+  expect(calls.at(-1)).toMatchObject({ url: "/v1/workspaces/restore", body: { name: "d", snapshot_id: "pg@base" } });
   routes["POST /v1/environments/e1/clone"] = json({}, 202);
   routes["POST /v1/environments"] = json({}, 202);
-  await tool(t, "env_create").run({ name: "e2", source: "e1" });
+  await tool(t, "env_fork").run({ name: "e2", source: "e1" });
   expect(calls.at(-1)!.url).toBe("/v1/environments/e1/clone");
-  await tool(t, "env_create").run({ name: "e3", source: "pg@2" });
+  await tool(t, "env_fork").run({ name: "e3", snapshot_id: "pg@2" });
   expect(calls.at(-1)).toMatchObject({ url: "/v1/environments", body: { name: "e3", snapshot_id: "pg@2" } });
+  const n = calls.length;
+  for (const [tn, args] of [["workspace_fork", { name: "x" }], ["workspace_fork", { name: "x", source: "w1", snapshot_id: "pg@2" }], ["env_fork", { name: "x" }]] as const) {
+    await expect(tool(t, tn).run(args)).rejects.toThrow("fork takes one of `source`");
+  }
+  expect(calls.length).toBe(n);
+  // create makes an empty one: it no longer takes a source
+  for (const tn of ["workspace", "env"]) expect((t.find((x) => x.name === tn)!.inputSchema as any).properties.source.description).not.toMatch(/\(create\)/);
 });
 
 test("capsule_create goes through the desk when there is one, with its argv array as given", async () => {
@@ -790,7 +799,7 @@ test("env create with wait answers the created object and a hint when the desk i
   expect(out.hint).toContain("desk");
 });
 
-test("env restore takes source; snapshot_id is an unlisted alias", async () => {
+test("env restore takes source; snapshot_id is its alias there, and listed only as fork's", async () => {
   routes["POST /v1/environments/e1/restore"] = json({ ok: 1 });
   routes["GET /v1/environments/e1"] = json({ id: "e1", services: [] });
   const t = platformTools("main");
@@ -798,7 +807,8 @@ test("env restore takes source; snapshot_id is an unlisted alias", async () => {
   await tool(t, "env").run({ action: "restore", env: "e1", snapshot_id: "snap-9" });
   expect(calls.filter((c) => c.url === "/v1/environments/e1/restore").map((c) => c.body.snapshot_id)).toEqual(["pg@2", "snap-9"]);
   const props = (t.find((x) => x.name === "env")!.inputSchema as any).properties;
-  expect(props.snapshot_id).toBeUndefined();
+  expect(props.snapshot_id.description).toMatch(/\(fork\)\.$/);
+  expect(props.snapshot_id.description).not.toContain("restore");
 });
 
 test("env restore with wait holds until the restore landed, not the running state it started in", async () => {
@@ -863,7 +873,7 @@ test("volume get resolves a given name to the volume id", async () => {
 
 test("no worktree tool and no tree argument; request_create echoes the title; quota defaults to KD_TEAM", async () => {
   const t = platformTools("main", undefined, 1);
-  // a workspace has one tree: a second working copy is a clone
+  // a workspace has one tree: a second working copy is a fork
   for (const k of ["main", "all", "workspace"] as const) {
     const tools = platformTools(k, "w1");
     expect(tools.map((x) => x.name)).not.toContain("worktree");
@@ -990,12 +1000,11 @@ test("workspace and env create set ttl_secs on the new object in the same call",
   routes["PUT /v1/workspaces/w9/ttl"] = json({});
   routes["POST /v1/environments"] = json({ id: "e9", state: "creating" }, 201);
   routes["PUT /v1/environments/e9/ttl"] = json({});
-  routes["GET /v1/environments/src"] = json({ id: "src" });
   routes["POST /v1/environments/src/clone"] = json({ id: "e8" }, 201);
   routes["PUT /v1/environments/e8/ttl"] = json({});
   expect(JSON.parse(await tool(t, "workspace_create").run({ name: "a", ttl_secs: 3600 }))).toEqual({ id: "w9", state: "creating" });
   await tool(t, "env_create").run({ name: "b", ttl_secs: 600 });
-  await tool(t, "env_create").run({ name: "c", source: "src", ttl_secs: 7200 });
+  await tool(t, "env_fork").run({ name: "c", source: "src", ttl_secs: 7200 });
   const puts = calls.filter((c) => c.method === "PUT").map((c) => [c.url, c.body]);
   expect(puts).toEqual([["/v1/workspaces/w9/ttl", { ttl_secs: 3600 }], ["/v1/environments/e9/ttl", { ttl_secs: 600 }], ["/v1/environments/e8/ttl", { ttl_secs: 7200 }]]);
   // the create body never carries it, and no ttl means no second call
@@ -1005,7 +1014,7 @@ test("workspace and env create set ttl_secs on the new object in the same call",
   // a refused ttl fails the answer and names what was made
   routes["PUT /v1/workspaces/w9/ttl"] = json({ error: "ttl_secs: 600 to 2592000" }, 422);
   await expect(tool(t, "workspace_create").run({ name: "a", ttl_secs: 3600 })).rejects.toThrow("created w9, but `ttl_secs` was refused");
-  expect((t.find((x) => x.name === "workspace")!.inputSchema as any).properties.ttl_secs.description).toContain("(create, restore, ttl)");
+  expect((t.find((x) => x.name === "workspace")!.inputSchema as any).properties.ttl_secs.description).toContain("(create, fork, ttl)");
 });
 
 test("every argument that names a snapshot says it takes a name, name@N, name@<branch> or an id", () => {

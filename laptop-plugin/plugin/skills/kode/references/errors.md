@@ -21,7 +21,7 @@ The status comes first; the body is one sentence. Report it as it is, then take 
 | `env` action `restore` `409` with `lost` | Name the services; call again with `discard` only after a yes. |
 | `422` for a package; the answer lists versions | Pick a listed version. |
 | A first snapshot without `volume` | It names the volume after the workspace. Always pass `volume` on the first snapshot of a workspace that was created empty. |
-| `409 this volume is named X, not Y (this workspace is a clone of that volume…)` | Drop `volume` or pass X: a clone or a restore saves into its source's volume. |
+| `409 this volume is named X, not Y (this workspace is a fork of that volume…)` | Drop `volume` or pass X: a fork saves into its source's volume. |
 | `409 volume {name} already exists; delete it first` | Ask for another name. |
 | `409 volume {name} is used by {readers}` | A pipeline reads it. Tell the user. |
 | `409 volume name {to} is taken` | A volume of the owner already has that name. Ask for another name. |
@@ -29,7 +29,7 @@ The status comes first; the body is one sentence. Report it as it is, then take 
 | `404 volume {name} has no commit {n}` / `has no branch {b}` / `has no ready version` | Read `volume` `get`: it lists the commits and the branches. A `base` that is gone means that nobody put a good commit on it: ask which commit is good. |
 | `422 branch: "X" must be lowercase letters, digits and hyphens (at most 32), and not a number or "latest"` | Pick another branch name. |
 | `422 labels: …` / `branches: at most 16 on one volume` | Fix the list; delete a branch that nobody uses with `volume` `delete_branch`. |
-| A snapshot answers `detached: "branch {B} moved …"` | Another session moved that branch since you checked it out; your commit is on no branch, and volumes do not merge. Let go: push the code, `snapshot` `delete` your commit, and when the structural change is still needed, redo it on a fresh restore of `{B}` and save that. Never move `{B}` back to yours (convention 9). |
+| A snapshot answers `detached: "branch {B} moved …"` | Another session moved that branch since you checked it out; your commit is on no branch, and volumes do not merge. Let go: push the code, `snapshot` `delete` your commit, and when the structural change is still needed, redo it on a fresh fork of `{B}` and save that. Never move `{B}` back to yours (convention 9). |
 | `no git connector of {owner} covers {host}/{repo}` | The user connects the code host in the web console. |
 | `link your GitHub account to push: …` / `your GitHub link has expired; link it again` | The person links GitHub in the web console (Settings, Connectors). Until then the work is an unfinished snapshot, not a push. |
 | `connector {name} can only read` | The connector's GitHub App has no write on contents. Tell the user; leave the work as an unfinished snapshot. |
@@ -37,7 +37,7 @@ The status comes first; the body is one sentence. Report it as it is, then take 
 | `422 pipeline {name} is invalid:` + lines | Fix every line, save again. |
 | `422 pipeline {name} cannot run:` + lines | A missing input or secret. Fix the cause, start again. |
 | `409 pipeline {name} changed; retry` | Read the newest version, apply the change, save. |
-| `409 … not ready yet` (restore or create from a snapshot) | The snapshot is not restorable yet: retry after a few seconds. |
+| `409 … not ready yet` (a fork from a snapshot) | The snapshot is not restorable yet: retry after a few seconds. |
 | `409 this run has already finished` | Nothing to cancel. |
 | `403 only a team admin can change team pipelines` | Tell the user. |
 | `429 this token has {n} runs in flight` | Wait for a run to end. |

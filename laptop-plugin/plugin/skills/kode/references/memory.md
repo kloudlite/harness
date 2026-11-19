@@ -23,7 +23,7 @@ Eight sections belong to the team, in reading order; `open-work` is yours alone.
 1. `memory` `read`, all sections.
 2. `architecture` and `sources`: which component the task touches, and which repository and path hold it.
 3. `run`: the packages and the commands to build and test it.
-4. `desks`, `volumes` and `environments`: which desk to use, which base to restore each workspace from, and which environment to connect.
+4. `desks`, `volumes` and `environments`: which desk to use, which base to fork each workspace from, and which environment to connect.
 5. `conventions`: the rules for names, branches, commits and what needs a yes.
 6. `plan` and `open-work`: whether the task is a step of an agreed plan, and whether a git branch on origin already holds part of it.
 
@@ -106,7 +106,7 @@ A shop with a Next.js storefront, a Go API and a Python worker, in two repositor
   - `api`: ghcr.io/acme/shop-api:main on 8080. `worker`: ghcr.io/acme/shop-worker:main.
   - `web`: ghcr.io/acme/shop-web:main on 3000. `mail`: mailpit on 1025 (web 8025).
   - Reset: `env` `restore` from `shop-env@base`. Usually intercepted: `api` for backend work, `web` for frontend work.
-- A test that breaks data clones `shop-dev` first (`env` `create` with `source`) and deletes the copy after.
+- A test that breaks data forks `shop-dev` first (`env` `fork` with `source`) and deletes the copy after.
 ```
 
 **`volumes`**
@@ -126,7 +126,7 @@ A shop with a Next.js storefront, a Go API and a Python worker, in two repositor
 
 **`conventions`**
 ```markdown
-- Workspaces are named after their repository (`shop-api`); clones `<repo>-<stream>`. Branches `feat/<topic>`, deleted once merged.
+- Workspaces are named after their repository (`shop-api`); forks `<repo>-<stream>`. Branches `feat/<topic>`, deleted once merged.
 - Commits: imperative subject, no AI or tool reference.
 - Migrations are additive; a destructive one needs a yes from the person.
 - Secrets live in the team's secrets, never in a home folder or a snapshot.

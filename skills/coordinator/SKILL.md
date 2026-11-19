@@ -9,15 +9,15 @@ There are two kinds of agent: you, the **coordinator**, who plans, and **workers
 
 ## What you own
 
-You talk to the person. You own the plan, the quota, the lifecycle of every workspace and environment (create, clone, start, stop, delete, snapshots), the volumes and their `base` branches, and the project memory. Workers never stop, delete or restore a workspace.
+You talk to the person. You own the plan, the quota, the lifecycle of every workspace and environment (create, fork, start, stop, delete, snapshots), the volumes and their `base` branches, and the project memory. Workers never fork, stop or delete a workspace.
 
 ## Plan first
 
 1. Orient: `status`, `memory` `read`, `workspace` `list`, `env` `get`, `quota`. The memory is the guide: take the repository, base, desk and environment from it (`kode` skill, `references/memory.md`). When it is empty, brainstorm with the person and write the initial draft before anything else.
-2. Restore or create the workspaces the work needs from `name@base`, with `ttl_secs`; pull and check out the git branch that `open-work` names, if any.
+2. Fork or create the workspaces the work needs from `name@base`, with `ttl_secs`; pull and check out the git branch that `open-work` names, if any.
 3. Lay out the work: how many workers, and which workspaces each gets.
    - One stream of work: one worker, one workspace.
-   - Parallel streams: one workspace each, usually a clone of the base (`workspace` `create` with `source`, a `task` and `ttl_secs`). Ask for a commit first: a clone copies the current state.
+   - Parallel streams: one workspace each, usually a fork of the base (`workspace` `fork` with `source`, a `task` and `ttl_secs`). Ask for a commit first: a fork copies the current state.
    - Never two workers on one workspace: they overwrite each other. Only when they must share one, give each its own files and say so in both briefs.
    - A worker may hold several workspaces (a frontend and a backend, a test runner beside the code).
    - Before you add or change a volume, base, environment or desk, check the plan against the memory's `architecture`, `volumes`, `environments`, `desks` and `conventions`, and against the `plan` and any change `open-work` already proposes: reuse what is named, and say where the plan departs from it (the `kode` skill, convention 20).
@@ -44,7 +44,7 @@ Answers arrive later as turns that start with `[from <worker>]`. Do not wait, sl
 
 ## Integrate and end
 
-When every stream reports `done` on the current contract, send the integration ask (the provider serves with an intercept, the consumer tests against it). Then merge the branches in a fixed order into the base workspace and run the whole test set once. End the session as convention 16 of the `kode` skill says: intercepts stopped, work pushed and merged, the memory written, every workspace and environment you created deleted: `workspace` `delete` saves first, so the base workspace, on the clean merged default branch with a passing build, is deleted plainly (`base` advances), unfinished work that cannot go to git with `branch: "wip-<topic>"`, a clone with `skip_snapshot: true`. A clone that reported `blocked` or could not push may hold the only copy: ask the person before you delete it.
+When every stream reports `done` on the current contract, send the integration ask (the provider serves with an intercept, the consumer tests against it). Then merge the branches in a fixed order into the base workspace and run the whole test set once. End the session as convention 16 of the `kode` skill says: intercepts stopped, work pushed and merged, the memory written, every workspace and environment you created deleted: `workspace` `delete` saves first, so the base workspace, on the clean merged default branch with a passing build, is deleted plainly (`base` advances), unfinished work that cannot go to git with `branch: "wip-<topic>"`, a fork with `skip_snapshot: true`. A fork that reported `blocked` or could not push may hold the only copy: ask the person before you delete it.
 
 ## Rules
 

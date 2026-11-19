@@ -45,7 +45,7 @@ The coordinator has `bash`, for its scratch folder only. A worker does not have 
 
 ## Waiting
 
-Create, start and restore calls take `wait: true` and answer when the object has settled. Use it before any loop:
+Create, fork and start calls take `wait: true` and answer when the object has settled. Use it before any loop:
 
 ```js
 // Create a workspace and wait until it is up

@@ -63,7 +63,7 @@ export type WorkerRow = { key: string; busy: boolean; waiting: boolean };
 /**
  * The Coordinator header (the top-level conversation), WORKERS (the other
  * conversations, one line each), WORKSPACES (resources the agents use, each
- * with its clones under a guide rail; the task plan lives in its own panel,
+ * with its forks under a guide rail; the task plan lives in its own panel,
  * not here), and a pinned Environment block at the bottom — the connected
  * environment with the services that belong to it directly under it.
  */
@@ -107,7 +107,7 @@ export function Sidebar({
 }) {
   const inner = width - 4; // padding + row padding
   const wheel = useWheelAccel();
-  // the count is workspaces, not their clones
+  // the count is workspaces, not their forks
   const count = workspaces.filter((w) => !w.parent).length;
 
   return (
@@ -164,7 +164,7 @@ export function Sidebar({
             if (w.parent) {
               // last child of its workspace closes the branch
               const last = !workspaces.some((o, j) => j > i && o.parent === w.parent);
-              // a clone: branch glyph, short name, and its running jobs
+              // a fork: branch glyph, short name, and its running jobs
               const tag = jobs(w);
               return (
                 <Row
@@ -185,8 +185,8 @@ export function Sidebar({
             }
 
             // one word on the right, and only when it earns the room
-            const stateTag = w.status === "cloning"
-                ? w.progress ?? "cloning"
+            const stateTag = w.status === "forking"
+                ? w.progress ?? "forking"
                 : jobs(w)
                 ? jobs(w)
                 : !mine

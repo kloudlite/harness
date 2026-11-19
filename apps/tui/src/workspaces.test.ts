@@ -22,10 +22,10 @@ test("fromTeam: status follows attachment, then state", () => {
   const { workspaces } = fromTeam(
     view({ workspaces: [sw("a", { environment: "e1" }), sw("b", { state: "stopped" }), sw("c", { state: "creating" }), sw("d"), sw("e", { state: "error" })] }),
   );
-  expect(workspaces.map((w) => w.status)).toEqual(["attached", "stopped", "cloning", "running", "stopped"]);
+  expect(workspaces.map((w) => w.status)).toEqual(["attached", "stopped", "forking", "running", "stopped"]);
 });
 
-test("fromTeam: clones follow their parent directly, a clone of a clone hangs off the root", () => {
+test("fromTeam: forks follow their parent directly, a fork of a fork hangs off the root", () => {
   const { workspaces } = fromTeam(
     view({ workspaces: [sw("c1", { parent: "p" }), sw("p"), sw("q"), sw("c2", { parent: "c1", task: "t" }), sw("orphan", { parent: "gone" })] }),
   );

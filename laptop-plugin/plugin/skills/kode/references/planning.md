@@ -12,12 +12,12 @@ Write one when two or more workers change things that must fit together: an API 
 2. **Read first.** The coordinator reads the project `memory`, every section, so the plan uses the volumes, environments and conventions that exist (and any change that `open-work` already proposes), and it reads enough of the code to name the real files, types and routes. A contract that guesses a name costs each worker a correction.
 3. **Write the contracts before any worker starts.** A contract is what two streams must agree on: names, fields, arguments, limits, error sentences, and who owns which files. Write the exact words. Leave the inside of a stream to its worker.
 4. **Give each file one owner.** Two streams never edit the same file. When two streams need one file, one stream owns it and the contract says what it must put there.
-5. **Put the plan in the base workspace.** Write it as one file at the root of the source folder (`~/workspace/PLAN.md`). Each clone of the base then carries it.
-6. **Give each parallel stream its own workspace.** Read `quota` first. The coordinator makes one clone of the base per stream: `workspace` `create` with `source`, a name `<base>-<stream>`, a `task` that names the stream and `ttl_secs`. A clone starts ready: the code, the packages and the plan are in it. A clone is never snapshotted: it shares the volume of the base. Never give two workers one workspace; when two streams must share one, the plan splits its files between them.
-7. **Give each worker its task.** `worker_ask` with the workspaces it uses (its clone, and any other it needs), the plan file, the stream, the files that the worker owns, its branch and what "done" means (a command that exits 0). `worker-templates.md` gives the order of a task.
+5. **Put the plan in the base workspace.** Write it as one file at the root of the source folder (`~/workspace/PLAN.md`). Each fork of the base then carries it.
+6. **Give each parallel stream its own workspace.** Read `quota` first. The coordinator makes one fork of the base per stream: `workspace` `fork` with `source`, a name `<base>-<stream>`, a `task` that names the stream and `ttl_secs`. A fork starts ready: the code, the packages and the plan are in it. A fork is never snapshotted: it shares the volume of the base. Never give two workers one workspace; when two streams must share one, the plan splits its files between them.
+7. **Give each worker its task.** `worker_ask` with the workspaces it uses (its fork, and any other it needs), the plan file, the stream, the files that the worker owns, its branch and what "done" means (a command that exits 0). `worker-templates.md` gives the order of a task.
 8. **Workers never negotiate with each other.** A Worker that finds a gap or an error in a contract stops that part, says so in `REPORT.md` and goes on with what the gap does not touch. The coordinator corrects the plan file and tells each worker that the change touches. A contract changes in one place only.
-9. **Integrate in a fixed order.** The plan names the order: the stream that others build on goes first. The coordinator reads each `REPORT.md`, takes the branches in that order into the base workspace (a pushed branch, or a patch or bundle file that the worker sent with `transfer`), deletes each clone when its commits are taken, and runs the whole test set once. A failure goes back to the worker that owns the file, with the end of the log.
-10. **End the session.** Push and merge the result; work that is left goes to a git branch on origin. A code change alone is no reason for a volume commit: code reaches the next session through git (pushed to origin, unfinished work on a git branch; the next workspace pulls it). Refresh the base only when the environment changed (convention 8 of the skill): the merged default branch checked out, the whole test set passed, credentials removed from the home, then the base workspace's `workspace` `delete` with `save: true` (`base` advances); a failed run moves no base and `open-work` says so. `memory` `write`: the volume, and the open work with its git branch. Delete every workspace, the clones and the base included: a plain `delete` takes no snapshot (it refuses, naming the difference, when packages, image or variables changed since the base: `save: true` or `skip_snapshot: true`).
+9. **Integrate in a fixed order.** The plan names the order: the stream that others build on goes first. The coordinator reads each `REPORT.md`, takes the branches in that order into the base workspace (a pushed branch, or a patch or bundle file that the worker sent with `transfer`), deletes each fork when its commits are taken, and runs the whole test set once. A failure goes back to the worker that owns the file, with the end of the log.
+10. **End the session.** Push and merge the result; work that is left goes to a git branch on origin. A code change alone is no reason for a volume commit: code reaches the next session through git (pushed to origin, unfinished work on a git branch; the next workspace pulls it). Refresh the base only when the environment changed (convention 8 of the skill): the merged default branch checked out, the whole test set passed, credentials removed from the home, then the base workspace's `workspace` `delete` with `save: true` (`base` advances); a failed run moves no base and `open-work` says so. `memory` `write`: the volume, and the open work with its git branch. Delete every workspace, the forks and the base included: a plain `delete` takes no snapshot (it refuses, naming the difference, when packages, image or variables changed since the base: `save: true` or `skip_snapshot: true`).
 
 ## What makes a contract good
 
@@ -63,7 +63,7 @@ Integration order: A, then B. What a stream must hold back, when another stream 
 - How to commit: the branch, the author, the form of the subject.
 - How to build and test: the commands, and what not to run.
 - Leave `REPORT.md`: outcome, commits, how it was verified, what is not verified, open questions.
-- Never stop, snapshot, restore or delete a workspace: the coordinator ends it. A clone is never snapshotted.
+- Never fork, stop, snapshot or delete a workspace: the coordinator ends it. A fork is never snapshotted.
 ```
 
 ## Mistakes
@@ -72,5 +72,5 @@ Integration order: A, then B. What a stream must hold back, when another stream 
 - Two streams that own one file: the second merge loses work.
 - Two workers on one workspace: each overwrites the other's files and processes.
 - A worker that asks another worker: two private agreements replace one contract.
-- Tests run in each clone only: the parts pass alone and fail together. Run the whole set once, after the last merge.
-- Clones left after the merge: each holds a slot and its disk.
+- Tests run in each fork only: the parts pass alone and fail together. Run the whole set once, after the last merge.
+- Forks left after the merge: each holds a slot and its disk.

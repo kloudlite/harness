@@ -291,14 +291,14 @@ test("processes view: section headers with counts, crashed row, filter, follow",
   t.done();
 });
 
-test("sidebar: Coordinator header, workspaces with their clones, environment with its services", async () => {
+test("sidebar: Coordinator header, workspaces with their forks, environment with its services", async () => {
   const t = await mount();
   const f = await t.frame();
   expect(f).toContain("✦ Coordinator"); // the top-level conversation
   expect(f).not.toContain("Workers"); // no worker yet, no section
   expect(f).toContain("Workspaces");
   expect(f).toContain("api-gateway");
-  expect(f).toMatch(/├ rate-limits-probe/); // clones branch off it
+  expect(f).toMatch(/├ rate-limits-probe/); // forks branch off it
   expect(f).toMatch(/└ load-test/); // short names, not their task text
   expect(f).not.toContain("Review bc5a5062"); // the task prompt never reaches a row
   expect(f).not.toContain("IMPL"); // no phase tags
@@ -311,7 +311,7 @@ test("sidebar: Coordinator header, workspaces with their clones, environment wit
   t.done();
 });
 
-test("clicking a clone row selects that workspace", async () => {
+test("clicking a fork row selects that workspace", async () => {
   const t = await mount();
   const lines = (await t.frame()).split("\n");
   const row = lines.findIndex((l) => l.includes("└ load-test"));
