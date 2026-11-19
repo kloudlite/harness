@@ -851,9 +851,14 @@ test("stop answers the POST body; wait polls until stopped", async () => {
 
 test("workspace resize patches the size it is given and answers the API's verdict", async () => {
   const t = tool(platformTools("main"), "workspace");
-  routes["PATCH /v1/workspaces/w1"] = json({ id: "w1", cpu: 8, memory_gb: 8, resize: { applies: "in_place" } });
+  routes["PATCH /v1/workspaces/w1"] = json({ id: "w1", cpu: 8, memory_gb: 8, restart_required: { ready: true, reason: "Resized" }, resize: { applies: "at_restart" } });
   const out = JSON.parse(await t.run({ action: "resize", workspace: "w1", cpu: 8 }));
-  expect(out.resize.applies).toBe("in_place");
+  expect(out.resize.applies).toBe("at_restart");
+  expect(out.restart_required.reason).toBe("Resized");
+  // the description says a sandboxed workspace takes its size at the next restart
+  const desc = tool(platformTools("main"), "workspace").description;
+  expect(desc).toContain("until its next `restart`");
+  expect(desc).toContain("at_restart");
   expect(calls.map((c) => `${c.method} ${c.url}`)).toEqual(["PATCH /v1/workspaces/w1"]);
   expect(calls[0].body).toEqual({ cpu: 8 });
   // nothing to change is refused before any call
