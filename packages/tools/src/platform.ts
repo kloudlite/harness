@@ -618,14 +618,14 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
         : {
             list: act({ team: S }, [], async (a) => api("GET", `/v1/environments${qs({ owner: a.team })}`)),
             get: eact({}, [], async (env) => (await wake(env), envView(env))),
-            create: act({ name: S, services: { type: "array", items: SERVICE }, team: S, region: S, ttl_secs: TTL, ...WAITING }, ["name"], async (a) => {
+            create: act({ name: S, services: { type: "array", items: SERVICE }, team: S, ttl_secs: TTL, ...WAITING }, ["name"], async (a) => {
               const services = a.services?.map(withServiceDefaults);
               return thenWaitEnv(await ttlAfter(a, "/v1/environments", await api("POST", "/v1/environments", strip({ name: a.name, services, owner: a.team }))), a);
             }),
-            fork: act({ name: S, source: { type: "string", description: "An environment (id or name) to fork live: the new one starts from its services and data as they are now and shares its volume. Give this or `snapshot_id`." }, snapshot_id: { type: "string", description: `A storage commit to fork a new environment from: ${SNAP_REF}. Give this or \`source\`.` }, services: { type: "array", items: SERVICE }, team: S, region: S, ttl_secs: TTL, ...WAITING }, ["name"], async (a) => {
+            fork: act({ name: S, source: { type: "string", description: "An environment (id or name) to fork live: the new one starts from its services and data as they are now and shares its volume. Give this or `snapshot_id`." }, snapshot_id: { type: "string", description: `A storage commit to fork a new environment from: ${SNAP_REF}. Give this or \`source\`.` }, services: { type: "array", items: SERVICE }, team: S, ttl_secs: TTL, ...WAITING }, ["name"], async (a) => {
               if (!a.source === !a.snapshot_id) throw new Error("fork takes one of `source` (an environment to fork live) or `snapshot_id` (a storage commit such as `shop-env@base`)");
               const services = a.services?.map(withServiceDefaults);
-              if (a.source) return thenWaitEnv(await ttlAfter(a, "/v1/environments", await api("POST", `/v1/environments/${seg(a.source)}/clone`, strip({ name: a.name, owner: a.team, services, region: a.region }))), a);
+              if (a.source) return thenWaitEnv(await ttlAfter(a, "/v1/environments", await api("POST", `/v1/environments/${seg(a.source)}/clone`, strip({ name: a.name, owner: a.team, services }))), a);
               return thenWaitEnv(await ttlAfter(a, "/v1/environments", await api("POST", "/v1/environments", strip({ name: a.name, snapshot_id: a.snapshot_id, services, owner: a.team }))), a);
             }),
             start: eact(WAITING, [], async (env, a) => thenWaitEnv(await api("POST", `/v1/environments/${env}/start`), a, env, true)),

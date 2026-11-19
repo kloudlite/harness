@@ -1134,3 +1134,8 @@ test("volume rename POSTs `to` under the owner and the name, and says so when th
     delete process.env.KD_TEAM;
   }
 });
+
+test("no env action takes a region: a team has one, and no create or fork chooses it", () => {
+  const props = (platformTools("main").find((x) => x.name === "env")!.inputSchema as any).properties;
+  expect(props.region).toBeUndefined();
+});
