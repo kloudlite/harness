@@ -335,6 +335,8 @@ const DEL_TAG = { type: "string", description: "Tag the snapshot this delete tak
 const DEL_VOLUME = { type: "string", description: "With `save`: the name its snapshot gives a volume that has none yet (else it takes the workspace's name)." };
 const DEL_MESSAGE = { type: "string", description: "With `save`: the message of its snapshot, default `before delete of <workspace name>`: a repeated delete finds the snapshot an earlier call handed back by it." };
 const SNAP_SOFT_MS = { type: "number", description: "How long it waits for the snapshot to be ready (default 25000); past it the answer says it is still being written." };
+const DISK = { type: "string", description: "The disk id (`disk.id` of a workspace or environment, or from `disk` `list`)." };
+const KEEP_DISK = { type: "boolean", description: "Keep the disk: it stays in its volume, detached, and `disk` `attach` puts it on a stopped workspace or environment later. Rare: code goes through git." };
 const DEL_SOFT_MS = { type: "number", description: "With `save`: how long it waits for its snapshot to be ready; past it the answer has `promoted: true` and nothing is deleted: call delete again, which takes no second snapshot." };
 const SKIP_HINT = "nothing was deleted; drop `save` and `tag` to delete without a snapshot";
 /** A commit an earlier delete cut and handed back is reused for this long: an older one may predate work done since. */
@@ -395,8 +397,12 @@ async function saveBeforeDelete(a: any, doc: any, settle: (s: any, ms: number) =
   const target: string | undefined = a.tag;
   if (a.skip_snapshot && (a.save || target !== undefined || a.volume !== undefined || a.message !== undefined)) throw new Error("`skip_snapshot: true` saves nothing, so it takes no `save`, `tag`, `volume` or `message`: drop them, or drop `skip_snapshot` to save first");
   const id: string = doc?.id ?? a.workspace;
-  if (id.startsWith("cap-") || doc?.device) return { saved: "nothing: a capsule or device workspace is deleted without a snapshot" };
+  if (id.startsWith("cap-") || doc?.device) {
+    if (a.keep_disk) throw new Error("a capsule or device workspace has no disk to keep; drop `keep_disk`");
+    return { saved: "nothing: a capsule or device workspace is deleted without a snapshot" };
+  }
   if (a.skip_snapshot) return { saved: "nothing (skip_snapshot)" };
+  if (a.keep_disk && !a.save && a.tag === undefined) return { saved: "nothing: the disk itself is kept" };
   const name: string = doc?.name ?? id;
   const rows = await apiJson<any[]>("GET", "/v1/volumes").catch(() => undefined);
   const row = Array.isArray(rows) ? rows.find((r) => r?.id === doc?.volume) : undefined;
@@ -597,14 +603,15 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
               const recorded = (d?.restarts?.length ?? 0) > n0 || (lastAt(d) !== undefined && JSON.stringify(lastAt(d)) !== last0);
               return JSON.stringify(recorded ? { ...d, restart: lastAt(d), hint: "restarted; restart_required is still set" } : { ...d, restart: null, hint: "the restart was accepted; its record follows on the next get" });
             }),
-            delete: mact({ save: SAVE, skip_snapshot: SKIP_SNAPSHOT, tag: DEL_TAG, volume: DEL_VOLUME, message: DEL_MESSAGE, soft_ms: DEL_SOFT_MS }, [], async (a) => {
+            delete: mact({ save: SAVE, skip_snapshot: SKIP_SNAPSHOT, tag: DEL_TAG, volume: DEL_VOLUME, message: DEL_MESSAGE, soft_ms: DEL_SOFT_MS, keep_disk: KEEP_DISK }, [], async (a) => {
               const ses = process.env.KD_DESK;
               const path = `/v1/workspaces/${seg(a.workspace)}`;
               const doc: any = JSON.parse(await api("GET", path));
               const saved = await saveBeforeDelete(a, doc, (s, ms) => settled(s, ms));
               if (saved.writing) return JSON.stringify(saved.writing, null, 2);
-              await api("DELETE", ses ? `/v1/desks/${seg(ses)}/workspaces/${seg(a.workspace)}` : path);
-              return JSON.stringify({ ...doc, state: "deleted", ...strip({ snapshot: saved.snapshot }), saved: saved.saved }, null, 2);
+              // `keep_disk` goes by the workspace's own route, the one that keeps a disk
+              await api("DELETE", a.keep_disk ? `${path}?keep_disk=true` : ses ? `/v1/desks/${seg(ses)}/workspaces/${seg(a.workspace)}` : path);
+              return JSON.stringify({ ...doc, state: "deleted", ...strip({ snapshot: saved.snapshot, kept_disk: a.keep_disk ? doc?.disk?.id : undefined }), saved: saved.saved }, null, 2);
             }),
             wait: mact({ timeout_ms: TIMEOUT }, [], async (a) => pollUntil(() => api("GET", `/v1/workspaces/${seg(a.workspace)}`), wsAny, timeoutMs(a), tickMs)),
             ttl: mact({ ttl_secs: TTL, clear: CLEAR }, [], async (a) => { const b = ttlBody(a); return typeof b === "string" ? b : (await api("PUT", `/v1/workspaces/${seg(a.workspace)}/ttl`, b), api("GET", `/v1/workspaces/${seg(a.workspace)}`)); }),
@@ -639,7 +646,7 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
             }),
             start: eact(WAITING, [], async (env, a) => thenWaitEnv(await api("POST", `/v1/environments/${env}/start`), a, env, true)),
             stop: eact(WAITING, [], async (env, a) => thenWaitEnv(await api("POST", `/v1/environments/${env}/stop`), a, env, false, stoppedDone)),
-            delete: eact({}, [], async (env) => deleting(`/v1/environments/${env}`, () => api("DELETE", `/v1/environments/${env}`))),
+            delete: eact({ keep_disk: KEEP_DISK }, [], async (env, a) => deleting(`/v1/environments/${env}`, () => api("DELETE", `/v1/environments/${env}${a.keep_disk ? "?keep_disk=true" : ""}`))),
             wait: eact({ timeout_ms: TIMEOUT }, [], async (env, a) => (await wake(env), waitEnv(env, a))),
             ttl: eact({ ttl_secs: TTL, clear: CLEAR }, [], async (env, a) => { const b = ttlBody(a); return typeof b === "string" ? b : (await api("PUT", `/v1/environments/${env}/ttl`, b), envView(env)); }),
             snapshot: eact({ message: SNAP_MESSAGE, volume: VOLUME, description: DESCRIPTION, labels: LABELS, tag: SNAP_TAG, soft_ms: SNAP_SOFT_MS }, ["message"], async (env, a) => {
@@ -884,6 +891,16 @@ function mainOnly(tickMs: number): ToolDef[] {
         }
         return JSON.stringify({ volume: a.volume, snapshot: a.snapshot, state: "deleted" }, null, 2);
       }),
+    }),
+    resource("disk", "Disks: the live storage of a workspace or environment, in a volume; a disk is attached to at most one, and a kept one waits detached. Actions: list (`volume` keeps one volume's), get, attach (put a detached disk on a STOPPED workspace or environment of the same owner and region; its current disk is detached and kept), detach (from a stopped one, which cannot start again until a disk is attached), delete (a detached disk, for good; its snapshots stay).", {
+      list: act({ volume: { type: "string", description: "A volume's id or name: keep only its disks." } }, [], async (a) => api("GET", `/v1/disks${qs({ volume: a.volume })}`)),
+      get: act({ disk: DISK }, ["disk"], async (a) => api("GET", `/v1/disks/${seg(a.disk)}`)),
+      attach: act({ disk: DISK, workspace: { type: "string", description: "The stopped workspace (id or name) the disk goes on. Give this or `environment`." }, environment: { type: "string", description: "The stopped environment (id or name) the disk goes on. Give this or `workspace`." } }, ["disk"], async (a) => {
+        if ((a.workspace === undefined) === (a.environment === undefined)) throw new Error("give one of `workspace` or `environment`: the stopped parent the disk goes on");
+        return api("POST", `/v1/disks/${seg(a.disk)}/attach`, strip({ workspace: a.workspace, environment: a.environment }));
+      }),
+      detach: act({ disk: DISK }, ["disk"], async (a) => api("POST", `/v1/disks/${seg(a.disk)}/detach`)),
+      delete: act({ disk: DISK }, ["disk"], async (a) => (await api("DELETE", `/v1/disks/${seg(a.disk)}`), JSON.stringify({ disk: a.disk, state: "deleted" }, null, 2))),
     }),
     resource("pipeline", "Pipelines: versioned definitions. Actions: list, get (a version, or the pipeline with its versions), save, delete (one version with `version`).", {
       list: act({ owner: OWNER_DEFAULT }, [], async (a) => api("GET", `/v1/pipelines/${seg(own(a))}`)),
