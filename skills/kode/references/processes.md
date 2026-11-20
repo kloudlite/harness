@@ -18,6 +18,15 @@ Wrong: `exec {cmd: "npm run dev &"}`. The server is untracked, dies when the exe
 
 ## 2. A long build or test suite
 
+A test suite of cargo, bun or the harness runs with `test`, not `exec`. It answers the counts and each failing test with its first error lines, and keeps the whole log in `~/notes/tests`:
+
+```
+test {workspace: "api", kind: "cargo", package: "api", filter: "auth::"}   -> {passed, failed, failures: [{name, error}], log}
+test {workspace: "api", id: "p-…"}                                          -> the same, once a run that handed off has exited
+```
+
+Any other long run (a build, a suite of another kind) goes as below.
+
 Right:
 
 ```
@@ -27,7 +36,9 @@ process {action: "wait", workspace: "api", id: "p-…", since: next, since_err: 
 exec {workspace: "api", cmd: "tail -n 40 ~/notes/test.log"}
 ```
 
-Call `wait` again while it answers `timed_out: true`, with `since` and `since_err` from the last answer. A remote connector cuts each wait at 20 s (a cut says `clamped`), so the loop is the same, only longer.
+Several at once (a build in one workspace, a test suite in another process): `wait {workspace, ids: ["p-1", "p-2"]}` answers when any one exits, `all: true` when every one has. It changes nothing, so a client runs it beside other calls.
+
+Call `wait` again while it answers `timed_out: true`, with `since` and `since_err` from the last answer. A remote connector cuts each wait at 20 s, or at 40 s when the client asks for progress (a cut says `clamped`), so the loop is the same, only longer.
 
 Wrong: `exec {cmd: "sleep 30; tail ~/notes/test.log"}` in a loop. Each call costs a turn and often a permission prompt, and it learns less than `wait`. Also wrong: `exec {cmd: "nohup cargo test &"}`, which is untracked and ends with its exec.
 

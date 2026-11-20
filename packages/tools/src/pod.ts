@@ -7,7 +7,7 @@ import { api, apiJson, seg } from "./platform.ts";
 import { resource, type Action } from "./actions.ts";
 import { ensureRunning } from "./ensure.ts";
 
-export const POD_TOOLS = ["read", "write", "edit", "glob", "grep", "exec", "process", "watch", "container_build", "container_push"];
+export const POD_TOOLS = ["read", "write", "edit", "glob", "grep", "exec", "process", "watch", "container_build", "container_push", "test", "wait"];
 
 /** The tools the pod serves one per verb, folded here into one tool per resource: `{action}` -> the pod's own tool.
  * The pod keeps `patch` and `process_close_stdin` for its HTTP users; `close_stdin` stays an action, `patch` is not forwarded. */
