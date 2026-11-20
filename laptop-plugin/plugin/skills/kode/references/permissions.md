@@ -7,7 +7,7 @@ Who may call each tool action. **C** is the coordinator, **W** is a worker (the 
 
 The runtime enforces the worker column for a worker with a brief: each **No** is refused (`{tool} {action} is the coordinator's; ask it with report need`), and so is a **Listed** action on a workspace off its list. **Own** and **When the task says so** are practice, which the runtime cannot judge. The column keeps what many sessions start from in one pair of hands.
 
-The one rule behind every row: a worker may do anything its task needs on its listed workspaces, and leaves the lifecycle of workspaces and environments to the coordinator. The coordinator may do anything inside the owner's quota, and asks a person only for what cannot be undone: `env` `restore` in place, the delete of a shared environment or of a volume, and an intercept on an environment that other people use.
+The one rule behind every row: a worker may do anything its task needs on its listed workspaces, and leaves the lifecycle of workspaces and environments to the coordinator. The coordinator may do anything inside the owner's quota, and asks a person only for what cannot be undone: `env` `restore`, the delete of a shared environment or of a volume, and an intercept on an environment that other people use.
 
 ## Reads (each agent, at any time)
 
@@ -64,7 +64,7 @@ The one rule behind every row: a worker may do anything its task needs on its li
 |---|---|---|---|
 | `env` `create` (services as data, or a fork with `source`) | Yes | No | A fork is a full environment slot; call `ttl` in the same turn |
 | `env` `start`, `stop`, `ttl`, `snapshot` | Yes | No | A snapshot holds the services, their configuration and the data |
-| `env` `restore` in place | Yes, after a yes from the person | No | It overwrites the current data |
+| `env` `restore` | Yes, after a yes from the person | No | It replaces the current disk, deleted unless `keep_disk` |
 | `env` `delete` | Yes | No | The data stays only in snapshots: snapshot first when the data has value |
 | `service` `add`, `update`, `remove` | Yes | When the task says so | A service that writes data gets a mount in the call that creates it |
 | `intercept` `start`, `stop` | Yes | When the task grants it; a shared environment only when the task names the service | Say it first on a shared environment; one workspace per service; stop it when done |

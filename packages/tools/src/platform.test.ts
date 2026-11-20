@@ -842,19 +842,14 @@ test("env restore takes source; snapshot_id is its alias there, and listed only 
   expect(props.snapshot_id.description).not.toContain("restore");
 });
 
-test("env restore with wait holds until the restore landed, not the running state it started in", async () => {
-  const t = platformTools("main", undefined, 5);
-  let n = 0;
-  routes["POST /v1/environments/e1/restore"] = json({ id: "e1", state: "running", services: [{ name: "db", ready: true }], restore_requested_at: "t0", restored_to: "s0" });
-  routes["GET /v1/environments/e1"] = () => {
-    n += 1;
-    // the first GET is the pre-restore read; the restore lands on the third poll
-    const landed = n >= 4;
-    return json({ id: "e1", state: "running", services: [{ name: "db" }], service_status: [{ name: "db", ready: true }], restore_requested_at: landed ? "t1" : "t0", restored_to: landed ? "s1" : "s0" })();
-  };
-  const out = JSON.parse(await tool(t, "env").run({ action: "restore", env: "e1", source: "s1", wait: true }));
-  expect(out.restored_to).toBe("s1");
-  expect(n).toBeGreaterThanOrEqual(4);
+test("env restore replaces the disk of a stopped environment, passes keep_disk, and answers the environment with what it did", async () => {
+  const t = platformTools("main");
+  routes["POST /v1/environments/e1/restore"] = json({ snapshot_id: "s1", disk: "d-1", kept_disk: "env-1" });
+  routes["GET /v1/environments/e1"] = json({ id: "e1", state: "stopped", services: [] });
+  const out = JSON.parse(await tool(t, "env").run({ action: "restore", env: "e1", source: "s1", keep_disk: true }));
+  expect(calls.find((c) => c.url === "/v1/environments/e1/restore")!.body).toEqual({ snapshot_id: "s1", keep_disk: true });
+  expect(out.state).toBe("stopped");
+  expect(out.restored).toEqual({ snapshot_id: "s1", disk: "d-1", kept_disk: "env-1" });
 });
 
 test("workspace restart answers the new restart record, or null with a hint on timeout", async () => {
