@@ -3,7 +3,7 @@
 Who may call each tool action. **C** is the coordinator, **W** is a worker (the `kode` skill, "Agent types and topologies"). One session that works alone holds both roles.
 
 - **Own:** for the coordinator, what it created in this desk; for a worker, the workspaces its task lists and what it starts on them (processes, capsules, intercepts).
-- **Shared:** a team environment, a named volume and its branches, a saved pipeline, or an object that another desk uses.
+- **Shared:** a team environment, a named volume and its tags, a saved pipeline, or an object that another desk uses.
 
 The runtime enforces the worker column for a worker with a brief: each **No** is refused (`{tool} {action} is the coordinator's; ask it with report need`), and so is a **Listed** action on a workspace off its list. **Own** and **When the task says so** are practice, which the runtime cannot judge. The column keeps what many sessions start from in one pair of hands.
 
@@ -19,7 +19,7 @@ The one rule behind every row: a worker may do anything its task needs on its li
 | `workspace`, `env` | `list`, `get`, `wait` | |
 | `capsule`, `run` | `list`, `get`, `wait`, `logs` | |
 | `volume`, `pipeline` | `list`, `get` | |
-| `memory` | `read`, `list` | Read it first in a new session: it names the volumes and the branch to start from |
+| `memory` | `read`, `list` | Read it first in a new session: it names the volumes and the tag to start from |
 | `service` | `logs` | |
 | `workspace_vars` | `get` | A secret shows as its reference, never as its value |
 | `packages` | `list` | |
@@ -39,9 +39,9 @@ The one rule behind every row: a worker may do anything its task needs on its li
 | Action | C | W | Rule |
 |---|---|---|---|
 | `create` (empty, or a fork with `source`) | Yes | No | Give a name that a person can read, a `task` that says why and `ttl_secs`. An empty workspace is for the first session of a project |
-| `fork` | Yes | No | It makes a new workspace from `name@base` (or the branch that `open-work` names) and checks it out, or from a live workspace in `source`; `name` is required; `ttl_secs` in the same call |
+| `fork` | Yes | No | It makes a new workspace from `name@base` (or another tag or snapshot), a new disk in the same volume, or from a live workspace in `source`; `name` is required; `ttl_secs` in the same call |
 | `start`, `stop`, `ttl` | Yes | No | A stop is a pause inside a session. Before the session ends, push, then delete: a plain `delete` takes no snapshot; `save: true` only when the environment changed |
-| `snapshot` | Yes | Listed, only when asked, with `branch` set to the branch that the task names (never `base`); without `volume`, `labels` and `description` | The `message` (required) says what changed and whether it is good. Naming a new volume, its `labels` and moving `base` are the coordinator's. A Worker in a fork under a plan file does not snapshot: the fork is detached, and its commit would sit on the base volume with no branch |
+| `snapshot` | Yes | Listed, only when asked, with `tag` set to the tag that the task names (never `base`); without `volume`, `labels` and `description` | The `message` (required) says what changed and whether it is good. Naming a new volume, its `labels` and moving `base` are the coordinator's. A Worker in a fork under a plan file does not snapshot: its code leaves through git |
 | `delete` | Yes | No | Push or report first. A code change alone is no reason for a volume commit: code reaches the next session through git (pushed to origin, unfinished work on a git branch; the next workspace pulls it). It takes no snapshot by default; `save: true` (from the clean merged default branch with a passing build) only when the environment changed; it refuses, naming the difference, when packages, image or variables changed since the base: `save: true` or `skip_snapshot: true`. No workspace stays between sessions |
 | `restart` | Yes | Listed | To read new variables |
 | `exec`, `process` | On a workspace no worker holds | Listed | The coordinator asks a worker or a capsule for the exit code and the end of the log |
@@ -73,12 +73,12 @@ The one rule behind every row: a worker may do anything its task needs on its li
 
 | Action | C | W | Rule |
 |---|---|---|---|
-| `snapshot` `delete` | Yes | No | Only a commit that no branch points at and nothing needs. Refused for a branch head and for the commit a live workspace was built from. Never the last commit: the volume goes with it |
+| `snapshot` `delete` | Yes | No | Only an untagged snapshot that nothing needs. Refused for a tagged snapshot and for the snapshot a live workspace was built from. Never the last snapshot: the volume goes with it |
 | `volume` `describe` | Yes | No | It sets the `description` and the `labels` of a named volume. A given value replaces the stored one |
-| `volume` `branch`, `delete_branch` | Yes | No | `branch` creates a lane or moves one: forward along its own lane, or back to its own earlier commit in a restore in place after the tail is kept on an `archived-YYYY-MM-DD` branch (convention 9); never onto another lane's commit. `base` goes only onto a state where a build or a test passed. `delete_branch` retires a lane, the owner's call |
+| `volume` `tag`, `untag` (`snapshot` `tag`, `untag`; old names `branch`, `delete_branch`) | Yes | No | `tag` puts a tag on a snapshot or moves it there. `base` goes only onto a state where a build or a test passed. `untag` removes a tag nobody starts from; the snapshot then expires 30 days after its last use |
 | `volume` `rename` | Yes, after a yes from the person | No | Every reference that spells the old name stops resolving. Update `memory` and the notes and scripts that name it in the same session |
 | `volume` `delete` | Yes, after a yes from the person | No | It removes each snapshot of a detached volume for good. Never a way to end a session: a volume stays |
-| `memory` `write` | Yes | No | It names only what lasts: volumes (name, contents, labels, the branch to start from), repositories, how to run, conventions, open work with its branch. Never a workspace, a desk or a running environment |
+| `memory` `write` | Yes | No | It names only what lasts: volumes (name, contents, labels, the tag to start from), repositories, how to run, conventions, open work with its git branch. Never a workspace, a desk or a running environment |
 
 ## Pipelines and runs
 

@@ -19,7 +19,7 @@ The branch or commit, or "nothing persisted". The files touched, one per line.
 The command, its exit code and the last 20 lines of its output. "Not verified" is an allowed answer. A claim without this section is not.
 
 ## Resources left
-Each storage commit or pipeline saved: the volume, the branch it is on (`name@node-22`) and its number, whether it is good or what is left, and what is inside. Each process or intercept still running, only when the task asked to keep it. Empty means nothing is left running.
+Each snapshot or pipeline save: the volume, the tag it carries (`name@node-22`) or untagged, and its number, whether it is good or what is left, and what is inside. Each process or intercept still running, only when the task asked to keep it. Empty means nothing is left running.
 
 ## Budget spent
 The model that ran (its class), the capsules used at the peak, the snapshots taken, the context used (approximately).

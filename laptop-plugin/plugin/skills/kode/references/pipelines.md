@@ -34,7 +34,7 @@ Every pipeline tool takes `owner`: the user's handle, or the team slug for a tea
 
 ## Refresh a base volume
 
-A nightly job that starts from a base branch, pulls, builds, and moves the branch only on success:
+A nightly job that starts from a base tag, pulls, builds, and moves the tag only on success:
 
 ```json
 {"name": "rust-refresh", "triggers": {"schedule": ["17 21 * * *"]},
@@ -47,7 +47,7 @@ A nightly job that starts from a base branch, pulls, builds, and moves the branc
 - The home is the volume's files, the clone included; the workspace's package profile is not, so list the job's `packages`.
 - `origin` and every submodule URL must be `https://github.com/...` (or `gitlab.com`) with no user name or token in it, so the credential helper answers; `permissions.git: read` gives it a read credential.
 - A job capsule has 1 CPU and 2 GiB: build with `-j 1`.
-- `run` `get` shows `saved.branch: base` when it moved. A `detail` naming the branch means someone moved it meanwhile; the commit is kept on no branch.
+- `run` `get` shows `saved.branch: base` when the tag moved (`branch` is the tag's old name). A `detail` naming the tag means someone moved it meanwhile; the snapshot is kept untagged.
 
 ## Pipeline
 
@@ -85,8 +85,8 @@ A trigger run takes every input's default. A required input with no default plus
 | `if` | `success()` | Bare or inside one `${{ }}` |
 | `packages` | `[]` | `attr` or `attr@version`; exclusive with `image` |
 | `image` | base image with `git` | A container image |
-| `fromSnapshot` | none | Home starts as a copy of `name@<branch>` (`shop-code@base`), `name@N` (a storage commit), `name` (its `base` branch, else its newest commit) or a snapshot id. Name the branch |
-| `saveTo` | none | A literal volume name, or `name@<branch>`; on exit 0 the home is the next storage commit, whose message is generated: `pipeline {pipeline} run #{n}, job {key}, from {start}` (`start` is `name@N` of the commit the home was forked from, else its id, or `an empty home`). `name` moves no branch. `name@<branch>` fast-forwards that branch onto it when the save is ready, only if the branch still points at the commit the home started from (else the commit stays on no branch and the job `detail` says why; the job still succeeds). Never `name@N`, `name@latest` or an id; not with `matrix`. A pipeline that saves to a name blocks a rename of that volume |
+| `fromSnapshot` | none | Home starts as a copy of `name@<tag>` (`shop-code@base`), `name@N` (a snapshot), `name` (its `base` snapshot, else its newest) or a snapshot id. Name the tag |
+| `saveTo` | none | A literal volume name, or `name@<tag>`; on exit 0 the home is the next snapshot, whose message is generated: `pipeline {pipeline} run #{n}, job {key}, from {start}` (`start` is `name@N` of the snapshot the home was forked from, else its id, or `an empty home`). `name` moves no tag. `name@<tag>` moves that tag onto it when the save is ready, only if the tag still points at the snapshot the home started from (else the snapshot stays untagged and the job `detail` says why; the job still succeeds). Never `name@N`, `name@latest` or an id; not with `matrix`. A pipeline that saves to a name blocks a rename of that volume |
 | `environment` | the pipeline's | `"staging"` shared, `{"clone": "staging"}` a copy per run |
 | `matrix` | none | axis to list; at most 64 combinations |
 | `timeoutMinutes` | 60 | 1 to 1440 |

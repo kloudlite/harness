@@ -123,14 +123,20 @@ const N = { type: "number" };
 const I = { type: "integer" };
 const SL = { type: "array", items: S };
 /** A snapshot reference, as `/v1` resolves it wherever a snapshot is named. */
-const SNAP_REF = "a volume name (its `base` branch, else its newest commit), `name@N`, `name@<branch>` or a snapshot id";
+const SNAP_REF = "a volume name (its snapshot tagged `base`, else its newest), `name@N`, `name@<tag>` or a snapshot id";
 /** What a volume says about itself, set at a push or with `volume describe`: a cold session picks its volumes from these. */
 const DESCRIPTION = { type: "string", description: "What the volume holds and what it is for (at most 500 characters). Set it on the first snapshot; a later value replaces it." };
 const LABELS = { type: "array", items: S, description: "Up to 8 short labels on the volume, for finding it (lowercase letters, digits, hyphens), such as the project name and `test`. A later value replaces the set." };
-/** A branch is a movable name on ONE storage commit of a volume, as a git branch is: `shop@base`. A push advances the
- * branch its source has checked out, so the argument is only for naming another one. */
-const SNAP_BRANCH = { type: "string", description: "The branch this storage commit goes on, such as `base` or `node-22` (read as `name@<branch>`): created or moved here, and checked out from then on. Omit it to advance the branch this was made from; if someone else moved that branch, the commit stays detached and the answer's `detached` says so. A volume's first commit makes `base`." };
-const BRANCH = { type: "string", description: "The branch name: lowercase letters, digits and hyphens (at most 32); not a number and not `latest`." };
+/** A tag is a name on ONE snapshot of a volume (`shop@base`), unique within it, moved only when asked (volumes phase 2:
+ * no checkout, no fast-forward). `branch` is its old name, accepted for one release. */
+const SNAP_TAG = { type: "string", description: "A tag for this snapshot, such as `base` or `node-22` (read as `name@<tag>`), moved here from wherever it was. Omit it and the snapshot is untagged: nothing moves, and it expires 30 days after its last use. A volume's first snapshot is tagged `base` when it names no tag." };
+const TAG = { type: "string", description: "The tag name: lowercase letters, digits and hyphens (at most 32); not a number and not `latest`." };
+const BRANCH_ALIAS = { type: "string", description: "The old name of `tag`, accepted until the next release: send `tag`." };
+/** The tag a call asks for: `tag`, else its old name `branch`. Both, differing, is refused before anything is done. */
+const tagOf = (a: any): string | undefined => {
+  if (a.tag !== undefined && a.branch !== undefined && a.tag !== a.branch) throw new Error("`tag` and `branch` differ; `branch` is the old name of `tag`: send `tag` alone");
+  return a.tag ?? a.branch ?? undefined;
+};
 const NAMED_VOLUME = { type: "string", description: "The volume's given name." };
 const OBJ = { type: "object" };
 const SERVICE = {
@@ -328,18 +334,18 @@ async function capsuleWait(path: string, limitMs: number, limit?: () => string):
 // 2026-11-18: "when deleting workspaces we don't need to snapshot every time.. only if there is any substantial change in
 // the dependencies"). A code change alone is no reason for a volume commit: code reaches the next session through git. The Rust port is
 // bins/runtime/src/tools/platform/ws_delete.rs, which says why each rule is what it is.
-const SAVE = { type: "boolean", description: "Snapshot first onto the checked-out branch (usually `base`), wait until the commit is ready, then delete: only when the workspace's environment changed in a way every later session wants (a dependency, toolchain, package or variable, a new repository, a warmed cache), from the clean merged default branch with the build passing. A code change alone is no reason for a volume commit: code reaches the next session through git (pushed to origin, unfinished work on a git branch; the next workspace pulls it). A snapshot that fails deletes nothing." };
-const SKIP_SNAPSHOT = { type: "boolean", description: "Delete with no snapshot even when the workspace's packages, image or variables differ from the commit it was made from (a plain delete refuses then, naming the difference)." };
-const DEL_BRANCH = { type: "string", description: "Save onto this branch of the volume instead of the checked-out one (implies `save`): created or moved there." };
+const SAVE = { type: "boolean", description: "Snapshot first, wait until it is ready, then delete (with `tag: \"base\"` it becomes the new `base`; without a tag it is untagged and expires 30 days after its last use): only when the workspace's environment changed in a way every later session wants (a dependency, toolchain, package or variable, a new repository, a warmed cache), from the clean merged default branch with the build passing. A code change alone is no reason for a volume commit: code reaches the next session through git (pushed to origin, unfinished work on a git branch; the next workspace pulls it). A snapshot that fails deletes nothing." };
+const SKIP_SNAPSHOT = { type: "boolean", description: "Delete with no snapshot even when the workspace's packages, image or variables differ from the snapshot it was made from (a plain delete refuses then, naming the difference)." };
+const DEL_TAG = { type: "string", description: "Tag the snapshot this delete takes (implies `save`), such as `base`: moved here from wherever it was." };
 const DEL_VOLUME = { type: "string", description: "With `save`: the name its snapshot gives a volume that has none yet (else it takes the workspace's name)." };
 const DEL_MESSAGE = { type: "string", description: "With `save`: the message of its snapshot, default `before delete of <workspace name>`: a repeated delete finds the snapshot an earlier call handed back by it." };
 const DEL_SOFT_MS = { type: "number", description: "With `save`: how long it waits for its snapshot to be ready; past it the answer has `promoted: true` and nothing is deleted: call delete again, which takes no second snapshot." };
-const SKIP_HINT = "nothing was deleted; drop `save` and `branch` to delete without a snapshot";
+const SKIP_HINT = "nothing was deleted; drop `save` and `tag` to delete without a snapshot";
 /** A commit an earlier delete cut and handed back is reused for this long: an older one may predate work done since. */
 const REUSE_MS = 1_800_000;
-/** Every storage commit has a message (owner, 2026-11-18): the api fills one for an older client, an agent says its own. */
-const SNAP_MESSAGE = { type: "string", description: "What this storage commit holds and why, in a few words, such as `add ripgrep; warm the cargo cache` (required: every commit has a message)." };
-const NO_MESSAGE = "error: a snapshot needs a `message`: say in a few words what this storage commit holds and why (such as `add ripgrep; warm the cargo cache`); nothing was saved";
+/** Every snapshot has a message (owner, 2026-11-18): the api fills one for an older client, an agent says its own. */
+const SNAP_MESSAGE = { type: "string", description: "What this snapshot holds and why, in a few words, such as `add ripgrep; warm the cargo cache` (required: every snapshot has a message)." };
+const NO_MESSAGE = "error: a snapshot needs a `message`: say in a few words what this snapshot holds and why (such as `add ripgrep; warm the cargo cache`); nothing was saved";
 const blank = (m: unknown) => typeof m !== "string" || !m.trim();
 
 const sentence = (m: string) => {
@@ -364,48 +370,48 @@ export function drift(cur: { image?: string; packages?: string[]; env?: Record<s
   return out.length ? [`changed since ${since}: ${out.join("; ")}`] : [];
 }
 
-/** The guard of a plain delete: a refusal when the workspace drifted from its base commit, a note when it could not tell. */
+/** The guard of a plain delete: a refusal when the workspace drifted from the snapshot it was made from (`disk.from`;
+ * `based_on_version` from an api before tags), a note when it could not tell. */
 async function baseGuard(doc: any, volName: string | undefined): Promise<{ refuse?: string; note?: string }> {
+  const from: string | undefined = doc?.disk?.from?.snapshot;
   const n = doc?.based_on_version;
-  if (typeof n !== "number" || !doc?.volume) return {};
-  const skipped = (why: string) => ({ note: `the comparison with its base commit was skipped (${why})` });
+  if ((typeof from !== "string" && typeof n !== "number") || !doc?.volume) return {};
+  const skipped = (why: string) => ({ note: `the comparison with the snapshot it was made from was skipped (${why})` });
   const h = await apiJson<any>("GET", `/v1/volumes/${seg(doc.volume)}/history`).catch(() => undefined);
   if (h === undefined) return skipped("the volume history could not be read");
   const rows: any[] = Array.isArray(h) ? h : Array.isArray(h?.history) ? h.history : [];
-  const state = rows.find((r) => r?.version === n)?.state;
-  if (state?.kind !== "workspace") return skipped(`v${n} carries no frozen workspace state`);
+  const row = typeof from === "string" ? rows.find((r) => r?.id === from) : rows.find((r) => r?.version === n);
+  const state = row?.state;
+  const label = typeof row?.version === "number" ? `v${row.version}` : (from ?? `v${n}`);
+  if (state?.kind !== "workspace") return skipped(`${label} carries no frozen workspace state`);
   const env = (await apiJson<any>("GET", `/v1/workspaces/${seg(doc.id)}/env`).catch(() => undefined))?.env;
-  const since = `${volName ?? doc.volume}${doc.branch ? `@${doc.branch}` : ""} v${n}`;
+  const tags: string[] = Array.isArray(row?.tags) ? row.tags : Array.isArray(row?.branches) ? row.branches : [];
+  const since = `${volName ?? doc.volume} ${label}${tags.length ? ` (${tags.join(", ")})` : ""}`;
   const d = drift({ image: doc.image, packages: doc.packages, env: env && typeof env === "object" ? env : undefined }, state, since);
   if (!d.length) return {};
-  const keep = doc.branch ? `\`save: true\` to keep them on ${doc.branch}` : "`save: true` with `branch` to keep them";
-  return { refuse: `workspace ${doc.name ?? doc.id} ${d[0]}; nothing was deleted: pass ${keep}, or \`skip_snapshot: true\` to drop them` };
+  return { refuse: `workspace ${doc.name ?? doc.id} ${d[0]}; nothing was deleted: pass \`save: true\` (with \`tag\`, such as \`base\`, to name it) to keep them, or \`skip_snapshot: true\` to drop them` };
 }
 
 type DeleteSave = { saved: string; snapshot?: any; writing?: any };
 
-/** Snapshot `doc` onto `branch` or its checked-out branch and wait for it when the call asks to save; else the guard.
+/** Snapshot `doc` (with the tag the call names, if any) and wait for it when the call asks to save; else the guard.
  * Any refusal or failure throws, so nothing is deleted. */
 async function saveBeforeDelete(a: any, doc: any, settle: (s: any, ms: number) => Promise<any>): Promise<DeleteSave> {
-  if (a.skip_snapshot && (a.save || a.branch !== undefined || a.volume !== undefined || a.message !== undefined)) throw new Error("`skip_snapshot: true` saves nothing, so it takes no `save`, `branch`, `volume` or `message`: drop them, or drop `skip_snapshot` to save first");
+  const target = tagOf(a);
+  if (a.skip_snapshot && (a.save || target !== undefined || a.volume !== undefined || a.message !== undefined)) throw new Error("`skip_snapshot: true` saves nothing, so it takes no `save`, `tag`, `volume` or `message`: drop them, or drop `skip_snapshot` to save first");
   const id: string = doc?.id ?? a.workspace;
   if (id.startsWith("cap-") || doc?.device) return { saved: "nothing: a capsule or device workspace is deleted without a snapshot" };
   if (a.skip_snapshot) return { saved: "nothing (skip_snapshot)" };
   const name: string = doc?.name ?? id;
   const rows = await apiJson<any[]>("GET", "/v1/volumes").catch(() => undefined);
   const row = Array.isArray(rows) ? rows.find((r) => r?.id === doc?.volume) : undefined;
-  if (!a.save && !a.branch) {
+  if (!a.save && !target) {
     if (a.volume !== undefined || a.message !== undefined) throw new Error("`volume` and `message` describe a save: add `save: true` to snapshot before deleting, or drop them; nothing was deleted");
     const g = await baseGuard(doc, row?.name);
     if (g.refuse) throw new Error(g.refuse);
     return { saved: `nothing: delete takes a snapshot only with \`save: true\`${g.note ? `; ${g.note}` : ""}` };
   }
-  const target: string | undefined = a.branch || doc?.branch || undefined;
-  if (!target) {
-    const unnamed = !row?.name && a.volume === undefined ? " (its volume has no name yet: it takes this workspace's name unless you pass `volume`)" : "";
-    throw new Error(`workspace ${name} has no branch checked out (a fork of a live workspace, a fork from a detached commit or one made empty), so \`save: true\` does not know where to save it; nothing was saved or deleted. Pass \`branch\` to save it on that branch of its volume${unnamed}, or drop \`save\` to delete it without a snapshot.`);
-  }
-  const was = row?.branches?.[target];
+  const was = target ? (row?.tags ?? row?.branches)?.[target] : undefined;
   const message: string = blank(a.message) ? `before delete of ${name}` : a.message.trim();
   let snapshot: any;
   if (doc?.volume) {
@@ -417,7 +423,8 @@ async function saveBeforeDelete(a: any, doc: any, settle: (s: any, ms: number) =
   }
   if (!snapshot) {
     try {
-      snapshot = JSON.parse(await api("POST", `/v1/workspaces/${seg(id)}/snapshots`, strip({ message, volume: a.volume, branch: a.branch })));
+      // `branch` is the tag's old name, which every api reads (a newer one reads `tag` too)
+      snapshot = JSON.parse(await api("POST", `/v1/workspaces/${seg(id)}/snapshots`, strip({ message, volume: a.volume, branch: target })));
     } catch (e) {
       const m = sentence((e as Error).message);
       throw new Error(`${m}; ${SKIP_HINT}${/volume/.test(m) && a.volume === undefined ? "; `volume` names the volume" : ""}`);
@@ -429,11 +436,11 @@ async function saveBeforeDelete(a: any, doc: any, settle: (s: any, ms: number) =
     return { saved: "", writing: { promoted: true, workspace: id, deleted: false, snapshot: s, hint: `snapshot ${vlabel(s)} is still being written, so nothing was deleted yet. Call delete again with the same arguments: it finds this snapshot instead of taking another, and deletes once it is ready.` } };
   }
   const vol: string = snapshot.name ?? row?.name ?? "?";
-  const on: string | undefined = snapshot.branch ?? (snapshot.detached === undefined && Array.isArray(snapshot.branches) && snapshot.branches.includes(target) ? target : undefined);
+  const listed: string[] = Array.isArray(snapshot.tags) ? snapshot.tags : Array.isArray(snapshot.branches) ? snapshot.branches : [];
+  const on: string | undefined = snapshot.tag ?? snapshot.branch ?? (target && listed.includes(target) ? target : listed[0]);
   if (on) return { snapshot, saved: `${on} is now ${vlabel(snapshot)}${on === target && typeof was === "number" ? ` (was v${was})` : ""} of volume ${vol}; the next session forks it with snapshot_id "${vol}@${on}"` };
-  const why = typeof snapshot.detached === "string" ? `${snapshot.detached}, so ` : "";
-  const expires = snapshot.expires_at ? `at ${snapshot.expires_at}` : "with the volume's default expiry";
-  return { snapshot, saved: `${why}${vlabel(snapshot)} of volume ${vol} is detached, NOT on ${target}; it expires ${expires} unless a branch is put on it. To make it ${target}: volume branch (volume "${vol}", branch "${target}", version ${snapshot.version ?? "N"})` };
+  const expires = snapshot.expires_at ? `at ${snapshot.expires_at}` : "30 days after its last use";
+  return { snapshot, saved: `${vlabel(snapshot)} of volume ${vol} is untagged: it expires ${expires} unless a tag is put on it (snapshot tag, volume "${vol}", snapshot "${snapshot.version ?? "N"}", tag "base")` };
 }
 
 /** Read the object, run the removal, answer the object as last read with `state: "deleted"`. */
@@ -534,8 +541,8 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
     const id = snapshot?.id; const vol = snapshot?.volume;
     if (!id || !vol || snapshot?.phase === "ready") return snapshot;
     const until = Date.now() + ms;
-    // what the push did to a branch is the push answer's alone: a history row must not hide it
-    const moved = strip({ branch: snapshot.branch, detached: snapshot.detached });
+    // the tag the snapshot answer named is its own: a history row read before the tag moved must not hide it
+    const moved = strip({ tag: snapshot.tag ?? snapshot.branch, branch: snapshot.branch });
     while (Date.now() < until) {
       await new Promise((r) => setTimeout(r, 1000));
       const rows = await apiJson<any[]>("GET", `/v1/volumes/${seg(vol)}/history`).catch(() => undefined);
@@ -545,15 +552,16 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
     }
     return { ...snapshot, note: "still being written; it lists in volume get once ready" };
   };
-  const snapAct = wact({ message: SNAP_MESSAGE, volume: VOLUME, description: DESCRIPTION, labels: LABELS, branch: SNAP_BRANCH }, ["message"], async (a) => {
+  const snapAct = wact({ message: SNAP_MESSAGE, volume: VOLUME, description: DESCRIPTION, labels: LABELS, tag: SNAP_TAG, branch: BRANCH_ALIAS }, ["message"], async (a) => {
     if (blank(a.message)) return NO_MESSAGE;
-    const snapshot = await settled(JSON.parse(await api("POST", `${wsPath(a)}/snapshots`, strip({ message: a.message, volume: a.volume, description: a.description, labels: a.labels, branch: a.branch }))));
+    // `branch` is the tag's old name, which every api reads (a newer one reads `tag` too)
+    const snapshot = await settled(JSON.parse(await api("POST", `${wsPath(a)}/snapshots`, strip({ message: a.message, volume: a.volume, description: a.description, labels: a.labels, branch: tagOf(a) }))));
     // the POST succeeded: a failed re-read must not turn a saved snapshot into an error
     try { return JSON.stringify({ ...JSON.parse(await api("GET", wsPath(a))), snapshot }, null, 2); }
     catch (e) { return JSON.stringify({ snapshot, note: `saved; the workspace was not re-read: ${(e as Error).message}` }, null, 2); }
   });
   tools.push(
-    resource("workspace", ws ? "This workspace. Actions: stop (snapshots first), snapshot (`message` required)." : "Workspaces: dev machines with a home volume. Actions: list, get, create (an empty one), fork (a new workspace from a live workspace or a storage commit; a fork never merges back), start, stop, restart, delete (no snapshot by default; it refuses, naming the difference, when packages, image or variables changed since the commit the workspace was made from: `save: true` snapshots onto the checked-out branch first, `skip_snapshot: true` drops them; capsules and device workspaces are deleted without a snapshot), wait, ttl, snapshot (`message` required), resize (`cpu` and/or `memory_gb`, within the owner's quota; a running workspace in a sandbox (gVisor) keeps the cpus and memory it started with until its next `restart`, so the answer says `resize.applies: at_restart` and `restart_required`, which `get` shows until the restart; `restart` applies it; a stopped one starts with it). A snapshot carries no size: create and fork take `cpu` and `memory_gb` for the job (default 4 CPU / 8 GB).",
+    resource("workspace", ws ? "This workspace. Actions: stop (snapshots first), snapshot (`message` required)." : "Workspaces: dev machines with a home volume. Actions: list, get, create (an empty one), fork (a new workspace from a live workspace or a storage commit; a fork never merges back), start, stop, restart, delete (no snapshot by default; it refuses, naming the difference, when packages, image or variables changed since the snapshot the workspace was made from: `save: true` snapshots first, with `tag` to tag it (`tag: \"base\"` makes it the new base), `skip_snapshot: true` drops them; capsules and device workspaces are deleted without a snapshot), wait, ttl, snapshot (`message` required; `tag` to tag it, else it is untagged), resize (`cpu` and/or `memory_gb`, within the owner's quota; a running workspace in a sandbox (gVisor) keeps the cpus and memory it started with until its next `restart`, so the answer says `resize.applies: at_restart` and `restart_required`, which `get` shows until the restart; `restart` applies it; a stopped one starts with it). A snapshot carries no size: create and fork take `cpu` and `memory_gb` for the job (default 4 CPU / 8 GB).",
       ws
         ? { ...(noStop ? {} : { stop: stopAct }), snapshot: snapAct }
         : {
@@ -596,7 +604,7 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
               const recorded = (d?.restarts?.length ?? 0) > n0 || (lastAt(d) !== undefined && JSON.stringify(lastAt(d)) !== last0);
               return JSON.stringify(recorded ? { ...d, restart: lastAt(d), hint: "restarted; restart_required is still set" } : { ...d, restart: null, hint: "the restart was accepted; its record follows on the next get" });
             }),
-            delete: mact({ save: SAVE, skip_snapshot: SKIP_SNAPSHOT, branch: DEL_BRANCH, volume: DEL_VOLUME, message: DEL_MESSAGE, soft_ms: DEL_SOFT_MS }, [], async (a) => {
+            delete: mact({ save: SAVE, skip_snapshot: SKIP_SNAPSHOT, tag: DEL_TAG, branch: BRANCH_ALIAS, volume: DEL_VOLUME, message: DEL_MESSAGE, soft_ms: DEL_SOFT_MS }, [], async (a) => {
               const ses = process.env.KD_DESK;
               const path = `/v1/workspaces/${seg(a.workspace)}`;
               const doc: any = JSON.parse(await api("GET", path));
@@ -641,9 +649,10 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
             delete: eact({}, [], async (env) => deleting(`/v1/environments/${env}`, () => api("DELETE", `/v1/environments/${env}`))),
             wait: eact({ timeout_ms: TIMEOUT }, [], async (env, a) => (await wake(env), waitEnv(env, a))),
             ttl: eact({ ttl_secs: TTL, clear: CLEAR }, [], async (env, a) => { const b = ttlBody(a); return typeof b === "string" ? b : (await api("PUT", `/v1/environments/${env}/ttl`, b), envView(env)); }),
-            snapshot: eact({ message: SNAP_MESSAGE, volume: VOLUME, description: DESCRIPTION, labels: LABELS, branch: SNAP_BRANCH }, ["message"], async (env, a) => {
+            snapshot: eact({ message: SNAP_MESSAGE, volume: VOLUME, description: DESCRIPTION, labels: LABELS, tag: SNAP_TAG, branch: BRANCH_ALIAS }, ["message"], async (env, a) => {
               if (blank(a.message)) return NO_MESSAGE;
-              const snapshot = await settled(JSON.parse(await api("POST", `/v1/environments/${env}/snapshots`, strip({ message: a.message, volume: a.volume, description: a.description, labels: a.labels, branch: a.branch }))));
+              // `branch` is the tag's old name, which every api reads (a newer one reads `tag` too)
+              const snapshot = await settled(JSON.parse(await api("POST", `/v1/environments/${env}/snapshots`, strip({ message: a.message, volume: a.volume, description: a.description, labels: a.labels, branch: tagOf(a) }))));
               try { return JSON.stringify({ ...JSON.parse(await envView(env)), snapshot }, null, 2); }
               catch (e) { return JSON.stringify({ snapshot, note: `saved; the environment was not re-read: ${(e as Error).message}` }, null, 2); }
             }),
@@ -776,6 +785,19 @@ function mainOnly(tickMs: number): ToolDef[] {
     if (!owner) throw new Error("`owner` is required: there is no desk team to default to");
     return owner;
   };
+  /** Put `tag` on one snapshot of the named volume (`version` or `snapshot`), moving it there. */
+  async function putTag(a: any, tag: string): Promise<string> {
+    // the route takes exactly one target; refused here so a model reads which, not a 422
+    if ((a.version === undefined) === (a.snapshot === undefined)) throw new Error("give exactly one of `version` or `snapshot`");
+    // the path is spelled at the call, as every /v1 call here is: the api's audience test reads this file for them
+    return api("PUT", `/v1/volumes/${seg(nameOwner(a))}/${seg(a.volume)}/tags/${seg(tag)}`, strip({ version: a.version, snapshot: a.snapshot }));
+  }
+
+  /** Remove `tag` from the named volume; its snapshot expires again unless another tag stays on it. */
+  async function dropTag(a: any, tag: string): Promise<string> {
+    await api("DELETE", `/v1/volumes/${seg(nameOwner(a))}/${seg(a.volume)}/tags/${seg(tag)}`);
+    return JSON.stringify({ volume: a.volume, tag, state: "deleted" }, null, 2);
+  }
   const pipe = (a: any) => `/v1/pipelines/${seg(own(a))}/${seg(a.pipeline)}`;
   const run = (a: any) => `${pipe(a)}/runs/${seg(a.run)}`;
   const secret = (a: any) => `/v1/secrets/${seg(a.owner ?? process.env.KD_TEAM)}${a.mine ? "/mine" : ""}`;
@@ -820,7 +842,7 @@ function mainOnly(tickMs: number): ToolDef[] {
         return JSON.stringify({ ...doc, state: "deleted" }, null, 2);
       }),
     }),
-    resource("volume", "Volumes: the stored state of workspaces and environments, each with a name, a description, labels and numbered storage commits; a branch is a movable name on one commit (`name@<branch>`) that a snapshot advances. Actions: list (filter by `label`), get (history with each commit's branches, and the newest commit), describe (set `description` and `labels`), branch (create a branch or move it onto a commit), delete_branch, rename (give the volume another name `to`: every commit, branch and the history stay, the old name stops resolving, so update references to it such as `old@base` in notes or scripts), delete a detached volume.", {
+    resource("volume", "Volumes: the stored state of workspaces and environments, each with a name, a description, labels, its disks and numbered snapshots; a tag is a name on one snapshot (`name@<tag>`), moved only when asked. Actions: list (filter by `label`), get (the snapshots with their tags, and the disks), describe (set `description` and `labels`), tag (put a tag on a snapshot, or move it there), untag, rename (give the volume another name `to`: every snapshot, tag and the history stay, the old name stops resolving, so update references to it such as `old@base` in notes or scripts), delete a detached volume. `branch` and `delete_branch` are the old names of tag and untag, accepted until the next release.", {
       list: act({ kind: S, owner: S, label: { type: "string", description: "Keep only volumes that carry this label." } }, [], async (a) => api("GET", `/v1/volumes${qs({ kind: a.kind, owner: a.owner, label: a.label })}`)),
       get: act({ volume: { type: "string", description: "The volume's id or its given name." } }, ["volume"], async (a) => {
         // /history and /refs are keyed by the volume id; a name given at a snapshot is a claim on the list row
@@ -831,23 +853,20 @@ function mainOnly(tickMs: number): ToolDef[] {
         const [history, refs] = await Promise.all([api("GET", `/v1/volumes/${seg(id)}/history?include=working`), api("GET", `/v1/volumes/${seg(id)}/refs`)]);
         // `working` and each row's `working_copies` come from the api untouched; an object answer ({history, working}) is spread, a bare list stays `history`
         const h = JSON.parse(history);
-        // the description, labels and branches ({branch: version}) live on the name claim, which only the list row carries;
-        // each history entry carries its own `branches` from the api
-        return JSON.stringify({ volume: a.volume, ...strip({ description: row?.description, labels: row?.labels, branches: row?.branches }), ...(Array.isArray(h) ? { history: h } : h), refs: JSON.parse(refs) }, null, 2);
+        // the description, labels and tags ({tag: version}) live on the name claim, which only the list row carries;
+        // each history entry carries its own `tags` from the api (`branches` from one before tags)
+        return JSON.stringify({ volume: a.volume, ...strip({ description: row?.description, labels: row?.labels, tags: row?.tags ?? row?.branches }), ...(Array.isArray(h) ? { history: h } : h), refs: JSON.parse(refs) }, null, 2);
       }),
       describe: act({ volume: NAMED_VOLUME, owner: OWNER_DEFAULT, description: DESCRIPTION, labels: LABELS }, ["volume"], async (a) => {
         // an empty string and an empty list are values (they clear), so only an absent field is left out
         if (a.description === undefined && a.labels === undefined) throw new Error("give `description` or `labels` (an empty string or an empty list clears)");
         return api("PATCH", `/v1/volumes/${seg(nameOwner(a))}/${seg(a.volume)}`, strip({ description: a.description, labels: a.labels }));
       }),
-      branch: act({ volume: NAMED_VOLUME, owner: OWNER_DEFAULT, branch: BRANCH, version: { ...I, description: "The storage commit the branch points at (the N of `name@N`). Give this or `snapshot`." }, snapshot: { type: "string", description: "The snapshot id the branch points at. Give this or `version`." } }, ["volume", "branch"], async (a) => {
-        // the route takes exactly one target; refused here so a model reads which, not a 422
-        if ((a.version === undefined) === (a.snapshot === undefined)) throw new Error("give exactly one of `version` or `snapshot`");
-        // the path is spelled at the call, as every /v1 call here is: the api's audience test reads this file for them
-        return api("PUT", `/v1/volumes/${seg(nameOwner(a))}/${seg(a.volume)}/branches/${seg(a.branch)}`, strip({ version: a.version, snapshot: a.snapshot }));
-      }),
-      delete_branch: act({ volume: NAMED_VOLUME, owner: OWNER_DEFAULT, branch: BRANCH }, ["volume", "branch"], async (a) => (await api("DELETE", `/v1/volumes/${seg(nameOwner(a))}/${seg(a.volume)}/branches/${seg(a.branch)}`), JSON.stringify({ volume: a.volume, branch: a.branch, state: "deleted" }, null, 2))),
-      rename: act({ volume: NAMED_VOLUME, owner: OWNER_DEFAULT, to: { type: "string", description: "The new name, by the rules of a first snapshot's volume name. Every commit, branch and the history stay; the old name stops resolving, so references to it (`old@base` in notes or scripts) must be updated." } }, ["volume", "to"], async (a) => {
+      tag: act({ volume: NAMED_VOLUME, owner: OWNER_DEFAULT, tag: TAG, version: { ...I, description: "The snapshot the tag goes on (the N of `name@N`). Give this or `snapshot`." }, snapshot: { type: "string", description: "The snapshot id the tag goes on. Give this or `version`." } }, ["volume", "tag"], async (a) => putTag(a, a.tag)),
+      untag: act({ volume: NAMED_VOLUME, owner: OWNER_DEFAULT, tag: TAG }, ["volume", "tag"], async (a) => dropTag(a, a.tag)),
+      branch: act({ volume: NAMED_VOLUME, owner: OWNER_DEFAULT, branch: { ...TAG, description: "The tag name (`branch` is the old name of `tag`)." }, version: { ...I, description: "The snapshot the tag goes on (the N of `name@N`). Give this or `snapshot`." }, snapshot: { type: "string", description: "The snapshot id the tag goes on. Give this or `version`." } }, ["volume", "branch"], async (a) => putTag(a, a.branch)),
+      delete_branch: act({ volume: NAMED_VOLUME, owner: OWNER_DEFAULT, branch: { ...TAG, description: "The tag name (`branch` is the old name of `tag`)." } }, ["volume", "branch"], async (a) => dropTag(a, a.branch)),
+      rename: act({ volume: NAMED_VOLUME, owner: OWNER_DEFAULT, to: { type: "string", description: "The new name, by the rules of a first snapshot's volume name. Every snapshot, tag and the history stay; the old name stops resolving, so references to it (`old@base` in notes or scripts) must be updated." } }, ["volume", "to"], async (a) => {
         const r = await raw("POST", `/v1/volumes/${seg(nameOwner(a))}/${seg(a.volume)}/rename`, { to: a.to });
         // the api's own refusals always carry a sentence; an empty 404/405 is a router without the route
         if (!r.unavailable && (r.status === 404 || r.status === 405) && !r.text.trim()) throw new Error(NO_RENAME);
@@ -855,7 +874,10 @@ function mainOnly(tickMs: number): ToolDef[] {
       }),
       delete: act({ volume: S }, ["volume"], async (a) => (await api("DELETE", `/v1/volumes/${seg(a.volume)}`), JSON.stringify({ volume: a.volume, state: "deleted" }, null, 2))),
     }),
-    resource("snapshot", "Snapshots of a volume. Action: delete one.", {
+    resource("snapshot", "Snapshots of a volume. Actions: delete one (refused while it carries a tag: untag it first), tag (put a tag on it, or move the tag there), untag.", {
+      tag: act({ volume: NAMED_VOLUME, owner: OWNER_DEFAULT, snapshot: { type: "string", description: "The snapshot: its number (the N of `name@N`) or its id." }, tag: TAG }, ["volume", "snapshot", "tag"], async (a) =>
+        putTag(/^\d+$/.test(String(a.snapshot)) ? { ...a, version: Number(a.snapshot), snapshot: undefined } : a, a.tag)),
+      untag: act({ volume: NAMED_VOLUME, owner: OWNER_DEFAULT, tag: TAG }, ["volume", "tag"], async (a) => dropTag(a, a.tag)),
       delete: act({ volume: S, snapshot: S }, ["volume", "snapshot"], async (a) => {
         // the route is keyed by the volume id; a display name resolves from the list rows as `volume get` does (a fork shares its source's row)
         const rows: any[] = await apiJson<any[]>("GET", "/v1/volumes").then((r) => (Array.isArray(r) ? r : [])).catch(() => []);

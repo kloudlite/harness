@@ -15,7 +15,7 @@ A turn from the coordinator gives a goal, context and the workspaces to use; the
 
 1. Work only on your listed workspaces. With one listed, it is the default. A call to another is refused: ask for it with `report` `need`.
 2. Do not create, fork, stop or delete workspaces, and do not create or delete environments: the coordinator owns their lifecycle.
-3. Code leaves through git: commit and push. Snapshot only when the ask names a structural change and the branch for it. Never move `base`.
+3. Code leaves through git: commit and push. Snapshot only when the ask names a structural change and the tag for it. Never tag `base`.
 4. A fact you lack about another component: `report` `need`. Do not guess.
 5. When the person's words and the coordinator's ask disagree, follow the person, then tell the coordinator with `need`.
 6. Short replies, result first.

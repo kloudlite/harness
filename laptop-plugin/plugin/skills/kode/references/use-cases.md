@@ -2,7 +2,7 @@
 
 Each case names the topology, the worker template (`worker-templates.md`), the steps as tool calls and the end state. Find the nearest case, then adapt it. The last section shows how to compose a new one. The examples use the team `acme`, the environment `shop` with the services `web`, `api`, `worker` and `db`, the workspace volume `shop-code` and the environment volume `shop-env`.
 
-Every case starts and ends the same way, so the cases do not repeat it. **Start** (convention 15 of the skill): read the memory, find the volume by its label, `workspace` `fork` from `shop-code@base` (a checkout of `base`), then `ttl`, then pull. **End** (convention 16): stop each intercept, push and merge, `memory` `write`, delete each workspace and each environment copy. A code change alone is no reason for a volume commit: code reaches the next session through git (pushed to origin, unfinished work on a git branch; the next workspace pulls it). `workspace` `delete` takes no snapshot by default. The main workspace refreshes the base only when the environment changed (a dependency, toolchain, package or variable, a new repository, a warmed cache; convention 8: the clean merged default branch checked out, its build or test passed, then `delete` with `save: true`, so `base` advances). A plain delete refuses, naming the difference, when packages, image or variables changed since the base: `save: true` keeps them, `skip_snapshot: true` drops them. Unfinished code is pushed to a git branch on origin and `open-work` names it. "Main workspace" is the one forked from the project volume; a fork, a capsule and a copy of an environment are deleted without a snapshot.
+Every case starts and ends the same way, so the cases do not repeat it. **Start** (convention 15 of the skill): read the memory, find the volume by its label, `workspace` `fork` from `shop-code@base` (a checkout of `base`), then `ttl`, then pull. **End** (convention 16): stop each intercept, push and merge, `memory` `write`, delete each workspace and each environment copy. A code change alone is no reason for a volume commit: code reaches the next session through git (pushed to origin, unfinished work on a git branch; the next workspace pulls it). `workspace` `delete` takes no snapshot by default. The main workspace refreshes the base only when the environment changed (a dependency, toolchain, package or variable, a new repository, a warmed cache; convention 8: the clean merged default branch checked out, its build or test passed, then `delete` with `save: true, tag: "base"`, so `base` moves onto it). A plain delete refuses, naming the difference, when packages, image or variables changed since the base: `save: true` keeps them, `skip_snapshot: true` drops them. Unfinished code is pushed to a git branch on origin and `open-work` names it. "Main workspace" is the one forked from the project volume; a fork, a capsule and a copy of an environment are deleted without a snapshot.
 
 | # | Use case | Topology | Template | Environment slots | Workspace slots |
 |---|---|---|---|---|---|
@@ -35,7 +35,7 @@ Every case starts and ends the same way, so the cases do not repeat it. **Start*
 ## 3. Try N approaches, keep the best
 
 **Steps.** Coordinator: `quota` gives N. `workspace` `fork` with `source`, N forks of the main workspace, each with a `task` that names its approach and a short TTL. N Throwaway workers, one fork each, with the same success command. Each worker runs and writes `REPORT.md`. The coordinator compares the reports, deletes the forks (`skip_snapshot: true`), picks one approach and gives a Solo worker the main workspace to do the winner correctly.
-**End.** No fork stays and none is snapshotted: a fork is detached, so its commit would sit on the base volume with no branch. The standard end for the main workspace.
+**End.** No fork stays and none is snapshotted: code leaves through git, and a fork's disk goes with it. The standard end for the main workspace.
 
 ## 4. Change frontend and backend together
 
@@ -55,18 +55,18 @@ Every case starts and ends the same way, so the cases do not repeat it. **Start*
 ## 7. Reproduce a data-dependent bug safely
 
 **Steps.** Coordinator: `env` `fork` with `source` `shop` and `ttl_secs`; `desk` `connect` to the copy. Now change data, drop tables and stop services freely. Repair as in case 2.
-**End.** `desk` `connect` back to `shop`; the copy deleted. If other people need the broken state, `env` `snapshot` the copy first: it becomes a commit of the `shop-env` volume, because a copy shares its source's volume. The copy is detached, so put the commit on its own branch (`branch: "bug-1432"`), never `base`, say in the `message` that the data is broken, and delete the branch when the bug is closed.
+**End.** `desk` `connect` back to `shop`; the copy deleted. If other people need the broken state, `env` `snapshot` the copy first: it becomes a snapshot of the `shop-env` volume, because a copy shares its source's volume. Give it a tag of its own (`tag: "bug-1432"`), never `base`, say in the `message` that the data is broken, and `volume` `untag` it when the bug is closed.
 
 ## 8. Verify a release end to end
 
 **Steps.** The coordinator forks `shop` one time, with `ttl_secs`. One Desk verification brief for each subsystem, each with its own intercepts in the copy. The workers run in parallel, and each leaves `REPORT.md`. The coordinator merges the verdicts.
-**End.** The copy deleted, each fork deleted, one combined report. A release that passed is a good moment for a branch of its own: `volume` `branch` with `branch: "release-12"` on the commit that was tested.
+**End.** The copy deleted, each fork deleted, one combined report. A release that passed is a good moment for a tag of its own: `volume` `tag` with `tag: "release-12"` on the snapshot that was tested.
 
 ## 9. Bake a golden toolchain, and refresh it
 
 **Steps, first time.** Coordinator: `workspace` `create` with the full package list and `ttl_secs`. Solo worker: clone the repositories, install what nixpkgs lacks into the home folder, fill the caches, run one build. Coordinator: `workspace` `snapshot` with `volume: "acme-node"`, a `description` that says what is inside and what it is for, `labels` with the project name and a `message`; the first commit makes `base`.
-**Steps, refresh.** A base is refreshed, never edited in place. `workspace` `fork` from `acme-node@base`, then `ttl`. Pull the latest code. `packages` `update`. Run one build or one test: a state that does not build never goes on `base`. `volume` `describe` with a new `description` when the contents changed, then `workspace` `delete` with `save: true` and a `message` that says what changed: it snapshots onto the checked-out `base`, which advances to the new commit, then deletes. A build that fails moves no base: delete with `skip_snapshot: true` and say so in `open-work`. Refresh when the pull or the package update costs each session more than a few minutes.
-**End.** The workspace deleted, each time. `memory` `write`: the volume, what is inside, `@base`. The commit that `base` left is on no branch: it expires 30 days after its last use, or delete it now with `snapshot` `delete` when nothing needs it.
+**Steps, refresh.** A base is refreshed, never edited in place. `workspace` `fork` from `acme-node@base`, then `ttl`. Pull the latest code. `packages` `update`. Run one build or one test: a state that does not build never goes on `base`. `volume` `describe` with a new `description` when the contents changed, then `workspace` `delete` with `save: true, tag: "base"` and a `message` that says what changed: it snapshots, moves `base` onto the new snapshot, then deletes. A build that fails moves no base: delete with `skip_snapshot: true` and say so in `open-work`. Refresh when the pull or the package update costs each session more than a few minutes.
+**End.** The workspace deleted, each time. `memory` `write`: the volume, what is inside, `@base`. The snapshot that `base` left is untagged: it expires 30 days after its last use, or delete it now with `snapshot` `delete` when nothing needs it.
 
 ## 10. Make a repeated check automatic
 
@@ -76,13 +76,13 @@ Every case starts and ends the same way, so the cases do not repeat it. **Start*
 ## 11. Scheduled integration test
 
 **Steps.** No session. A saved pipeline with a schedule. Each job runs in a capsule against the environment, reaches the services by name and ends. A failed run is what calls a coordinator.
-**End.** Nothing to remove: the capsules end by themselves. A commit that a job saves with `saveTo` is on no branch and expires after 30 days like any other; a job that reads `name@base` keeps using the commit that `base` points at.
+**End.** Nothing to remove: the capsules end by themselves. A snapshot that a job saves with `saveTo: name` is untagged and expires after 30 days like any other; a job that reads `name@base` keeps using the snapshot that `base` is on.
 
 ## 12. Continue the unfinished work of yesterday
 
 **Steps.** Yesterday's session ended with its commits pushed to the git branch `feat/auth` on origin (with `REPORT.md` committed there), a line in `open-work` of the memory naming the repository, that git branch and what is left, and a plain `workspace` `delete`. A code change alone is no reason for a volume commit: code reaches the next session through git (pushed to origin, unfinished work on a git branch; the next workspace pulls it). `base` still points at the last good environment. Coordinator today: `status`, `memory` `read`, `workspace` `fork` from `shop-code@base`, then `ttl`. A Solo brief that names the workspace and the git branch. Worker: pull, `git checkout feat/auth`, read `REPORT.md`, continue.
 **End.** Finished: merge, remove the line from `open-work`, delete the workspace (with `save: true` only when the environment changed). Not finished: push again, update `open-work`, delete the workspace. No workspace stays stopped overnight.
-**Which volume.** A workspace saves into the volume that it came from: forked from `shop-code`, its snapshot is the next commit of `shop-code`, and another `volume` name is refused with a `409`. A branch other than `base` (`node-22`) is for environment state that is not ready for every session yet; delete it when it is merged into `base` or dropped.
+**Which volume.** A workspace saves into the volume that it came from: forked from `shop-code`, its snapshot is the next snapshot of `shop-code`, and another `volume` name is refused with a `409`. A tag other than `base` (`node-22`) is for environment state that is not ready for every session yet; untag it when `base` has the change or it is dropped.
 
 ## 13. Bring a new repository into Kode (the first session)
 

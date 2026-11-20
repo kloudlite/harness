@@ -14,7 +14,7 @@ The status comes first; the body is one sentence. Report it as it is, then take 
 | `409 the storage pool is full; retry later or ask an operator` | Tell the user. |
 | `409 a snapshot is already being cut for this workspace` | Wait, read the volume history, do not repeat. |
 | `409 this snapshot is the base of …` / `… is where … stands now (its latest push)` | A live workspace or environment was built from it or last pushed it. Delete that workspace first (after its own snapshot), or keep the commit. |
-| `409 commit {N} is the head of branch {b}; move or delete the branch first` | The commit is a lane's head and stays: nothing is removed from the tree (convention 10). Keep it. A lane is retired, with `volume` `delete_branch`, only when the owner says so; never move a branch just to delete a commit. |
+| `409 snapshot {N} is tagged {t}; move or delete the tag first` | A tagged snapshot is kept. Keep it, or `volume` `untag` it first when nobody starts from that tag any more; never untag `base` to delete its snapshot. |
 | `409 the volume still has a workspace or environment` | Delete the owner first, if the user asked. |
 | `409 this desk has no environment; connect one…` | `desk` `connect` with `environment`. |
 | `409 conflict, retry` / `the desk changed; retry` / `volume {name} is being changed; retry` | Read again, repeat once. |
@@ -26,10 +26,10 @@ The status comes first; the body is one sentence. Report it as it is, then take 
 | `409 volume {name} is used by {readers}` | A pipeline reads it. Tell the user. |
 | `409 volume name {to} is taken` | A volume of the owner already has that name. Ask for another name. |
 | `404` or `405` with no sentence on `volume` `rename`, or `volume rename is not available on this platform's api yet` | The platform does not have rename yet. Nothing was renamed; tell the user. |
-| `404 volume {name} has no commit {n}` / `has no branch {b}` / `has no ready version` | Read `volume` `get`: it lists the commits and the branches. A `base` that is gone means that nobody put a good commit on it: ask which commit is good. |
-| `422 branch: "X" must be lowercase letters, digits and hyphens (at most 32), and not a number or "latest"` | Pick another branch name. |
-| `422 labels: …` / `branches: at most 16 on one volume` | Fix the list; delete a branch that nobody uses with `volume` `delete_branch`. |
-| A snapshot answers `detached: "branch {B} moved …"` | Another session moved that branch since you checked it out; your commit is on no branch, and volumes do not merge. Let go: push the code, `snapshot` `delete` your commit, and when the structural change is still needed, redo it on a fresh fork of `{B}` and save that. Never move `{B}` back to yours (convention 9). |
+| `404 volume {name} has no commit {n}` / `has no tag {t}` / `has no ready version` | Read `volume` `get`: it lists the snapshots and their tags. A `base` that is gone means that nobody put it on a good snapshot: ask which one is good. |
+| `422 tag: "X" must be lowercase letters, digits and hyphens (at most 32), and not a number or "latest"` | Pick another tag name. |
+| `422 labels: …` / `tags: at most 16 on one volume` | Fix the list; remove a tag that nobody uses with `volume` `untag`. |
+| A snapshot answer says it is `untagged` | It moved no tag and expires 30 days after its last use. Tag it only if a session should start there (`snapshot` `tag`), or let it expire. |
 | `no git connector of {owner} covers {host}/{repo}` | The user connects the code host in the web console. |
 | `link your GitHub account to push: …` / `your GitHub link has expired; link it again` | The person links GitHub in the web console (Settings, Connectors). Until then the work is an unfinished snapshot, not a push. |
 | `connector {name} can only read` | The connector's GitHub App has no write on contents. Tell the user; leave the work as an unfinished snapshot. |
