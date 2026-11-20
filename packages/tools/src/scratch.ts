@@ -1,6 +1,5 @@
-//! The hands of a conversation that runs outside any workspace pod (the coordinator's `main` key):
-//! `bash`, `read`, `write`, confined to one scratch folder, since codemode scripts need a shell and a
-//! place for files. The confinement keeps the
+//! The hands of a session that runs outside any workspace pod: `bash`, `read`, `write`, confined to
+//! one scratch folder, a shell and a place for files. The confinement keeps the
 //! runtime's home, the owner's keys and every other netgroup out of reach: paths are checked against the
 //! real (symlink-resolved) root, and bash runs in fresh namespaces where only that folder is visible.
 //! Work inside a workspace uses the pod's tools (pod.ts) instead.

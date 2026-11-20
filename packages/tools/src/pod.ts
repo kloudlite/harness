@@ -207,7 +207,7 @@ export async function podTools(ws: string, o: { ensure?: typeof ensureRunning } 
       } catch {}
       throw new Error(`${label} ${res!.status}: ${msg}`);
     } catch (e: any) {
-      // a failed call throws (a codemode script stops, a direct call shows as failed); a command that ran and exited non-zero is a 200 and stays a result
+      // a failed call throws, so it shows as failed; a command that ran and exited non-zero is a 200 and stays a result
       if (e instanceof Mapped) throw e;
       if (e instanceof NotReady) throw new Error(`${label}: workspace not ready: ${e.message}`);
       throw e?.message?.startsWith(`${label} `) ? e : new Error(`${label}: ${e?.message ?? e}`);

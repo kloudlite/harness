@@ -10,7 +10,7 @@ const NOT_FOR_SKILLS = ["task"];
 test("references/tools.md lists exactly the served tools, and no other", async () => {
   // what the runtime serves (scripts/dump-schemas.ts), plus the tools it implements itself
   const tools = [webFetch, webSearch, ...(await anyPodTools()), ...platformTools("all")];
-  const served = new Set([...tools.map((t) => t.name), ...DOOR, "status", "task", "codemode"]);
+  const served = new Set([...tools.map((t) => t.name), ...DOOR, "status", "task"]);
   const doc = readFileSync(join(import.meta.dir, "kode/references/tools.md"), "utf8");
   const named = new Set<string>();
   for (const l of doc.split("\n")) if (l.startsWith("| `") && !l.startsWith("| ---")) for (const m of l.split("|")[1]!.matchAll(/`([a-z_]+)`/g)) named.add(m[1]!);

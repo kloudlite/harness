@@ -52,7 +52,7 @@ function show(r: Raw): string {
   return r.data === undefined ? r.text : JSON.stringify(r.data, null, 2);
 }
 
-/** One call, rendered for the model. A non-2xx answer throws, so a direct call shows as failed and a codemode script stops. */
+/** One call, rendered for the model. A non-2xx answer throws, so the call shows as failed. */
 export async function api(method: string, path: string, body?: unknown, asText = false): Promise<string> {
   return show(await raw(method, path, body, asText));
 }

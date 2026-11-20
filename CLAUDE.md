@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 The agent-facing side of Kode, a Bun monorepo:
 
-- `skills/` — the skills: `kode` (the platform, its rules and how to choose), `caveman`, `codemode`. `kode` is the one the plugin ships.
+- `skills/` — the skills: `kode` (the platform, its rules and how to choose) and `caveman`. `kode` is the one the plugin ships.
 - `laptop-plugin/` — the Claude Code and Codex plugin: the remote `kd` MCP server and the `kode` skill (`plugin/skills/` is a copy, made by `laptop-plugin/sync-skills.sh`). Pushing `main` publishes it.
 - `packages/tools` — the tool definitions (names, descriptions, schemas) the Kode runtime serves; `scripts/dump-schemas.ts` writes them out for the runtime's fixture (kode `bins/runtime/tests/fixtures/tool-schemas.json`).
 
