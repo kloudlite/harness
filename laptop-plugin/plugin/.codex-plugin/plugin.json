@@ -1,6 +1,6 @@
 {
   "name": "kode",
-  "version": "0.12.25",
+  "version": "0.12.26",
   "description": "Kode workspaces, environments and desks from Codex and ChatGPT: the remote kd MCP server and the skills; sign in in the browser on the first tool call.",
   "author": {
     "name": "Kloudlite"
