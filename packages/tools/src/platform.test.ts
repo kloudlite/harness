@@ -350,7 +350,7 @@ test("workspace delete saves only with save: true (tagged with `tag`, else untag
   const posts = () => calls.filter((c) => c.method === "POST");
   routes["GET /v1/workspaces/w1"] = json({ id: "w1", name: "shop", volume: "vol-1", disk: { id: "w1" } });
   routes["GET /v1/volumes"] = json([{ id: "vol-1", name: "shop", tags: { base: 2 } }]);
-  routes["GET /v1/volumes/vol-1/history"] = json([]);
+  routes["GET /v1/volumes/vol-1"] = json({ snapshots: [] });
   routes["DELETE /v1/workspaces/w1"] = () => new Response(null, { status: 204 });
   routes["POST /v1/workspaces/w1/snapshots"] = json({ id: "s3", phase: "ready", volume: "vol-1", name: "shop", version: 3, tag: "base" }, 202);
   // the default: no snapshot (this workspace was made empty, so nothing to compare)
@@ -393,7 +393,7 @@ test("a plain delete refuses when packages or variables drifted from the snapsho
   const deletes = () => calls.filter((c) => c.method === "DELETE").length;
   routes["GET /v1/workspaces/w1"] = json({ id: "w1", name: "web", volume: "vol-1", disk: { id: "w1", from: { snapshot: "s2" } }, image: "img", packages: ["git", "ripgrep"] });
   routes["GET /v1/volumes"] = json([{ id: "vol-1", name: "kode-web", tags: { base: 2 } }]);
-  routes["GET /v1/volumes/vol-1/history"] = json([{ id: "s2", version: 2, tags: ["base"], state: { kind: "workspace", image: "img", packages: ["git", "jq"], env: { GH_PUSH_PAT: "${{ secrets.A }}" } } }]);
+  routes["GET /v1/volumes/vol-1"] = json({ snapshots: [{ id: "s2", version: 2, tags: ["base"], state: { kind: "workspace", image: "img", packages: ["git", "jq"], env: { GH_PUSH_PAT: "${{ secrets.A }}" } } }] });
   routes["GET /v1/workspaces/w1/env"] = json({ env: { GH_PUSH_PAT: "${{ secrets.B }}" } });
   routes["DELETE /v1/workspaces/w1"] = () => new Response(null, { status: 204 });
   await expect(del()).rejects.toThrow("workspace web changed since kode-web v2 (base): packages (+ripgrep, -jq); variables (GH_PUSH_PAT); nothing was deleted: pass `save: true` (with `tag`, such as `base`, to name it) to keep them, or `skip_snapshot: true` to drop them");
@@ -404,7 +404,7 @@ test("a plain delete refuses when packages or variables drifted from the snapsho
   routes["GET /v1/workspaces/w1"] = json({ id: "w1", name: "web", volume: "vol-1", disk: { id: "w1", from: { snapshot: "s2" } }, image: "img", packages: ["git", "jq"] });
   expect(JSON.parse(await del()).saved).toBe("nothing: delete takes a snapshot only with `save: true`");
   // an unreadable base does not block: it deletes and says the comparison was skipped
-  routes["GET /v1/volumes/vol-1/history"] = json({ error: "boom" }, 500);
+  routes["GET /v1/volumes/vol-1"] = json({ error: "boom" }, 500);
   expect(JSON.parse(await del()).saved).toContain("the comparison with the snapshot it was made from was skipped");
   expect(deletes()).toBe(3);
 });
@@ -423,12 +423,12 @@ test("a delete handed back while its snapshot is written is finished by the next
   const t = tool(platformTools("main"), "workspace");
   routes["GET /v1/workspaces/w1"] = json({ id: "w1", name: "shop", volume: "vol-1" });
   routes["GET /v1/volumes"] = json([{ id: "vol-1", name: "shop", tags: { base: 2 } }]);
-  routes["GET /v1/volumes/vol-1/history"] = json([]);
+  routes["GET /v1/volumes/vol-1"] = json({ snapshots: [] });
   routes["DELETE /v1/workspaces/w1"] = () => new Response(null, { status: 204 });
   routes["POST /v1/workspaces/w1/snapshots"] = json({ id: "s3", phase: "writing", volume: "vol-1", name: "shop", version: 3, tag: "base" }, 202);
   const first = JSON.parse(await t.run({ action: "delete", workspace: "w1", tag: "base", soft_ms: 1500 }));
   expect([first.promoted, first.deleted, first.snapshot.id]).toEqual([true, false, "s3"]);
-  routes["GET /v1/volumes/vol-1/history"] = json([{ id: "s3", phase: "ready", version: 3, message: "before delete of shop", createdAt: new Date().toISOString(), tags: ["base"] }]);
+  routes["GET /v1/volumes/vol-1"] = json({ snapshots: [{ id: "s3", phase: "ready", version: 3, message: "before delete of shop", at: new Date().toISOString(), tags: ["base"] }] });
   const second = JSON.parse(await t.run({ action: "delete", workspace: "w1", tag: "base", soft_ms: 1500 }));
   expect(second.saved).toStartWith("base is now v3 (was v2) of volume shop");
   expect(calls.filter((c) => c.method === "POST").length).toBe(1);
@@ -525,13 +525,11 @@ test("capsule delete ends the capsule first and ignores a refusal; pipeline get 
   expect(JSON.parse(await tool(t, "pipeline_get").run({ owner: "acme", pipeline: "ci" }))).toEqual({ name: "ci", versions: [{ version: 1 }] });
 });
 
-test("volume get answers history and refs; service update with restart restarts after the patch", async () => {
+test("volume get answers the volume by id; service update with restart restarts after the patch", async () => {
   const t = platformTools("main", undefined, 1);
-  routes["GET /v1/volumes/pg/history?include=working"] = json([{ id: "s1", working_copies: ["w"] }]);
-  routes["GET /v1/volumes/pg/refs"] = json({ latest: "s1" });
-  expect(JSON.parse(await tool(t, "volume_get").run({ volume: "pg" }))).toEqual({ volume: "pg", history: [{ id: "s1", working_copies: ["w"] }], refs: { latest: "s1" } });
-  routes["GET /v1/volumes/pg/history?include=working"] = json({ history: [{ id: "s1" }], working: [{ name: "w", head: "s1" }] });
-  expect(JSON.parse(await tool(t, "volume_get").run({ volume: "pg" })).working).toEqual([{ name: "w", head: "s1" }]);
+  const vol = { id: "pg", disks: [{ id: "ws-1", attached_to: { kind: "workspace", id: "ws-1", name: "w", state: "running" } }], snapshots: [{ id: "s1", version: 1, tags: ["base"] }] };
+  routes["GET /v1/volumes/pg"] = json(vol);
+  expect(JSON.parse(await tool(t, "volume_get").run({ volume: "pg" }))).toEqual(vol);
   routes["GET /v1/environments/e1"] = json({ services: [{ name: "api", image: "a:1" }] });
   routes["PATCH /v1/environments/e1"] = json({});
   routes["POST /v1/environments/e1/services/api/restart"] = json({}, 202);
@@ -910,9 +908,8 @@ test("workspace restart waits for restart_required to clear", async () => {
 
 test("volume get resolves a given name to the volume id", async () => {
   routes["GET /v1/volumes"] = json([{ id: "ws-ab12", name: "pg" }]);
-  routes["GET /v1/volumes/ws-ab12/history?include=working"] = json([{ id: "s1" }]);
-  routes["GET /v1/volumes/ws-ab12/refs"] = json({});
-  expect(JSON.parse(await tool(platformTools("main"), "volume_get").run({ volume: "pg" })).history).toEqual([{ id: "s1" }]);
+  routes["GET /v1/volumes/ws-ab12"] = json({ id: "ws-ab12", name: "pg", snapshots: [{ id: "s1" }] });
+  expect(JSON.parse(await tool(platformTools("main"), "volume_get").run({ volume: "pg" })).snapshots).toEqual([{ id: "s1" }]);
 });
 
 test("no worktree tool and no tree argument; request_create echoes the title; quota defaults to KD_TEAM", async () => {
@@ -1034,8 +1031,8 @@ test("the push tools pass description, labels and a tag, and leave out what was 
 
 test("a snapshot answers the tag it put on the snapshot", async () => {
   routes["POST /v1/workspaces/w1/snapshots"] = json({ id: "s9", volume: "pg", version: 4, tag: "base" });
-  // the history row arrives later and may be read before the tag moved: the answer's own tag stays
-  routes["GET /v1/volumes/pg/history"] = json([{ id: "s9", version: 4, tags: [] }]);
+  // the volume's row arrives later and may be read before the tag moved: the answer's own tag stays
+  routes["GET /v1/volumes/pg"] = json({ snapshots: [{ id: "s9", version: 4, tags: [] }] });
   routes["GET /v1/workspaces/w1"] = json({ id: "w1", state: "ready" });
   const out = JSON.parse(await tool(platformTools("main"), "workspace_snapshot").run({ workspace: "w1", message: "m", tag: "base" }));
   expect(out.snapshot).toMatchObject({ id: "s9", version: 4, tag: "base", tags: [], phase: "ready" });
@@ -1070,20 +1067,18 @@ test("every argument that names a snapshot says it takes a name, name@N, name@<t
   for (const d of [props("workspace").snapshot_id.description, props("env").source.description, props("capsule").from_snapshot.description]) expect(d).toContain(ref);
 });
 
-test("volume list filters by label; get adds the description, labels and tags of the list row", async () => {
+test("volume list filters by label; get answers the volume's own document", async () => {
   const t = platformTools("main");
   routes["GET /v1/volumes?owner=acme&label=shop"] = json([{ id: "ws-ab12", name: "pg" }]);
   expect(JSON.parse(await tool(t, "volume_list").run({ owner: "acme", label: "shop" }))).toEqual([{ id: "ws-ab12", name: "pg" }]);
   // the old filter is no argument any more: it must not reach the query as `tag`
   await expect(tool(t, "volume_list").run({ owner: "acme", tag: "base" })).rejects.toThrow();
   routes["GET /v1/volumes"] = json([{ id: "ws-ab12", name: "pg", description: "Postgres 16", labels: ["shop", "test"], tags: { base: 1 } }, { id: "ws-cd34", name: null, description: null, labels: [], tags: {} }]);
-  for (const id of ["ws-ab12", "ws-cd34"]) {
-    // each history entry's own tags come from the api untouched
-    routes[`GET /v1/volumes/${id}/history?include=working`] = json([{ id: "s1", version: 1, tags: ["base"] }]);
-    routes[`GET /v1/volumes/${id}/refs`] = json({});
-  }
-  // by name and by id alike: the row is the same one
-  for (const volume of ["pg", "ws-ab12"]) expect(JSON.parse(await tool(t, "volume_get").run({ volume }))).toEqual({ volume, description: "Postgres 16", labels: ["shop", "test"], tags: { base: 1 }, history: [{ id: "s1", version: 1, tags: ["base"] }], refs: {} });
+  const doc = { id: "ws-ab12", name: "pg", description: "Postgres 16", labels: ["shop", "test"], tags: { base: 1 }, disks: [], snapshots: [{ id: "s1", version: 1, tags: ["base"] }] };
+  routes["GET /v1/volumes/ws-ab12"] = json(doc);
+  routes["GET /v1/volumes/ws-cd34"] = json({ id: "ws-cd34", name: null, description: null, labels: [], tags: {}, disks: [], snapshots: [] });
+  // by name and by id alike: the api's document, untouched
+  for (const volume of ["pg", "ws-ab12"]) expect(JSON.parse(await tool(t, "volume_get").run({ volume }))).toEqual(doc);
   expect(JSON.parse(await tool(t, "volume_get").run({ volume: "ws-cd34" }))).toMatchObject({ description: null, labels: [], tags: {} });
 });
 

@@ -374,9 +374,9 @@ async function baseGuard(doc: any, volName: string | undefined): Promise<{ refus
   const from: string | undefined = doc?.disk?.from?.snapshot;
   if (typeof from !== "string" || !doc?.volume) return {};
   const skipped = (why: string) => ({ note: `the comparison with the snapshot it was made from was skipped (${why})` });
-  const h = await apiJson<any>("GET", `/v1/volumes/${seg(doc.volume)}/history`).catch(() => undefined);
-  if (h === undefined) return skipped("the volume history could not be read");
-  const rows: any[] = Array.isArray(h) ? h : Array.isArray(h?.history) ? h.history : [];
+  const h = await apiJson<any>("GET", `/v1/volumes/${seg(doc.volume)}`).catch(() => undefined);
+  if (h === undefined) return skipped("the volume could not be read");
+  const rows: any[] = Array.isArray(h?.snapshots) ? h.snapshots : [];
   const row = rows.find((r) => r?.id === from);
   const state = row?.state;
   const label = typeof row?.version === "number" ? `v${row.version}` : from;
@@ -416,10 +416,10 @@ async function saveBeforeDelete(a: any, doc: any, settle: (s: any, ms: number) =
   const message: string = blank(a.message) ? `before delete of ${name}` : a.message.trim();
   let snapshot: any;
   if (doc?.volume) {
-    const h = await apiJson<any>("GET", `/v1/volumes/${seg(doc.volume)}/history`).catch(() => undefined);
-    const hist: any[] = Array.isArray(h) ? h : Array.isArray(h?.history) ? h.history : [];
-    const fresh = hist.filter((r) => r?.message === message && r?.phase !== "error" && Date.now() - Date.parse(r?.createdAt) < REUSE_MS);
-    const last = fresh.sort((x, y) => String(y.createdAt).localeCompare(String(x.createdAt)))[0];
+    const h = await apiJson<any>("GET", `/v1/volumes/${seg(doc.volume)}`).catch(() => undefined);
+    const rows: any[] = Array.isArray(h?.snapshots) ? h.snapshots : [];
+    const fresh = rows.filter((r) => r?.message === message && r?.phase !== "error" && Date.now() - Date.parse(r?.at) < REUSE_MS);
+    const last = fresh.sort((x, y) => String(y.at).localeCompare(String(x.at)))[0];
     if (last) snapshot = { ...last, volume: doc.volume };
   }
   if (!snapshot) {
@@ -541,13 +541,13 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
     const id = snapshot?.id; const vol = snapshot?.volume;
     if (!id || !vol || snapshot?.phase === "ready") return snapshot;
     const until = Date.now() + ms;
-    // the tag the snapshot answer named is its own: a history row read before the tag moved must not hide it
+    // the tag the snapshot answer named is its own: a row read before the tag moved must not hide it
     const moved = strip({ tag: snapshot.tag });
     while (Date.now() < until) {
       await new Promise((r) => setTimeout(r, 1000));
-      const rows = await apiJson<any[]>("GET", `/v1/volumes/${seg(vol)}/history`).catch(() => undefined);
-      const row = Array.isArray(rows) ? rows.find((r) => r?.id === id) : undefined;
-      // history also lists cuts still being written: only the row's own phase says ready
+      const doc = await apiJson<any>("GET", `/v1/volumes/${seg(vol)}`).catch(() => undefined);
+      const row = Array.isArray(doc?.snapshots) ? doc.snapshots.find((r: any) => r?.id === id) : undefined;
+      // the volume also lists snapshots still being written: only the row's own phase says ready
       if (row && (row.phase ?? "ready") === "ready") return { ...snapshot, ...row, ...moved, phase: "ready" };
     }
     return { ...snapshot, note: "still being written; it lists in volume get once ready" };
@@ -845,17 +845,12 @@ function mainOnly(tickMs: number): ToolDef[] {
     resource("volume", "Volumes: the stored state of workspaces and environments, each with a name, a description, labels, its disks and numbered snapshots; a tag is a name on one snapshot (`name@<tag>`), moved only when asked. Actions: list (filter by `label`), get (the snapshots with their tags, and the disks), describe (set `description` and `labels`), tag (put a tag on a snapshot, or move it there), untag, rename (give the volume another name `to`: every snapshot, tag and the history stay, the old name stops resolving, so update references to it such as `old@base` in notes or scripts), delete a detached volume.", {
       list: act({ kind: S, owner: S, label: { type: "string", description: "Keep only volumes that carry this label." } }, [], async (a) => api("GET", `/v1/volumes${qs({ kind: a.kind, owner: a.owner, label: a.label })}`)),
       get: act({ volume: { type: "string", description: "The volume's id or its given name." } }, ["volume"], async (a) => {
-        // /history and /refs are keyed by the volume id; a name given at a snapshot is a claim on the list row
+        // the volume by its id (a name given at a snapshot is resolved through the list rows): its disks, what
+        // each is attached to, and its snapshots with their tags, newest first
         const rows = await apiJson<any[]>("GET", "/v1/volumes").catch(() => []);
         const list = Array.isArray(rows) ? rows : [];
-        const row = list.find((r) => r?.name === a.volume) ?? list.find((r) => r?.id === a.volume);
-        const id = row?.id ?? a.volume;
-        const [history, refs] = await Promise.all([api("GET", `/v1/volumes/${seg(id)}/history?include=working`), api("GET", `/v1/volumes/${seg(id)}/refs`)]);
-        // `working` and each row's `working_copies` come from the api untouched; an object answer ({history, working}) is spread, a bare list stays `history`
-        const h = JSON.parse(history);
-        // the description, labels and tags ({tag: version}) live on the name claim, which only the list row carries;
-        // each history entry carries its own `tags` from the api
-        return JSON.stringify({ volume: a.volume, ...strip({ description: row?.description, labels: row?.labels, tags: row?.tags }), ...(Array.isArray(h) ? { history: h } : h), refs: JSON.parse(refs) }, null, 2);
+        const row = list.find((r) => r?.id === a.volume) ?? list.find((r) => r?.name === a.volume);
+        return api("GET", `/v1/volumes/${seg(row?.id ?? a.volume)}`);
       }),
       describe: act({ volume: NAMED_VOLUME, owner: OWNER_DEFAULT, description: DESCRIPTION, labels: LABELS }, ["volume"], async (a) => {
         // an empty string and an empty list are values (they clear), so only an absent field is left out
