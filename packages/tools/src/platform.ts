@@ -1052,6 +1052,13 @@ function mainOnly(tickMs: number): ToolDef[] {
       },
     ),
     def("regions", "List the regions a team can live in. A team has one region, set when it is made.", {}, [], async () => api("GET", "/v1/regions")),
+    def(
+      "ci",
+      "GitHub Actions for a commit or branch of a github.com repository: `state` (passed, failed, running, none), each workflow's newest run of that commit, and for a failed run its failing jobs, failing steps and the last `tail` lines of each failing job's log. Read through the team's GitHub connector; no token reaches the workspace.",
+      { repo: { type: "string", description: "`owner/name` on github.com." }, ref: { type: "string", description: "A commit id (7 to 40 hex characters) or a branch name." }, tail: { type: "integer", description: "Lines of each failing job's log (default 40, at most 200)." } },
+      ["repo", "ref"],
+      async (a) => api("GET", `/v1/ci/github${qs({ repo: a.repo, ref: a.ref, tail: a.tail === undefined ? undefined : String(a.tail) })}`),
+    ),
     def("devices", "List the person's own machines (devices): id (`dev-…`, what `workspace` create takes as `device`), name, os, whether it is online, enabled, the account it serves (a handle or a team) and the workspaces it reports. A device workspace needs a device that is online and active in the team. Read only: starting, connecting or removing a device is the person's, on their machine.", {}, [], async () => api("GET", "/v1/devices")),
   ];
 }

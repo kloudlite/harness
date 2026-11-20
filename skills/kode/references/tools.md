@@ -98,6 +98,7 @@ The coordinator gives work to workers and a worker answers; no other host serves
 |---|---|---|
 | `quota` | `owner?` | Ceilings and use |
 | `regions` | none | The regions a team can live in. A team (your own account included) has one, bound when it is made; no create or fork chooses it, and `request_create` with kind `region` moves a team that holds nothing |
+| `ci` | `repo`, `ref`, `tail` | GitHub Actions for a commit or branch: `state`, each workflow's newest run, and for a failure its failing jobs, steps and log tail; read through the GitHub connector, no token in the workspace |
 | `devices` | none | The person's machines: `id` (`dev-…`, the `device` of `workspace` create), name, os, `online`, `enabled`, `account`, and the workspaces each reports. Read only |
 | `requests_list`, `request_get`, `request_create` | `owner?`, `id`, `kind`, `reason` | Requests to an admin |
 | `status` | `all?` | `notices` not yet shown (`all` lists the last 50, delivered ones included, kept in `~/.kd/notices.json` across restarts of the bench, the process that serves your tools in the harness), `workspaces` (the desk's) and `environment` with their states, running `processes` of those workspaces and any a tool touched (`processes_unknown` names a ready workspace whose tool server did not answer, usually a build on its CPUs: try again shortly). Call it once at the start of each turn |
