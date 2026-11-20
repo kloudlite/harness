@@ -27,7 +27,7 @@ process {action: "wait", workspace: "api", id: "p-…", since: next, since_err: 
 exec {workspace: "api", cmd: "tail -n 40 ~/notes/test.log"}
 ```
 
-Call `wait` again while it answers `timed_out: true`, with `since` and `since_err` from the last answer. A remote connector cuts each wait at 20 s, so the loop is the same, only longer.
+Call `wait` again while it answers `timed_out: true`, with `since` and `since_err` from the last answer. A remote connector cuts each wait at 20 s, or at 600 s when the client asks for progress (a cut says `clamped`), so the loop is the same, only longer.
 
 Wrong: `exec {cmd: "sleep 30; tail ~/notes/test.log"}` in a loop. Each call costs a turn and often a permission prompt, and it learns less than `wait`. Also wrong: `exec {cmd: "nohup cargo test &"}`, which is untracked and ends with its exec.
 
