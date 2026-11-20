@@ -1,7 +1,7 @@
 //! The hands of a conversation that runs outside any workspace pod (the coordinator's `main` key):
 //! `bash`, `read`, `write`, confined to one scratch folder, since codemode scripts need a shell and a
 //! place for files. The confinement keeps the
-//! bench's home, the owner's keys and every other desk out of reach: paths are checked against the
+//! runtime's home, the owner's keys and every other netgroup out of reach: paths are checked against the
 //! real (symlink-resolved) root, and bash runs in fresh namespaces where only that folder is visible.
 //! Work inside a workspace uses the pod's tools (pod.ts) instead.
 import { spawn } from "node:child_process";
@@ -10,7 +10,7 @@ import { dirname, relative, resolve } from "node:path";
 import { guarded } from "./args.ts";
 import type { ToolDef } from "./index.ts";
 
-// ponytail: folders live until the bench restarts (/tmp is an emptyDir) and nothing deletes a
+// ponytail: folders live until the runtime restarts (/tmp is an emptyDir) and nothing deletes a
 // coordinator conversation today; remove `scratchRoot(key)` where one is dropped once that path exists.
 export const scratchRoot = (key: string) => `/tmp/kl-main/${key.replace(/[^A-Za-z0-9_-]/g, "_")}`;
 
@@ -44,7 +44,7 @@ const lexists = (p: string) => {
   }
 };
 
-// Runs as root in new user+mount+pid namespaces (proven on the bench under gVisor 2026-10-08).
+// Runs as root in new user+mount+pid namespaces (proven in the runtime under gVisor 2026-10-08).
 // `-n` everywhere: without it `mount --move` fails "failed to update userspace mount table".
 // Only $R survives from the real filesystem view; /tmp, the home and the keys dir are blanked.
 // The INNER `unshare -Um --map-user` is LOAD-BEARING: as namespace root the script could

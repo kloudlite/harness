@@ -1,6 +1,6 @@
 # Pipelines
 
-A pipeline is a versioned JSON definition of jobs in a graph. Each job runs its steps in its own capsule. A run starts one version by hand, on a schedule, from a webhook, or after another pipeline. A saved pipeline is a declared artifact: a worker with the pipeline authoring brief (`worker-templates.md`) writes and saves it, and the coordinator adds the schedule or the webhook after it reads the definition.
+A pipeline is a versioned JSON definition of jobs in a graph. Each job runs its steps in its own capsule. A run starts one version by hand, on a schedule, from a webhook, or after another pipeline. A saved pipeline is a declared artifact: write and save it, run it by hand, and add the schedule or the webhook only after the definition is read again.
 
 Every pipeline tool takes `owner`: the user's handle, or the team slug for a team. When the host has files, keep each definition in the user's repository (`pipelines/ci.json`) and send its text to `pipeline` action `save`.
 

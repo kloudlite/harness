@@ -7,12 +7,10 @@ import { anyPodTools, platformTools, webFetch, webSearch } from "../packages/too
 const DOOR: string[] = [];
 // bench-only tools: no skill teaches them
 const NOT_FOR_SKILLS = ["task"];
-// the runtime's own tools (bins/runtime/src/tools/workers.rs), served to its threads only
-const RUNTIME = ["worker_ask", "report"];
 test("references/tools.md lists exactly the served tools, and no other", async () => {
   // what the runtime serves (scripts/dump-schemas.ts), plus the tools it implements itself
   const tools = [webFetch, webSearch, ...(await anyPodTools()), ...platformTools("all")];
-  const served = new Set([...tools.map((t) => t.name), ...DOOR, ...RUNTIME, "status", "task", "codemode"]);
+  const served = new Set([...tools.map((t) => t.name), ...DOOR, "status", "task", "codemode"]);
   const doc = readFileSync(join(import.meta.dir, "kode/references/tools.md"), "utf8");
   const named = new Set<string>();
   for (const l of doc.split("\n")) if (l.startsWith("| `") && !l.startsWith("| ---")) for (const m of l.split("|")[1]!.matchAll(/`([a-z_]+)`/g)) named.add(m[1]!);
@@ -34,9 +32,9 @@ test("references/tools.md lists exactly the served tools, and no other", async (
 
 test("every tool a skill names in backticks with an underscore is in tools.md", () => {
   const doc = readFileSync(join(import.meta.dir, "kode/references/tools.md"), "utf8");
-  for (const s of ["kode", "coordinator", "worker"]) {
+  for (const s of ["kode"]) {
     const t = readFileSync(join(import.meta.dir, s, "SKILL.md"), "utf8");
-    for (const m of t.matchAll(/`((?:workspace|env|service|capsule|pipeline|run|secret|desk|volume|snapshot|process|packages|container|worktree|connector|webhook|request)_[a-z_]+)`/g))
+    for (const m of t.matchAll(/`((?:workspace|env|service|capsule|pipeline|run|secret|netgroup|volume|snapshot|process|packages|container|worktree|connector|webhook|request)_[a-z_]+)`/g))
       if (!/^(env_var|run_number)/.test(m[1]!)) expect(doc.includes(`\`${m[1]}\``) ? m[1] : `${s}: ${m[1]} not in tools.md`).toBe(m[1]!);
   }
 });

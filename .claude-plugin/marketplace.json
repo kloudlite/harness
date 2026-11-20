@@ -7,13 +7,13 @@
       "name": "kode",
       "displayName": "Kode",
       "source": "./laptop-plugin/plugin",
-      "description": "Work on Kode workspaces from Claude Code through the desk's tools and skills.",
-      "version": "0.12.39",
+      "description": "Work on Kode workspaces from Claude Code through its tools and skills.",
+      "version": "0.13.0",
       "author": { "name": "Kloudlite" },
       "homepage": "https://github.com/kloudlite/harness",
       "repository": "https://github.com/kloudlite/harness",
       "category": "development",
-      "keywords": ["kode", "workspaces", "mcp", "desks"]
+      "keywords": ["kode", "workspaces", "mcp", "netgroups"]
     }
   ]
 }

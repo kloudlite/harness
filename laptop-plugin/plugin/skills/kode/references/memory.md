@@ -13,7 +13,7 @@ Eight sections belong to the team, in reading order; `open-work` is yours alone.
 | `run` | For each component: the packages, then the commands to build, test, run and ship it, the ports, and the traps (`export CC=gcc`). | Logs of one run. |
 | `environments` | Each environment: the `volume@tag` it starts from, each service with its image, port and mounts, the seed data, what is safe to reset and how, and which services are usually intercepted. | Who is connected now; live state. |
 | `volumes` | Each volume: what is inside, its packages, labels, the tag to start from (`shop-api@base`), the secrets its variables reference (by name), and how `base` is kept fresh. | Credentials, snapshot numbers. |
-| `desks` | The layout of work: each kind of desk, the work it is for, the workspaces on it (`name` from `volume@tag`), the environment it connects to, and how work that spans components is placed. | Live desks, workspaces or ids. |
+| `netgroups` | The layout of work: each kind of netgroup, the work it is for, the workspaces on it (`name` from `volume@tag`), the environment it connects to, and how work that spans components is placed. | Live netgroups, workspaces or ids. |
 | `conventions` | The team's rules: names, branches, commits, reviews, migrations, how to ship, where credentials live, and what needs a yes from the person. | A decision about one task. |
 | `plan` | The plan the team agreed: its goal, each step with its state (`todo`, `doing`, `done`) and owner, the decisions, and the open questions. Removed when the plan is done. | A proposal not yet agreed (that is `open-work`). |
 | `open-work` (yours) | Each unfinished item: the repository and git branch on origin to resume from (`shop-api` `feat/auth`) and what is left; a proposal waiting for the person's yes. | Anything the team relies on. |
@@ -23,7 +23,7 @@ Eight sections belong to the team, in reading order; `open-work` is yours alone.
 1. `memory` `read`, all sections.
 2. `architecture` and `sources`: which component the task touches, and which repository and path hold it.
 3. `run`: the packages and the commands to build and test it.
-4. `desks`, `volumes` and `environments`: which desk to use, which base to fork each workspace from, and which environment to connect.
+4. `netgroups`, `volumes` and `environments`: which netgroup to use, which base to fork each workspace from, and which environment to connect.
 5. `conventions`: the rules for names, branches, commits and what needs a yes.
 6. `plan` and `open-work`: whether the task is a step of an agreed plan, and whether a git branch on origin already holds part of it.
 
@@ -38,7 +38,7 @@ The memory is empty and `volume` `list` with the project label finds nothing. Ma
    - The repositories: URL, default branch, which component each holds, and how changes are merged.
    - How each component is built, tested and run, and how it ships.
    - The services it needs (databases, queues, caches), which data must survive a reset, and what seed data a test needs.
-   - How work should be laid out: which components get their own base, which desks, which environment each connects to.
+   - How work should be laid out: which components get their own base, which netgroups, which environment each connects to.
    - The team's rules: commit author, branch policy, what needs approval, where secrets are kept.
 2. **Check the answers against the code.** Read each repository's README, manifests, compose file and CI. Where the code and the answer disagree, ask.
 3. **Write the initial draft.** Every section that has content, each with `if_version` 0. Write what is known; a line `unknown: <question>` marks what is not. `plan` holds the first steps: the volumes and environments to create.
@@ -56,12 +56,12 @@ At the end of every task, for each change the task made to the project, patch it
 | Changed a command, a package or a port | `run` |
 | Made, changed or removed an environment or its seed data | `environments` |
 | Made a volume, moved `base`, changed what a base holds | `volumes` |
-| Changed which desks or workspaces a kind of work uses | `desks` |
+| Changed which netgroups or workspaces a kind of work uses | `netgroups` |
 | Agreed a rule with the person | `conventions` |
 | Finished, started or changed a step of the plan | `plan` |
 | Left work unfinished | `open-work` |
 
-A stale line is worse than a missing one: remove what no longer exists. Only the coordinator writes; a worker says in its `REPORT.md` what changed for the memory, and the coordinator patches it.
+A stale line is worse than a missing one: remove what no longer exists. One session writes at a time; a parallel stream says in its `REPORT.md` what changed for the memory, and the session that integrates patches it.
 
 ## Writing rules
 
@@ -74,26 +74,26 @@ A stale line is worse than a missing one: remove what no longer exists. Only the
 
 ## Example: a complete memory
 
-A shop with a Next.js storefront, a Go API and a Python worker, in two repositories. Each block is the content of one section.
+A shop with a Next.js storefront, a Go API and a Python job runner, in two repositories. Each block is the content of one section.
 
 **`architecture`**
 ```markdown
 - `web`: the Next.js storefront. Calls `api` over HTTP (`API_URL`). Runs in `shop-dev` as `web:3000`. Repository `shop-web`.
 - `api`: the Go API for products, carts and orders. Reads and writes `db`; publishes `order.created` to `queue`. Runs in `shop-dev` as `api:8080`. Repository `shop-api`, `cmd/api`.
-- `worker`: consumes `order.created` and sends mail through `mail`. Runs in `shop-dev` as `worker`. Repository `shop-api`, `worker/`.
+- `jobs`: consumes `order.created` and sends mail through `mail`. Runs in `shop-dev` as `jobs`. Repository `shop-api`, `jobs/`.
 - Data: `db` (Postgres) holds products, carts and orders; `queue` (Redis streams) holds nothing that must survive a reset.
 ```
 
 **`sources`**
 ```markdown
-- `github.com/acme/shop-api` (`main`) at `~/workspace/shop-api`: `api` and `worker`. Pull requests into `main`, squash merge.
+- `github.com/acme/shop-api` (`main`) at `~/workspace/shop-api`: `api` and `jobs`. Pull requests into `main`, squash merge.
 - `github.com/acme/shop-web` (`main`) at `~/workspace/shop-web`: `web`. It reads the API's `openapi.yaml`: change `shop-api` first, then `shop-web`.
 ```
 
 **`run`**
 ```markdown
-- `api`: packages `go_1_23`, `golangci-lint`. `make test` (needs `db` from the desk's environment), `make lint`, `go run ./cmd/api` on 8080.
-- `worker`: packages `python312`, `uv`. `uv run pytest`; `uv run python -m worker`.
+- `api`: packages `go_1_23`, `golangci-lint`. `make test` (needs `db` from the netgroup's environment), `make lint`, `go run ./cmd/api` on 8080.
+- `jobs`: packages `python312`, `uv`. `uv run pytest`; `uv run python -m jobs`.
 - `web`: packages `nodejs_22`, `pnpm`. `pnpm test`; `pnpm dev` on 3000 with `API_URL=http://api:8080`.
 - Ship: merge to `main`; CI builds and deploys. Nothing deploys from a workspace.
 ```
@@ -103,7 +103,7 @@ A shop with a Next.js storefront, a Go API and a Python worker, in two repositor
 - `shop-dev` from `shop-env@base`:
   - `db`: postgres:16 on 5432, mount `pg` at /var/lib/postgresql/data, seeded with 200 products.
   - `queue`: redis:7 on 6379.
-  - `api`: ghcr.io/acme/shop-api:main on 8080. `worker`: ghcr.io/acme/shop-worker:main.
+  - `api`: ghcr.io/acme/shop-api:main on 8080. `jobs`: ghcr.io/acme/shop-jobs:main.
   - `web`: ghcr.io/acme/shop-web:main on 3000. `mail`: mailpit on 1025 (web 8025).
   - Reset: `env` `restore` from `shop-env@base`. Usually intercepted: `api` for backend work, `web` for frontend work.
 - A test that breaks data forks `shop-dev` first (`env` `fork` with `source`) and deletes the copy after.
@@ -117,11 +117,11 @@ A shop with a Next.js storefront, a Go API and a Python worker, in two repositor
 - `shop-test` (labels `shop`, `test`): the fixture for the end-to-end suite.
 ```
 
-**`desks`**
+The `netgroups` section:
 ```markdown
-- `api` desk: a workspace `shop-api` from `shop-api@base`, connected to `shop-dev`; intercept `api` or `worker` to test. Backend and worker work.
-- `web` desk: a workspace `shop-web` from `shop-web@base`, connected to `shop-dev`; intercept `web`. Frontend work.
-- Work across both (an endpoint and its page): one `api` desk holding both workspaces; the API is done and intercepted before the page starts.
+- `api` netgroup: a workspace `shop-api` from `shop-api@base`, connected to `shop-dev`; intercept `api` or `jobs` to test. Backend and jobs work.
+- `web` netgroup: a workspace `shop-web` from `shop-web@base`, connected to `shop-dev`; intercept `web`. Frontend work.
+- Work across both (an endpoint and its page): one `api` netgroup holding both workspaces; the API is done and intercepted before the page starts.
 ```
 
 **`conventions`**
@@ -136,7 +136,7 @@ A shop with a Next.js storefront, a Go API and a Python worker, in two repositor
 ```markdown
 Payments, agreed with the person:
 1. done: `api` `POST /payments` against the provider stub.
-2. doing: `worker` retries failed captures (`shop-api` git branch `feat/capture-retry`).
+2. doing: `jobs` retries failed captures (`shop-api` git branch `feat/capture-retry`).
 3. todo: `web` checkout page.
 Open: are refunds in scope?
 ```

@@ -1,4 +1,4 @@
-//! Platform API tools: the model's hands on /v1 (workspaces, environments, volumes, desks).
+//! Platform API tools: the model's hands on /v1 (workspaces, environments, volumes, netgroups).
 //! The bearer is a short-lived tool token (rotates every 900 s) in a file, so it is read on
 //! EVERY call, never cached. Non-2xx comes back as text for the model, never a throw.
 //! `kind` is the TOKEN's reach, not an agent role: `main` is the whole table (what the coordinator
@@ -72,20 +72,20 @@ export async function apiJson<T>(method: string, path: string, body?: unknown): 
 
 export const seg = encodeURIComponent;
 
-/** The workspaces `workspace list` shows: a desk (KD_DESK) serves its own members only, as the sidebar does
- * (backend/src/desk.ts); without it a second desk saw the first one's. `status` reads the same rows. */
-export async function deskWorkspaces(team?: string): Promise<any[]> {
+/** The workspaces `workspace list` shows: in a netgroup (KD_NETGROUP) only its own members; without it a
+ * second netgroup saw the first one's. `status` reads the same rows. */
+export async function netgroupWorkspaces(team?: string): Promise<any[]> {
   const all = await apiJson<any[]>("GET", `/v1/workspaces${qs({ team })}`);
-  const desk = process.env.KD_DESK;
-  return desk ? all.filter((w) => w.desk === desk && w.id !== process.env.KD_BENCH) : all;
+  const netgroup = process.env.KD_NETGROUP;
+  return netgroup ? all.filter((w) => w.netgroup === netgroup) : all;
 }
 
 const NO_NETGROUP = "no netgroup is set: pass `netgroup`";
 
-/** A netgroup's `{id, name, environment, state}`: the runtime's own (KD_DESK, read as its netgroup) unless
+/** A netgroup's `{id, name, environment, state}`: the runtime's own (KD_NETGROUP) unless
  * `netgroup` names another. */
 async function currentNetgroup(netgroup?: string): Promise<string> {
-  const id = netgroup ?? process.env.KD_DESK;
+  const id = netgroup ?? process.env.KD_NETGROUP;
   if (!id) return NO_NETGROUP;
   const r = await raw("GET", `/v1/netgroups/${seg(id)}`);
   if (r.unavailable) throw new Error(UNAVAILABLE);
@@ -205,7 +205,7 @@ async function load(path: string): Promise<{ doc: any } | { err: string }> {
 const OWNER = { type: "string", description: "The owner: your handle, or a team slug." };
 const OWNER_DEFAULT = { type: "string", description: "The owner: your handle, or a team slug. Default: this netgroup's team." };
 const SBX = { type: "string", description: "The capsule id or name." };
-const NG = { type: "string", description: "The netgroup id, name or `team/name`; a desk's id reaches its netgroup." };
+const NG = { type: "string", description: "The netgroup id, name or `team/name`." };
 const JOINER = { type: "string", description: "A workspace id or name: a standalone one of yours to join, or a member to leave." };
 const PIPE = { type: "string", description: "The pipeline name." };
 const RUN = { type: "string", description: "The run id (the `id` of a run from `run list` or `run start`)." };
@@ -268,7 +268,7 @@ const softMs = (a: any): number => {
   const s = clamp(Number(a.soft_ms) || 25_000, 600_000);
   return s <= 20_000 ? s : Math.max(20_000, s - 5_000);
 };
-/** The answer of a call that handed off: nothing keeps running in the bench, the platform does the work, so there is no output offset. */
+/** The answer of a call that handed off: nothing keeps running here, the platform does the work, so there is no output offset. */
 const promoted = (id: unknown, kind: string) => JSON.stringify({ promoted: true, id, kind, next: 0, next_err: 0, poll_after_ms: 2000 }, null, 2);
 
 /** GET a plain-text body (logs): `api` would pretty-print JSON-looking text and turn an empty body into "ok". */
@@ -281,7 +281,7 @@ async function getText(path: string): Promise<string> {
 
 /** Poll a document with back-off (tick, then 1.5x up to 6 ticks) until `done`. At the limit: `limit()` when given
  * (a hand-off, which does not wait for a slow read either), else the last view with `timed_out: true`.
- * One loop for every `wait`: an environment, a workspace, a desk, a run. */
+ * One loop for every `wait`: an environment, a workspace, a netgroup, a run. */
 async function pollUntil(get: () => Promise<string>, done: (d: any) => boolean, limitMs: number, tickMs: number, trim: (d: any) => any = (d) => d, limit?: () => string): Promise<string> {
   const end = Date.now() + limitMs;
   let wait = tickMs;
@@ -456,7 +456,7 @@ const single = (name: string, description: string, a: Action) => def(name, descr
 
 /** The platform table. Resource tools take an `action`; the rest are single-purpose. `main` and `all` list
  * everything except what only a workspace does (packages edits, intercept); `workspace` is the slice a workspace's own token reaches, with its workspace fixed and `env`
- * defaulted to its desk's. `noStop` drops `workspace stop` (for a caller that must not stop the workspace it runs in). */
+ * defaulted to its netgroup's. `noStop` drops `workspace stop` (for a caller that must not stop the workspace it runs in). */
 export function platformTools(kind: "main" | "workspace" | "all", wsId?: string, tickMs = 5000, noStop = false): ToolDef[] {
   const ws = kind === "workspace";
   const W = ws ? `/v1/workspaces/${seg(wsId!)}` : "";
@@ -468,13 +468,13 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
   /** An action that needs the main-only `workspace` argument. */
   const mact = (props: Props, req: string[], run: (a: any) => Promise<string>) => act({ workspace: WS, ...props }, ["workspace", ...req], run);
 
-  /** `env` for the workspace slice: the environment its desk connects it to (the workspace doc carries it, resolved through the desk). */
+  /** `env` for the workspace slice: the environment its netgroup connects it to (the workspace doc carries it). */
   const envOf = async (a: any): Promise<{ env: string } | { err: string }> => {
     if (a.env) return { env: a.env };
     if (!ws) return { err: "error: env is required" };
     const g = await load(W);
     if ("err" in g) return g;
-    if (!g.doc?.netgroup && !g.doc?.desk) return { err: "error: this workspace is in no netgroup" };
+    if (!g.doc?.netgroup) return { err: "error: this workspace is in no netgroup" };
     return g.doc.environment ? { env: g.doc.environment } : { err: "error: this workspace's netgroup has no environment" };
   };
   const ENVP = ws ? { ...ENV, description: "The environment id or name. Default: the environment of this workspace's netgroup." } : ENV;
@@ -504,10 +504,10 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
     try {
       return await pollUntil(read, w.done, softMs(a), tickMs, undefined, () => promoted(w.id ? w.id(d) : d.id, w.kind));
     } catch (e: any) {
-      // A desk's bench reads only the environment its desk is connected to, so a create
+      // A netgroup's tools read only the environment it is connected to, so a create
       // answers the object and the way in rather than the 403 the first poll met.
       const m = String(e?.message ?? e);
-      if (m.startsWith("403") && m.includes("not connected to this desk")) {
+      if (m.startsWith("403") && m.includes("not connected to this netgroup")) {
         return JSON.stringify({ ...d, hint: "created; this netgroup is not connected to it: `netgroup` `connect` with `environment`, then `env` `wait`" }, null, 2);
       }
       throw e;
@@ -564,18 +564,18 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
       ws
         ? { ...(noStop ? {} : { stop: stopAct }), snapshot: snapAct }
         : {
-            list: act({ team: S }, [], async (a) => JSON.stringify(await deskWorkspaces(a.team), null, 2)),
+            list: act({ team: S }, [], async (a) => JSON.stringify(await netgroupWorkspaces(a.team), null, 2)),
             get: mact({}, [], async (a) => api("GET", `/v1/workspaces/${seg(a.workspace)}`)),
-            // In a desk (KD_DESK) a workspace is created and deleted THROUGH it, so it is managed: a
-            // direct create would be standalone and then refused by this desk's own tools, and a direct
-            // delete of a managed one is a 409. The desk already names the owner, so `team` is dropped.
+            // In a netgroup (KD_NETGROUP) a workspace is created THROUGH it, so it is a member and is
+            // deleted with it; a delete takes it out with `?delete=true`. The netgroup already names the
+            // owner, so `team` is dropped.
             create: act({ name: S, image: S, packages: SL, team: S, ttl_secs: TTL, cpu: NEW_CPU, memory_gb: NEW_MEM, device: { type: "string", description: "A device id (dev-…, from `kode devices list`): make a device workspace, whose folder is on that machine and whose tools run there. The device must be online and active in this team." }, access: { type: "array", items: { type: "string" }, description: "Device workspaces only: names of extra sandbox access (`xcode`, `user-temp`, `android`, `pty`), defined on the person's own machine (built in, or added with `kode devices access add`). A name the machine does not define keeps the workspace from starting (`AccessUndefined`)." }, ...WAITING }, ["name"], async (a) => {
               const body = { name: a.name, image: a.image, packages: a.packages, cpu: a.cpu, memory_gb: a.memory_gb, device: a.device, access: a.access };
-              const ses = process.env.KD_DESK;
-              return thenWaitWs(await ttlAfter(a, "/v1/workspaces", ses ? await api("POST", `/v1/netgroups/${seg(ses)}/workspaces`, strip(body)) : await api("POST", "/v1/workspaces", strip({ team: a.team, ...body }))), a);
+              const ng = process.env.KD_NETGROUP;
+              return thenWaitWs(await ttlAfter(a, "/v1/workspaces", ng ? await api("POST", `/v1/netgroups/${seg(ng)}/workspaces`, strip(body)) : await api("POST", "/v1/workspaces", strip({ team: a.team, ...body }))), a);
             }),
             // A fork is a NEW workspace: from a live one (`source`, a copy of its home as it is now that
-            // joins this desk) or from a storage commit (`snapshot_id`). It never merges back: its work
+            // joins this netgroup) or from a storage commit (`snapshot_id`). It never merges back: its work
             // leaves through git, its environment through a snapshot onto a branch of its own.
             fork: act({ name: S, source: { type: "string", description: "A workspace (id or name) to fork live: the new one starts from its home as it is now and shares its volume. Give this or `snapshot_id`." }, snapshot_id: { type: "string", description: `A storage commit to fork from: ${SNAP_REF}. Give this or \`source\`.` }, task: { type: "string", description: "With `source`: what the fork is for (at most 200 characters)." }, snapshot: { type: "string", description: "With `source` a device workspace: the id (dsnap-…) of the snapshot of it to fork." }, team: S, image: S, packages: SL, ttl_secs: TTL, cpu: NEW_CPU, memory_gb: NEW_MEM, ...WAITING }, ["name"], async (a) => {
               if (!a.source === !a.snapshot_id) throw new Error("fork takes one of `source` (a workspace to fork live) or `snapshot_id` (a storage commit such as `shop@base`)");
@@ -604,13 +604,13 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
               return JSON.stringify(recorded ? { ...d, restart: lastAt(d), hint: "restarted; restart_required is still set" } : { ...d, restart: null, hint: "the restart was accepted; its record follows on the next get" });
             }),
             delete: mact({ save: SAVE, skip_snapshot: SKIP_SNAPSHOT, tag: DEL_TAG, volume: DEL_VOLUME, message: DEL_MESSAGE, soft_ms: DEL_SOFT_MS, keep_disk: KEEP_DISK }, [], async (a) => {
-              const ses = process.env.KD_DESK;
+              const ng = process.env.KD_NETGROUP;
               const path = `/v1/workspaces/${seg(a.workspace)}`;
               const doc: any = JSON.parse(await api("GET", path));
               const saved = await saveBeforeDelete(a, doc, (s, ms) => settled(s, ms));
               if (saved.writing) return JSON.stringify(saved.writing, null, 2);
               // `keep_disk` goes by the workspace's own route, the one that keeps a disk
-              await api("DELETE", a.keep_disk ? `${path}?keep_disk=true` : ses ? `/v1/netgroups/${seg(ses)}/workspaces/${seg(a.workspace)}?delete=true` : path);
+              await api("DELETE", a.keep_disk ? `${path}?keep_disk=true` : ng ? `/v1/netgroups/${seg(ng)}/workspaces/${seg(a.workspace)}?delete=true` : path);
               return JSON.stringify({ ...doc, state: "deleted", ...strip({ snapshot: saved.snapshot, kept_disk: a.keep_disk ? doc?.disk?.id : undefined }), saved: saved.saved }, null, 2);
             }),
             wait: mact({ timeout_ms: TIMEOUT }, [], async (a) => pollUntil(() => api("GET", `/v1/workspaces/${seg(a.workspace)}`), wsAny, timeoutMs(a), tickMs)),
@@ -681,7 +681,7 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
             create: act({ name: S, team: TEAM, environment: ENVREF, ttl_secs: TTL }, ["name"], async (a) =>
               api("POST", "/v1/netgroups", strip({ name: a.name, team: a.team, environment: a.environment, ttl_secs: a.ttl_secs }))),
             connect: act({ netgroup: NG, environment: ENVREF }, [], async (a) => {
-              const id = a.netgroup ?? process.env.KD_DESK;
+              const id = a.netgroup ?? process.env.KD_NETGROUP;
               if (!id) return NO_NETGROUP;
               if (a.environment === undefined) return "error: `environment` is required (an id or name, or null to disconnect)";
               const r = await raw("PUT", `/v1/netgroups/${seg(id)}/environment`, { environment: a.environment });
@@ -740,7 +740,7 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
         const g = await load(wsPath(a));
         return "err" in g ? g.err : JSON.stringify(g.doc?.packages ?? [], null, 2);
       }),
-      // the orchestrating desk reads packages; a workspace (or the laptop door) changes them
+      // the netgroup's tools read packages; a workspace (or the laptop door) changes them
       ...(kind === "main" ? {} : {
         add: packagesEdit((cur, a) => {
           const add: string[] = a.packages ?? [];
@@ -804,7 +804,7 @@ function mainOnly(tickMs: number): ToolDef[] {
   const run = (a: any) => `${pipe(a)}/runs/${seg(a.run)}`;
   const secret = (a: any) => `/v1/secrets/${seg(a.owner ?? process.env.KD_TEAM)}${a.mine ? "/mine" : ""}`;
   const PROJECT = { type: "string", description: "The project: its owner (a team slug or your handle). Same as `owner`. Default: this netgroup's team." };
-  const MEM_SECTION = { type: "string", enum: ["architecture", "sources", "run", "environments", "volumes", "desks", "conventions", "plan", "open-work"], description: "One section. Default (read): all, in this order." };
+  const MEM_SECTION = { type: "string", enum: ["architecture", "sources", "run", "environments", "volumes", "netgroups", "conventions", "plan", "open-work"], description: "One section. Default (read): all, in this order." };
   const memOwner = (a: any) => {
     if (a.project && a.owner && a.project !== a.owner) throw new Error("`project` and `owner` name the same thing; give one, or the same value");
     return a.project || a.owner || process.env.KD_TEAM;
@@ -825,8 +825,8 @@ function mainOnly(tickMs: number): ToolDef[] {
       create: act({ command: { oneOf: [S, SL], description: "A shell string (run with `sh -c`), or an argv array." }, image: S, packages: SL, variables: { type: "object", additionalProperties: S, description: "Environment variables for the command. A value of exactly `${{ secrets.NAME }}` reads a secret." }, lifetime_s: { ...I, description: "The capsule's hard lifetime in seconds, 10 to 86400 (default 300). It ends when the command exits or this runs out." }, team: TEAMSLUG, from_workspace: { type: "string", description: "A workspace of yours (id, name or `team/name`) whose current files the capsule starts as, uncommitted work included." }, from_snapshot: { type: "string", description: `The snapshot whose files the capsule starts as: ${SNAP_REF}.` }, ...WAITING }, ["command"], async (a) => {
         const cmd = Array.isArray(a.command) ? a.command : ["sh", "-c", String(a.command)];
         const body = { cmd, image: a.image, packages: a.packages, env: a.variables, timeout_secs: a.lifetime_s ?? a.timeout_s, from_workspace: a.from_workspace, from_snapshot: a.from_snapshot };
-        const ses = process.env.KD_DESK;
-        const out = ses ? await api("POST", `/v1/netgroups/${seg(ses)}/capsules`, strip(body)) : await api("POST", "/v1/capsules", strip({ team: a.team, ...body }));
+        const ng = process.env.KD_NETGROUP;
+        const out = ng ? await api("POST", `/v1/netgroups/${seg(ng)}/capsules`, strip(body)) : await api("POST", "/v1/capsules", strip({ team: a.team, ...body }));
         if (!a.wait) return out;
         const id = JSON.parse(out).id;
         return capsuleWait(`/v1/capsules/${seg(id)}`, softMs(a), () => promoted(id, "capsule"));
@@ -964,7 +964,7 @@ function mainOnly(tickMs: number): ToolDef[] {
         return JSON.stringify({ ...(body && typeof body === "object" ? body : {}), note: "takes effect after restart" }, null, 2);
       }),
     }),
-    resource("memory", "Project memory: the CURRENT structure of a project, the guide every task starts from, written for a cold start. A project is its owner: a team, or your own account. Actions: read (a section, or the whole document merged with your own `open-work`), write (a PATCH: `edits` of find/replace like the edit tool; full `content` only to create a new section with if_version 0; `delete: true` removes it; `if_version` is the version you read; a 409 answers the current content, merge and write again), list (projects with memory and their sections). Sections, in reading order: architecture, sources, run, environments, volumes, desks, conventions, plan (the team's) and open-work (yours). Content is markdown of at most 16 KiB. It describes what is, never what happened. Only a Coordinator writes.", {
+    resource("memory", "Project memory: the CURRENT structure of a project, the guide every task starts from, written for a cold start. A project is its owner: a team, or your own account. Actions: read (a section, or the whole document merged with your own `open-work`), write (a PATCH: `edits` of find/replace like the edit tool; full `content` only to create a new section with if_version 0; `delete: true` removes it; `if_version` is the version you read; a 409 answers the current content, merge and write again), list (projects with memory and their sections). Sections, in reading order: architecture, sources, run, environments, volumes, netgroups, conventions, plan (the team's) and open-work (yours). Content is markdown of at most 16 KiB. It describes what is, never what happened. Only a Coordinator writes.", {
       read: act({ project: PROJECT, owner: OWNER_DEFAULT, section: MEM_SECTION, scope: { type: "string", enum: ["team", "user", "merged"], description: "Default: merged." } }, [], async (a) => {
         const r = JSON.parse(await api("GET", `/v1/memory/${seg(memOwner(a))}${qs({ section: a.section, scope: a.scope })}`));
         const sections: any[] = r.sections ?? [];

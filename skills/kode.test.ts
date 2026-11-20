@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 const DIR = import.meta.dir;
 const PLUGIN = join(DIR, "../laptop-plugin/plugin/skills");
-// the one skill an agent installs; the other folders here are the runtime's role skills
+// the one skill an agent installs
 const USER = ["kode"];
 const read = (...p: string[]) => readFileSync(join(DIR, ...p), "utf8");
 
@@ -17,18 +17,11 @@ test("the kode skill has its name, a description under 1024 chars with a Not for
   expect(t.split("\n").length).toBeLessThanOrEqual(220);
 });
 
-// the runtime's two roles: each a short skill an agent can start from, with a short description
-test("the coordinator and worker skills have their names, a two-sentence description and stay short", () => {
-  for (const role of ["coordinator", "worker"]) {
-    const t = read(role, "SKILL.md");
-    const fm = t.match(/^---\nname: (.+)\ndescription: (.+)\n---\n/)!;
-    expect(fm[1]).toBe(role);
-    expect(fm[2]!.split(/(?<=\.) /).length).toBeLessThanOrEqual(2);
-    expect(t.split("\n").length).toBeLessThanOrEqual(80);
-  }
-  // the old role names are gone from every skill (spelled in pieces so a grep for them finds none here)
-  const OLD = new RegExp(["main[ .-]desk", "workspace[ .-]desk", "sub" + "agent", "main_" + "tell", "workspace_" + "ask"].join("|"), "i");
-  for (const f of ["kode/SKILL.md", "coordinator/SKILL.md", "worker/SKILL.md"]) expect(read(f)).not.toMatch(OLD);
+// no desk and no agent roles: the platform has neither (spelled in pieces so a grep for them finds none here)
+test("the kode skill names no desk, coordinator or worker", () => {
+  const OLD = new RegExp(["de" + "sk", "coordin" + "ator", "worker_" + "ask"].join("|"), "i");
+  const walk = (d: string): string[] => readdirSync(d).flatMap((f) => (statSync(join(d, f)).isDirectory() ? walk(join(d, f)).map((x) => join(f, x)) : [f]));
+  for (const f of walk(join(DIR, "kode"))) expect(read("kode", f).match(OLD)?.[0] ? `${f}: ${read("kode", f).match(OLD)![0]}` : f).toBe(f);
 });
 
 test("the kode skill names no skill that does not exist, and every reference file it names exists", () => {

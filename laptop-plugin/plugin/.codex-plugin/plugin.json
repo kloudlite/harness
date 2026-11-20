@@ -1,7 +1,7 @@
 {
   "name": "kode",
-  "version": "0.12.39",
-  "description": "Kode workspaces, environments and desks from Codex and ChatGPT: the remote kd MCP server and the skills; sign in in the browser on the first tool call.",
+  "version": "0.13.0",
+  "description": "Kode workspaces, environments and netgroups from Codex and ChatGPT: the remote kd MCP server and the skills; sign in in the browser on the first tool call.",
   "author": {
     "name": "Kloudlite"
   },
@@ -12,13 +12,13 @@
     "kode",
     "workspaces",
     "mcp",
-    "desks"
+    "netgroups"
   ],
   "skills": "./skills/",
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Kode",
-    "shortDescription": "Agent workspaces, environments and desks on Kode",
+    "shortDescription": "Agent workspaces, environments and netgroups on Kode",
     "longDescription": "Gives the agent the Kode tools (the remote kd MCP server) and the kode skill: make isolated workspaces, compose environments, intercept services, snapshot and discard.",
     "developerName": "Kloudlite",
     "category": "Coding",
@@ -30,7 +30,7 @@
     "composerIcon": "./.claude-plugin/icon.png",
     "logo": "./.claude-plugin/icon.png",
     "defaultPrompt": [
-      "List my Kode desks and workspaces"
+      "List my Kode netgroups and workspaces"
     ]
   }
 }

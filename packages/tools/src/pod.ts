@@ -49,7 +49,7 @@ export const podFence = (ws: string): PodFence | undefined => fences.get(ws);
 export const touched = new Map<string, number>();
 /** Calls in flight per workspace: a Claude Code session has no turn in the backend, but its call is running. */
 export const inflight = new Map<string, number>();
-/** Per-process crash-notice choice from `exec`'s `notify`, keyed `{workspace}/{process id}`; the bench's watch (backend/src/watch.ts) reads it. */
+/** Per-process crash-notice choice from `exec`'s `notify`, keyed `{workspace}/{process id}`; the runtime's watch reads it. */
 export type Notify = "never" | "on_failure" | "always";
 export const processNotify = new Map<string, Notify>();
 const canonIds = new Map<string, string>();
@@ -143,7 +143,7 @@ export async function podTools(ws: string, o: { ensure?: typeof ensureRunning } 
 
   async function call(name: string, args: any): Promise<string> {
     const label = name.replace(/^(process|watch)_/, "$1 "); // the model calls `process` with an action, never `process_wait`
-    // `notify` is the bench's, not the pod's: keep it, forward the rest
+    // `notify` is the runtime's, not the pod's: keep it, forward the rest
     let notify: Notify | undefined;
     if (name === "exec" && args && "notify" in args) {
       const { notify: n, ...rest } = args;
@@ -259,11 +259,10 @@ export async function podHold(ws: string): Promise<void> {
   } catch {}
 }
 
-/** Somebody is using this bench's desk (a turn runs, a client is connected): hold it. The API
- * stamps `held-at` on the Desk and wakes it if it idled; an awake desk keeps its environment
- * up and its members running (owner ruling 2026-10-16: a bench never idles, its desk does).
- * Best effort, errors dropped; no `KD_DESK` means not a bench, nothing to hold. */
-export async function deskHold(id = process.env.KD_DESK): Promise<void> {
+/** Somebody is using this netgroup (a call runs, a client is connected): hold it. The API stamps
+ * `held-at` on the Netgroup and wakes it if it idled; an awake netgroup keeps its environment up
+ * and its members running. Best effort, errors dropped; no `KD_NETGROUP` means nothing to hold. */
+export async function netgroupHold(id = process.env.KD_NETGROUP): Promise<void> {
   if (!id) return;
   try {
     await apiJson("POST", `/v1/netgroups/${seg(id)}/hold`);
