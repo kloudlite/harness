@@ -9,15 +9,15 @@ The status comes first; the body is one sentence. Report it as it is, then take 
 | `403 you are no longer a member of {team}` | Stop. The user cannot act there. |
 | `404 not found` | The object does not exist or is not the user's. Check the id with the list tool. |
 | `422` name rule (`name must be 1-40 lowercase letters, digits or '-'…`) | Rename: lowercase, hyphens, starts with a letter, no `--`, not `ws`, `env`, `api`, `admin`, `system`, `kd`. |
-| `409 a workspace named "x" already exists here` (also environment, desk) | Reuse it, or pick another name. |
+| `409 a workspace named "x" already exists here` (also environment, netgroup) | Reuse it, or pick another name. |
 | `409` `"x" is ambiguous; qualify it as owner/name` | Use the id or `team/name`. |
 | `409 the storage pool is full; retry later or ask an operator` | Tell the user. |
 | `409 a snapshot is already being cut for this workspace` | Wait, read the volume history, do not repeat. |
 | `409 this snapshot is the base of …` / `… is where … stands now (its latest push)` | A live workspace or environment was built from it or last pushed it. Delete that workspace first (after its own snapshot), or keep the commit. |
 | `409 snapshot {N} is tagged {t}; move or delete the tag first` | A tagged snapshot is kept. Keep it, or `volume` `untag` it first when nobody starts from that tag any more; never untag `base` to delete its snapshot. |
 | `409 the volume still has a workspace or environment` | Delete the owner first, if the user asked. |
-| `409 this desk has no environment; connect one…` | `netgroup` `connect` with `environment`. |
-| `409 conflict, retry` / `the desk changed; retry` / `volume {name} is being changed; retry` | Read again, repeat once. |
+| `409 this netgroup has no environment; connect one…` | `netgroup` `connect` with `environment`. |
+| `409 conflict, retry` / `the netgroup changed; retry` / `volume {name} is being changed; retry` | Read again, repeat once. |
 | `env` action `restore` `409` with `lost` | Name the services; call again with `discard` only after a yes. |
 | `422` for a package; the answer lists versions | Pick a listed version. |
 | A first snapshot without `volume` | It names the volume after the workspace. Always pass `volume` on the first snapshot of a workspace that was created empty. |

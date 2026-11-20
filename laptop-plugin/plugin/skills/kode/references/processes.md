@@ -91,6 +91,6 @@ Wrong: `exec {cmd: "gradle --daemon build"}` or a tool's `-d` or `--daemonize` f
 
 ## 7. What is running
 
-Right: `process {action: "list", workspace: "web"}`. It lists every exec, build and watch, running and finished, and `status` lists the running ones of the desk.
+Right: `process {action: "list", workspace: "web"}`. It lists every exec, build and watch, running and finished, and `status` lists the running ones of the netgroup.
 
 Wrong: `exec {cmd: "ps aux"}`. An exec sees only its own processes. Anything not in `process` `list` is untracked and may be gone after its exec.

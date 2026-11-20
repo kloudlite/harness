@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { POD_TOOLS, anyPodTools, podGet, podHold, deskHold, inflight, podTools, touched, processNotify, retryDelays } from "./pod.ts";
+import { POD_TOOLS, anyPodTools, podGet, podHold, netgroupHold, inflight, podTools, touched, processNotify, retryDelays } from "./pod.ts";
 
 const realFetch = globalThis.fetch;
 let log: { url: string; auth: string | null }[] = [];
@@ -189,15 +189,15 @@ test("podHold posts /hold to a ready workspace", async () => {
   expect(log.at(-1)!.url).toBe("http://10.0.0.5:7788/hold");
 });
 
-test("deskHold posts the desk's hold and nothing for a bench-less process", async () => {
+test("netgroupHold posts the netgroup's hold and nothing without one", async () => {
   handler = () => new Response(null, { status: 204 });
-  await deskHold("desk-1");
-  expect(log.at(-1)!.url).toBe("http://api.test/v1/desks/desk-1/hold");
+  await netgroupHold("ng-1");
+  expect(log.at(-1)!.url).toBe("http://api.test/v1/netgroups/ng-1/hold");
   log = [];
-  await deskHold(undefined);
+  await netgroupHold(undefined);
   expect(log).toEqual([]);
   handler = () => j({ error: "no" }, 500);
-  await deskHold("desk-1"); // best effort: a failure is dropped, never thrown
+  await netgroupHold("ng-1"); // best effort: a failure is dropped, never thrown
 });
 
 test("a second NotReady after the wake throws: one retry only", async () => {

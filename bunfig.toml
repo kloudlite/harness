@@ -1,3 +1,0 @@
-[test]
-# the tui suites need its preload (boot + temp config dir); a run from here must find it too
-preload = ["./apps/tui/src/test-setup.ts"]

@@ -27,4 +27,4 @@ Checked on 2026-11-03 against the image page or the vendor documentation named i
 ]
 ```
 
-`api`, `worker` and `web` are the user's code. Add each as a service with its published image and ports, so callers have a name to dial; develop it in a workspace and intercept the service. Do not build an image for each change.
+`api`, `jobs` and `web` are the user's code. Add each as a service with its published image and ports, so callers have a name to dial; develop it in a workspace and intercept the service. Do not build an image for each change.
