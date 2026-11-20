@@ -48,7 +48,7 @@ Then leave the workspaces as they are: the coordinator deletes them, which saves
 
 ## Running a service
 
-Start it with `exec` and `detach: true`, read `process` `output`, confirm it listens, get the service names from `env` `get`, then `intercept` `start`. To pick up a change, `process` `kill` and start it again: the intercept stays. When done, `intercept` `stop`, then `process` `kill`. To test against another worker's service, call it by name and change nothing of it.
+Start it with `exec` and `background: true`, read `process` `output`, confirm it listens, get the service names from `env` `get`, then `intercept` `start`. To pick up a change, `process` `kill` and start it again: the intercept stays. When done, `intercept` `stop`, then `process` `kill`. To test against another worker's service, call it by name and change nothing of it.
 
 ## Your tools
 

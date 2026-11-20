@@ -1,6 +1,6 @@
 # Processes: right and wrong
 
-The workspace's tool server lists every process it started in `process` `list`. That list is the whole rule: a workspace stays awake while one of its processes runs, and its netgroup with it. A **background process** is a listed process that runs on after its call answered: `exec` with `detach: true`, or an `exec` past its `soft_ms`. An **untracked** process is one a command left behind inside an exec with `&`, `nohup`, `setsid`, `disown` or a program's own daemon fork. It is not listed, it keeps nothing awake, and it ends with its exec.
+The workspace's tool server lists every process it started in `process` `list`. That list is the whole rule: a workspace stays awake while one of its processes runs, and its netgroup with it. A **background process** is a listed process that runs on after its call answered: `exec` with `background: true`, or an `exec` past its `soft_ms`. An **untracked** process is one a command left behind inside an exec with `&`, `nohup`, `setsid`, `disown` or a program's own daemon fork. It is not listed, it keeps nothing awake, and it ends with its exec.
 
 Each case below gives the right calls, then the wrong one.
 
@@ -9,7 +9,7 @@ Each case below gives the right calls, then the wrong one.
 Right:
 
 ```
-exec {workspace: "web", cmd: "npm run dev", detach: true}   -> {id: "p-…"}
+exec {workspace: "web", cmd: "npm run dev", background: true}   -> {id: "p-…"}
 process {action: "output", workspace: "web", id: "p-…", tail: 20}            -> "ready on :3000"
 exec {workspace: "web", cmd: "curl -s localhost:3000/health"}
 ```
@@ -21,13 +21,13 @@ Wrong: `exec {cmd: "npm run dev &"}`. The server is untracked, dies when the exe
 Right:
 
 ```
-exec {workspace: "api", cmd: "cargo test -j 6 > ~/notes/test.log 2>&1", detach: true}   -> {id: "p-…"}
+exec {workspace: "api", cmd: "cargo test -j 6 > ~/notes/test.log 2>&1", background: true}   -> {id: "p-…"}
 process {action: "wait", workspace: "api", id: "p-…", timeout_ms: 600000}               -> {timed_out: true, next, next_err}
 process {action: "wait", workspace: "api", id: "p-…", since: next, since_err: next_err}  -> {state: "exited", exit_code: 0}
 exec {workspace: "api", cmd: "tail -n 40 ~/notes/test.log"}
 ```
 
-Call `wait` again while it answers `timed_out: true`, with `since` and `since_err` from the last answer. A remote connector cuts each wait at 20 s, or at 40 s when the client asks for progress (a cut says `clamped`), so the loop is the same, only longer.
+Call `wait` again while it answers `timed_out: true`, with `since` and `since_err` from the last answer. A remote connector cuts each wait at 20 s (a cut says `clamped`), so the loop is the same, only longer.
 
 Wrong: `exec {cmd: "sleep 30; tail ~/notes/test.log"}` in a loop. Each call costs a turn and often a permission prompt, and it learns less than `wait`. Also wrong: `exec {cmd: "nohup cargo test &"}`, which is untracked and ends with its exec.
 
@@ -36,7 +36,7 @@ Wrong: `exec {cmd: "sleep 30; tail ~/notes/test.log"}` in a loop. Each call cost
 Right: a watcher is a background process. A database, queue or broker is a service of the environment, never a process in the workspace (`services.md`).
 
 ```
-exec {workspace: "web", cmd: "npx tsc --watch --preserveWatchOutput", detach: true}   -> {id: "p-…"}
+exec {workspace: "web", cmd: "npx tsc --watch --preserveWatchOutput", background: true}   -> {id: "p-…"}
 env {action: "create", name: "web-test", services: [{name: "db", image: "postgres:16", ports: [5432], mounts: [...]}]}
 ```
 
@@ -72,8 +72,8 @@ The helper ends when this exec returns, whatever the command does. Anything that
 Right: run it in its foreground mode as a background process, so the process you started is the one that works.
 
 ```
-exec {workspace: "app", cmd: "gradle build --no-daemon", detach: true}
-exec {workspace: "app", cmd: "ssh-agent -D -a ~/.ssh/agent.sock", detach: true}
+exec {workspace: "app", cmd: "gradle build --no-daemon", background: true}
+exec {workspace: "app", cmd: "ssh-agent -D -a ~/.ssh/agent.sock", background: true}
 ```
 
 Wrong: `exec {cmd: "gradle --daemon build"}` or a tool's `-d` or `--daemonize` flag. The daemon leaves the listed process, is untracked, and ends with the exec.

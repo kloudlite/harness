@@ -24,5 +24,5 @@ Read your row.
 
 - **The netgroup argument.** On the remote door a call acts in the netgroup named by its optional `netgroup` argument (id or name), else in your `main`. `team` names which of the teams you connected.
 - **The harness.** The harness drives one fixed desk, which it supplies itself: its agents pass no `desk`, `workspace` `create` always lands in that desk, and a task that needs another desk is for the user to open. Its tools are served by the bench, the process that serves your own tools on the desk: `netgroup` `stop` stops it too, so say so first and make it your last call.
-- **MCP doors.** `kode mcp` (the laptop door) and `https://dev.kodespace.io/mcp` (the remote door) serve the same tools; the remote door's default `soft_ms` is 20 s, and it cuts a wait at 20 s, or at 40 s for a client that asks for progress (`tools.md`).
+- **MCP doors.** `kode mcp` (the laptop door) and `https://dev.kodespace.io/mcp` (the remote door) serve the same tools; the remote door's default `soft_ms` is 20 s, and it cuts a wait at 20 s (`tools.md`).
 - **No tool.** Connecting a provider (the web console) and `kode env`, the tunnel to the laptop: give the user the exact command, or run it only on a host with a shell.

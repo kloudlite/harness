@@ -225,7 +225,7 @@ export function Processes({
         >
           {!proc ? (
             <box paddingLeft={2} paddingTop={1}>
-              <text fg={theme.muted}>nothing has run in this workspace — background commands the agent starts (exec with detach) show here</text>
+              <text fg={theme.muted}>nothing has run in this workspace — background commands the agent starts (exec with background: true) show here</text>
             </box>
           ) : (
             <>

@@ -215,10 +215,10 @@ const NG = { type: "string", description: "The netgroup id, name or `team/name`;
 const JOINER = { type: "string", description: "A workspace id or name: a standalone one of yours to join, or a member to leave." };
 const PIPE = { type: "string", description: "The pipeline name." };
 const RUN = { type: "string", description: "The run id (the `id` of a run from `run list` or `run start`)." };
-const TIMEOUT = { type: "number", description: "Milliseconds this call waits before it answers (default 20000 on a remote connector, at most 20000, or 40000 when the client asks for progress; default 25000, maximum 900000 in the harness). At the limit the answer has `timed_out: true`: call again." };
+const TIMEOUT = { type: "number", description: "Milliseconds this call waits before it answers (default 20000 on a remote connector, at most 20000; default 25000, maximum 900000 in the harness). At the limit the answer has `timed_out: true`: call again." };
 const WAITING = {
   wait: { type: "boolean", description: "Wait for the object to settle instead of answering at once." },
-  soft_ms: { type: "number", description: "With `wait`: the call waits for the object to settle and answers within this many milliseconds, handing off with `promoted: true` if the work is not done (default 20000 on a remote connector, at most 20000, or 40000 when the client asks for progress; default 25000, maximum 600000 in the harness). Resume with the `wait` action named by `kind`." },
+  soft_ms: { type: "number", description: "With `wait`: the call waits for the object to settle and answers within this many milliseconds, handing off with `promoted: true` if the work is not done (default 20000 on a remote connector, at most 20000; default 25000, maximum 600000 in the harness). Resume with the `wait` action named by `kind`." },
 };
 const MINE = { type: "boolean", description: "Your own secret in the team `owner` (any active member), not the team's shared one." };
 const TTL = { type: "integer", description: "Seconds of unused time before it is deleted, 600 to 2592000." };
