@@ -128,15 +128,9 @@ const SNAP_REF = "a volume name (its snapshot tagged `base`, else its newest), `
 const DESCRIPTION = { type: "string", description: "What the volume holds and what it is for (at most 500 characters). Set it on the first snapshot; a later value replaces it." };
 const LABELS = { type: "array", items: S, description: "Up to 8 short labels on the volume, for finding it (lowercase letters, digits, hyphens), such as the project name and `test`. A later value replaces the set." };
 /** A tag is a name on ONE snapshot of a volume (`shop@base`), unique within it, moved only when asked (volumes phase 2:
- * no checkout, no fast-forward). `branch` is its old name, accepted for one release. */
+ * no checkout, no fast-forward). */
 const SNAP_TAG = { type: "string", description: "A tag for this snapshot, such as `base` or `node-22` (read as `name@<tag>`), moved here from wherever it was. Omit it and the snapshot is untagged: nothing moves, and it expires 30 days after its last use. A volume's first snapshot is tagged `base` when it names no tag." };
 const TAG = { type: "string", description: "The tag name: lowercase letters, digits and hyphens (at most 32); not a number and not `latest`." };
-const BRANCH_ALIAS = { type: "string", description: "The old name of `tag`, accepted until the next release: send `tag`." };
-/** The tag a call asks for: `tag`, else its old name `branch`. Both, differing, is refused before anything is done. */
-const tagOf = (a: any): string | undefined => {
-  if (a.tag !== undefined && a.branch !== undefined && a.tag !== a.branch) throw new Error("`tag` and `branch` differ; `branch` is the old name of `tag`: send `tag` alone");
-  return a.tag ?? a.branch ?? undefined;
-};
 const NAMED_VOLUME = { type: "string", description: "The volume's given name." };
 const OBJ = { type: "object" };
 const SERVICE = {
@@ -340,6 +334,7 @@ const SKIP_SNAPSHOT = { type: "boolean", description: "Delete with no snapshot e
 const DEL_TAG = { type: "string", description: "Tag the snapshot this delete takes (implies `save`), such as `base`: moved here from wherever it was." };
 const DEL_VOLUME = { type: "string", description: "With `save`: the name its snapshot gives a volume that has none yet (else it takes the workspace's name)." };
 const DEL_MESSAGE = { type: "string", description: "With `save`: the message of its snapshot, default `before delete of <workspace name>`: a repeated delete finds the snapshot an earlier call handed back by it." };
+const SNAP_SOFT_MS = { type: "number", description: "How long it waits for the snapshot to be ready (default 25000); past it the answer says it is still being written." };
 const DEL_SOFT_MS = { type: "number", description: "With `save`: how long it waits for its snapshot to be ready; past it the answer has `promoted: true` and nothing is deleted: call delete again, which takes no second snapshot." };
 const SKIP_HINT = "nothing was deleted; drop `save` and `tag` to delete without a snapshot";
 /** A commit an earlier delete cut and handed back is reused for this long: an older one may predate work done since. */
@@ -371,22 +366,21 @@ export function drift(cur: { image?: string; packages?: string[]; env?: Record<s
   return out.length ? [`changed since ${since}: ${out.join("; ")}`] : [];
 }
 
-/** The guard of a plain delete: a refusal when the workspace drifted from the snapshot it was made from (`disk.from`;
- * `based_on_version` from an api before tags), a note when it could not tell. */
+/** The guard of a plain delete: a refusal when the workspace drifted from the snapshot it was made from (`disk.from`),
+ * a note when it could not tell. */
 async function baseGuard(doc: any, volName: string | undefined): Promise<{ refuse?: string; note?: string }> {
   const from: string | undefined = doc?.disk?.from?.snapshot;
-  const n = doc?.based_on_version;
-  if ((typeof from !== "string" && typeof n !== "number") || !doc?.volume) return {};
+  if (typeof from !== "string" || !doc?.volume) return {};
   const skipped = (why: string) => ({ note: `the comparison with the snapshot it was made from was skipped (${why})` });
   const h = await apiJson<any>("GET", `/v1/volumes/${seg(doc.volume)}/history`).catch(() => undefined);
   if (h === undefined) return skipped("the volume history could not be read");
   const rows: any[] = Array.isArray(h) ? h : Array.isArray(h?.history) ? h.history : [];
-  const row = typeof from === "string" ? rows.find((r) => r?.id === from) : rows.find((r) => r?.version === n);
+  const row = rows.find((r) => r?.id === from);
   const state = row?.state;
-  const label = typeof row?.version === "number" ? `v${row.version}` : (from ?? `v${n}`);
+  const label = typeof row?.version === "number" ? `v${row.version}` : from;
   if (state?.kind !== "workspace") return skipped(`${label} carries no frozen workspace state`);
   const env = (await apiJson<any>("GET", `/v1/workspaces/${seg(doc.id)}/env`).catch(() => undefined))?.env;
-  const tags: string[] = Array.isArray(row?.tags) ? row.tags : Array.isArray(row?.branches) ? row.branches : [];
+  const tags: string[] = Array.isArray(row?.tags) ? row.tags : [];
   const since = `${volName ?? doc.volume} ${label}${tags.length ? ` (${tags.join(", ")})` : ""}`;
   const d = drift({ image: doc.image, packages: doc.packages, env: env && typeof env === "object" ? env : undefined }, state, since);
   if (!d.length) return {};
@@ -398,7 +392,7 @@ type DeleteSave = { saved: string; snapshot?: any; writing?: any };
 /** Snapshot `doc` (with the tag the call names, if any) and wait for it when the call asks to save; else the guard.
  * Any refusal or failure throws, so nothing is deleted. */
 async function saveBeforeDelete(a: any, doc: any, settle: (s: any, ms: number) => Promise<any>): Promise<DeleteSave> {
-  const target = tagOf(a);
+  const target: string | undefined = a.tag;
   if (a.skip_snapshot && (a.save || target !== undefined || a.volume !== undefined || a.message !== undefined)) throw new Error("`skip_snapshot: true` saves nothing, so it takes no `save`, `tag`, `volume` or `message`: drop them, or drop `skip_snapshot` to save first");
   const id: string = doc?.id ?? a.workspace;
   if (id.startsWith("cap-") || doc?.device) return { saved: "nothing: a capsule or device workspace is deleted without a snapshot" };
@@ -412,7 +406,7 @@ async function saveBeforeDelete(a: any, doc: any, settle: (s: any, ms: number) =
     if (g.refuse) throw new Error(g.refuse);
     return { saved: `nothing: delete takes a snapshot only with \`save: true\`${g.note ? `; ${g.note}` : ""}` };
   }
-  const was = target ? (row?.tags ?? row?.branches)?.[target] : undefined;
+  const was = target ? row?.tags?.[target] : undefined;
   const message: string = blank(a.message) ? `before delete of ${name}` : a.message.trim();
   let snapshot: any;
   if (doc?.volume) {
@@ -424,8 +418,7 @@ async function saveBeforeDelete(a: any, doc: any, settle: (s: any, ms: number) =
   }
   if (!snapshot) {
     try {
-      // `branch` is the tag's old name, which every api reads (a newer one reads `tag` too)
-      snapshot = JSON.parse(await api("POST", `/v1/workspaces/${seg(id)}/snapshots`, strip({ message, volume: a.volume, branch: target })));
+      snapshot = JSON.parse(await api("POST", `/v1/workspaces/${seg(id)}/snapshots`, strip({ message, volume: a.volume, tag: target })));
     } catch (e) {
       const m = sentence((e as Error).message);
       throw new Error(`${m}; ${SKIP_HINT}${/volume/.test(m) && a.volume === undefined ? "; `volume` names the volume" : ""}`);
@@ -437,8 +430,8 @@ async function saveBeforeDelete(a: any, doc: any, settle: (s: any, ms: number) =
     return { saved: "", writing: { promoted: true, workspace: id, deleted: false, snapshot: s, hint: `snapshot ${vlabel(s)} is still being written, so nothing was deleted yet. Call delete again with the same arguments: it finds this snapshot instead of taking another, and deletes once it is ready.` } };
   }
   const vol: string = snapshot.name ?? row?.name ?? "?";
-  const listed: string[] = Array.isArray(snapshot.tags) ? snapshot.tags : Array.isArray(snapshot.branches) ? snapshot.branches : [];
-  const on: string | undefined = snapshot.tag ?? snapshot.branch ?? (target && listed.includes(target) ? target : listed[0]);
+  const listed: string[] = Array.isArray(snapshot.tags) ? snapshot.tags : [];
+  const on: string | undefined = snapshot.tag ?? (target && listed.includes(target) ? target : listed[0]);
   if (on) return { snapshot, saved: `${on} is now ${vlabel(snapshot)}${on === target && typeof was === "number" ? ` (was v${was})` : ""} of volume ${vol}; the next session forks it with snapshot_id "${vol}@${on}"` };
   const expires = snapshot.expires_at ? `at ${snapshot.expires_at}` : "30 days after its last use";
   return { snapshot, saved: `${vlabel(snapshot)} of volume ${vol} is untagged: it expires ${expires} unless a tag is put on it (snapshot tag, volume "${vol}", snapshot "${snapshot.version ?? "N"}", tag "base")` };
@@ -543,7 +536,7 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
     if (!id || !vol || snapshot?.phase === "ready") return snapshot;
     const until = Date.now() + ms;
     // the tag the snapshot answer named is its own: a history row read before the tag moved must not hide it
-    const moved = strip({ tag: snapshot.tag ?? snapshot.branch, branch: snapshot.branch });
+    const moved = strip({ tag: snapshot.tag });
     while (Date.now() < until) {
       await new Promise((r) => setTimeout(r, 1000));
       const rows = await apiJson<any[]>("GET", `/v1/volumes/${seg(vol)}/history`).catch(() => undefined);
@@ -553,10 +546,9 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
     }
     return { ...snapshot, note: "still being written; it lists in volume get once ready" };
   };
-  const snapAct = wact({ message: SNAP_MESSAGE, volume: VOLUME, description: DESCRIPTION, labels: LABELS, tag: SNAP_TAG, branch: BRANCH_ALIAS }, ["message"], async (a) => {
+  const snapAct = wact({ message: SNAP_MESSAGE, volume: VOLUME, description: DESCRIPTION, labels: LABELS, tag: SNAP_TAG, soft_ms: SNAP_SOFT_MS }, ["message"], async (a) => {
     if (blank(a.message)) return NO_MESSAGE;
-    // `branch` is the tag's old name, which every api reads (a newer one reads `tag` too)
-    const snapshot = await settled(JSON.parse(await api("POST", `${wsPath(a)}/snapshots`, strip({ message: a.message, volume: a.volume, description: a.description, labels: a.labels, branch: tagOf(a) }))));
+    const snapshot = await settled(JSON.parse(await api("POST", `${wsPath(a)}/snapshots`, strip({ message: a.message, volume: a.volume, description: a.description, labels: a.labels, tag: a.tag }))), softMs(a));
     // the POST succeeded: a failed re-read must not turn a saved snapshot into an error
     try { return JSON.stringify({ ...JSON.parse(await api("GET", wsPath(a))), snapshot }, null, 2); }
     catch (e) { return JSON.stringify({ snapshot, note: `saved; the workspace was not re-read: ${(e as Error).message}` }, null, 2); }
@@ -605,7 +597,7 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
               const recorded = (d?.restarts?.length ?? 0) > n0 || (lastAt(d) !== undefined && JSON.stringify(lastAt(d)) !== last0);
               return JSON.stringify(recorded ? { ...d, restart: lastAt(d), hint: "restarted; restart_required is still set" } : { ...d, restart: null, hint: "the restart was accepted; its record follows on the next get" });
             }),
-            delete: mact({ save: SAVE, skip_snapshot: SKIP_SNAPSHOT, tag: DEL_TAG, branch: BRANCH_ALIAS, volume: DEL_VOLUME, message: DEL_MESSAGE, soft_ms: DEL_SOFT_MS }, [], async (a) => {
+            delete: mact({ save: SAVE, skip_snapshot: SKIP_SNAPSHOT, tag: DEL_TAG, volume: DEL_VOLUME, message: DEL_MESSAGE, soft_ms: DEL_SOFT_MS }, [], async (a) => {
               const ses = process.env.KD_DESK;
               const path = `/v1/workspaces/${seg(a.workspace)}`;
               const doc: any = JSON.parse(await api("GET", path));
@@ -650,10 +642,9 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
             delete: eact({}, [], async (env) => deleting(`/v1/environments/${env}`, () => api("DELETE", `/v1/environments/${env}`))),
             wait: eact({ timeout_ms: TIMEOUT }, [], async (env, a) => (await wake(env), waitEnv(env, a))),
             ttl: eact({ ttl_secs: TTL, clear: CLEAR }, [], async (env, a) => { const b = ttlBody(a); return typeof b === "string" ? b : (await api("PUT", `/v1/environments/${env}/ttl`, b), envView(env)); }),
-            snapshot: eact({ message: SNAP_MESSAGE, volume: VOLUME, description: DESCRIPTION, labels: LABELS, tag: SNAP_TAG, branch: BRANCH_ALIAS }, ["message"], async (env, a) => {
+            snapshot: eact({ message: SNAP_MESSAGE, volume: VOLUME, description: DESCRIPTION, labels: LABELS, tag: SNAP_TAG, soft_ms: SNAP_SOFT_MS }, ["message"], async (env, a) => {
               if (blank(a.message)) return NO_MESSAGE;
-              // `branch` is the tag's old name, which every api reads (a newer one reads `tag` too)
-              const snapshot = await settled(JSON.parse(await api("POST", `/v1/environments/${env}/snapshots`, strip({ message: a.message, volume: a.volume, description: a.description, labels: a.labels, branch: tagOf(a) }))));
+              const snapshot = await settled(JSON.parse(await api("POST", `/v1/environments/${env}/snapshots`, strip({ message: a.message, volume: a.volume, description: a.description, labels: a.labels, tag: a.tag }))), softMs(a));
               try { return JSON.stringify({ ...JSON.parse(await envView(env)), snapshot }, null, 2); }
               catch (e) { return JSON.stringify({ snapshot, note: `saved; the environment was not re-read: ${(e as Error).message}` }, null, 2); }
             }),
@@ -846,7 +837,7 @@ function mainOnly(tickMs: number): ToolDef[] {
         return JSON.stringify({ ...doc, state: "deleted" }, null, 2);
       }),
     }),
-    resource("volume", "Volumes: the stored state of workspaces and environments, each with a name, a description, labels, its disks and numbered snapshots; a tag is a name on one snapshot (`name@<tag>`), moved only when asked. Actions: list (filter by `label`), get (the snapshots with their tags, and the disks), describe (set `description` and `labels`), tag (put a tag on a snapshot, or move it there), untag, rename (give the volume another name `to`: every snapshot, tag and the history stay, the old name stops resolving, so update references to it such as `old@base` in notes or scripts), delete a detached volume. `branch` and `delete_branch` are the old names of tag and untag, accepted until the next release.", {
+    resource("volume", "Volumes: the stored state of workspaces and environments, each with a name, a description, labels, its disks and numbered snapshots; a tag is a name on one snapshot (`name@<tag>`), moved only when asked. Actions: list (filter by `label`), get (the snapshots with their tags, and the disks), describe (set `description` and `labels`), tag (put a tag on a snapshot, or move it there), untag, rename (give the volume another name `to`: every snapshot, tag and the history stay, the old name stops resolving, so update references to it such as `old@base` in notes or scripts), delete a detached volume.", {
       list: act({ kind: S, owner: S, label: { type: "string", description: "Keep only volumes that carry this label." } }, [], async (a) => api("GET", `/v1/volumes${qs({ kind: a.kind, owner: a.owner, label: a.label })}`)),
       get: act({ volume: { type: "string", description: "The volume's id or its given name." } }, ["volume"], async (a) => {
         // /history and /refs are keyed by the volume id; a name given at a snapshot is a claim on the list row
@@ -858,8 +849,8 @@ function mainOnly(tickMs: number): ToolDef[] {
         // `working` and each row's `working_copies` come from the api untouched; an object answer ({history, working}) is spread, a bare list stays `history`
         const h = JSON.parse(history);
         // the description, labels and tags ({tag: version}) live on the name claim, which only the list row carries;
-        // each history entry carries its own `tags` from the api (`branches` from one before tags)
-        return JSON.stringify({ volume: a.volume, ...strip({ description: row?.description, labels: row?.labels, tags: row?.tags ?? row?.branches }), ...(Array.isArray(h) ? { history: h } : h), refs: JSON.parse(refs) }, null, 2);
+        // each history entry carries its own `tags` from the api
+        return JSON.stringify({ volume: a.volume, ...strip({ description: row?.description, labels: row?.labels, tags: row?.tags }), ...(Array.isArray(h) ? { history: h } : h), refs: JSON.parse(refs) }, null, 2);
       }),
       describe: act({ volume: NAMED_VOLUME, owner: OWNER_DEFAULT, description: DESCRIPTION, labels: LABELS }, ["volume"], async (a) => {
         // an empty string and an empty list are values (they clear), so only an absent field is left out
@@ -868,8 +859,6 @@ function mainOnly(tickMs: number): ToolDef[] {
       }),
       tag: act({ volume: NAMED_VOLUME, owner: OWNER_DEFAULT, tag: TAG, version: { ...I, description: "The snapshot the tag goes on (the N of `name@N`). Give this or `snapshot`." }, snapshot: { type: "string", description: "The snapshot id the tag goes on. Give this or `version`." } }, ["volume", "tag"], async (a) => putTag(a, a.tag)),
       untag: act({ volume: NAMED_VOLUME, owner: OWNER_DEFAULT, tag: TAG }, ["volume", "tag"], async (a) => dropTag(a, a.tag)),
-      branch: act({ volume: NAMED_VOLUME, owner: OWNER_DEFAULT, branch: { ...TAG, description: "The tag name (`branch` is the old name of `tag`)." }, version: { ...I, description: "The snapshot the tag goes on (the N of `name@N`). Give this or `snapshot`." }, snapshot: { type: "string", description: "The snapshot id the tag goes on. Give this or `version`." } }, ["volume", "branch"], async (a) => putTag(a, a.branch)),
-      delete_branch: act({ volume: NAMED_VOLUME, owner: OWNER_DEFAULT, branch: { ...TAG, description: "The tag name (`branch` is the old name of `tag`)." } }, ["volume", "branch"], async (a) => dropTag(a, a.branch)),
       rename: act({ volume: NAMED_VOLUME, owner: OWNER_DEFAULT, to: { type: "string", description: "The new name, by the rules of a first snapshot's volume name. Every snapshot, tag and the history stay; the old name stops resolving, so references to it (`old@base` in notes or scripts) must be updated." } }, ["volume", "to"], async (a) => {
         const r = await raw("POST", `/v1/volumes/${seg(nameOwner(a))}/${seg(a.volume)}/rename`, { to: a.to });
         // the api's own refusals always carry a sentence; an empty 404/405 is a router without the route

@@ -2,7 +2,7 @@
 //! and the per-action required list is checked when the call arrives (the error carries that action's
 //! own schema, so a model fixes the call without a second look-up). Every failure is JSON text,
 //! `{error, hint?, schema?}`, so a model reads one shape whichever layer refused.
-import { checkArgs } from "./args.ts";
+import { checkArgs, NO_BRANCH_ACTION } from "./args.ts";
 import type { ToolDef } from "./index.ts";
 
 type Props = Record<string, unknown>;
@@ -74,6 +74,7 @@ export function resource(name: string, description: string, actions: Record<stri
     async run(input: any) {
       const act = input?.action;
       const a = typeof act === "string" ? actions[act] : undefined;
+      if (!a && names.includes("untag") && (act === "branch" || act === "delete_branch")) throw failure(`${name}: ${NO_BRANCH_ACTION}`);
       if (!a) throw failure(`${name}: \`action\` must be one of ${names.join(", ")}; got ${JSON.stringify(act ?? null)}`);
       const { action: _, ...rest } = input;
       for (const [from, to] of Object.entries(a.alias ?? {})) if (rest[from] !== undefined) rest[to] ??= rest[from], delete rest[from];

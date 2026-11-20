@@ -29,7 +29,7 @@ Small work you may do yourself on a workspace (the `kode` skill's Solo quick pat
 
 `worker_ask { worker, task, workspaces, for? }`. `worker` is a name you pick (lowercase letters, digits, `-`, such as `api-auth`). The first call starts the worker and needs `workspaces` (ids or names); a later call to the same name sends a follow-up, and `workspaces`, when given, replaces its list. `for` links the work to a task on your own board.
 
-Give the goal in the person's words, plus only what the worker cannot know: the environment, the person's decisions, facts from another worker's report, the contract with its version. Not files, libraries or steps: the worker decides how. Say what done means and where the work goes: push the git branch, or snapshot onto `wip-<topic>`.
+Give the goal in the person's words, plus only what the worker cannot know: the environment, the person's decisions, facts from another worker's report, the contract with its version. Not files, libraries or steps: the worker decides how. Say what done means and where the work goes: push the git branch, or snapshot with the tag `wip-<topic>`.
 
 ## Reports
 

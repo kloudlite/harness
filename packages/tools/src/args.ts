@@ -45,6 +45,11 @@ function coerce(v: unknown, s: Schema): unknown {
 /** Spellings a tool reads without listing (a fixed target, the old wait names): never an "unknown argument". */
 const READ_NOT_LISTED = new Set(["because", "workspace", "timeout", "timeout_s", "max_wait_ms"]);
 
+/** A call that still sends `branch` (a schema cached before volumes lost branches) is told the new name, never served under the old one. */
+export const NO_BRANCH = "`branch` is gone: volumes have no branches; send `tag` to put a tag on the snapshot";
+/** The volume actions that were `branch` and `delete_branch`. */
+export const NO_BRANCH_ACTION = "volumes have no branches: use action `tag` (or `untag`) with `tag`";
+
 export function checkArgs(schema: Record<string, unknown>, input: unknown): { args: any } | { error: string } {
   const s = schema as Schema;
   const props = s.properties ?? {};
@@ -53,6 +58,7 @@ export function checkArgs(schema: Record<string, unknown>, input: unknown): { ar
   const missing = (s.required ?? []).filter((k) => given[k] === undefined);
   const unknown = Object.keys(given).filter((k) => !(k in props) && !READ_NOT_LISTED.has(k));
   // A name this call does not take is refused, never dropped: `device` sent to an action without it would otherwise make a different object.
+  if (unknown.includes("branch") && "tag" in props) return { error: NO_BRANCH };
   if (unknown.length)
     return { error: `unknown argument ${unknown.map((k) => `\`${k}\``).join(", ")}; this tool takes ${Object.keys(props).join(", ") || "no arguments"}${missing.length ? ` (${missing.map((k) => `\`${k}\``).join(", ")} required)` : ""}` };
   if (missing.length) return { error: `\`${missing[0]}\` is required` };

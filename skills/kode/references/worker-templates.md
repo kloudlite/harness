@@ -37,8 +37,8 @@ Commits go back by `git push` when the worker can push. When it cannot: `git for
 | Purpose | One bounded change: a feature, a fix, a refactor |
 | Scope | The workspaces the task lists. The desk's environment is read-only unless the task grants an intercept |
 | Tools | Each worker tool of `permissions.md` |
-| End state | Commit and push (unfinished work on a git branch on origin), or hand the commits back as a file. A code change alone is no reason for a volume commit: code reaches the next session through git (pushed to origin, unfinished work on a git branch; the next workspace pulls it). Environment state the task asks to keep, when the workspace is not a fork: `workspace` `snapshot` onto the branch the task names, a `message` that says what changed, and `name@<branch>` in the report. `REPORT.md`. The coordinator deletes the workspace |
-| Must not | Use a workspace the task does not list; create, fork, stop or delete a workspace; create or fork an environment or a desk; name a volume; move `base` or a branch the task does not name |
+| End state | Commit and push (unfinished work on a git branch on origin), or hand the commits back as a file. A code change alone is no reason for a volume commit: code reaches the next session through git (pushed to origin, unfinished work on a git branch; the next workspace pulls it). Environment state the task asks to keep, when the workspace is not a fork: `workspace` `snapshot` with the tag the task names, a `message` that says what changed, and `name@<tag>` in the report. `REPORT.md`. The coordinator deletes the workspace |
+| Must not | Use a workspace the task does not list; create, fork, stop or delete a workspace; create or fork an environment or a desk; name a volume; move `base` or another tag the task does not name |
 
 ## 2. Throwaway experiment
 
@@ -83,7 +83,7 @@ One short block, in this order:
 5. The budget: capsules, and a time limit.
 6. What is granted beyond the template, such as one named intercept.
 7. The model class (`models.md`): standard for a clear task, light for mechanical work, one class up after a failed attempt.
-8. Where the work goes at the end: "push the branch" (unfinished work too, on its own git branch) or "hand the commits back as a file"; a snapshot only when the task changes environment state, onto the branch the brief names.
+8. Where the work goes at the end: "push the branch" (unfinished work too, on its own git branch) or "hand the commits back as a file"; a snapshot only when the task changes environment state, with the tag the brief names.
 9. When the work is split under a plan file (`planning.md`): the path of the plan, the files that this worker owns, and its branch.
 
 A task that does not say what "done" means goes back to the coordinator.

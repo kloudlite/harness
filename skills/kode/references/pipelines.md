@@ -47,7 +47,7 @@ A nightly job that starts from a base tag, pulls, builds, and moves the tag only
 - The home is the volume's files, the clone included; the workspace's package profile is not, so list the job's `packages`.
 - `origin` and every submodule URL must be `https://github.com/...` (or `gitlab.com`) with no user name or token in it, so the credential helper answers; `permissions.git: read` gives it a read credential.
 - A job capsule has 1 CPU and 2 GiB: build with `-j 1`.
-- `run` `get` shows `saved.branch: base` when the tag moved (`branch` is the tag's old name). A `detail` naming the tag means someone moved it meanwhile; the snapshot is kept untagged.
+- `run` `get` shows `saved.tag: base` when the tag moved. A `detail` naming the tag means someone moved it meanwhile; the snapshot is kept untagged.
 
 ## Pipeline
 
