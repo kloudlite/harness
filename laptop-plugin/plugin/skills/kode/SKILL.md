@@ -167,7 +167,7 @@ Which tools you hold depends on the host; `references/setup.md` says which host 
 
 ## How to work
 
-1. **Orient first.** Follow convention 15, then `netgroup` `list`, `workspace` `list` (the owner's workspaces; `thisDesk` marks this desk's) and `env` `get` of the desk's environment, before any create. Say in one line what exists.
+1. **Orient first.** Follow convention 15, then `netgroup` `list`, `workspace` `list` (the owner's workspaces; `thisNetgroup` marks this netgroup's) and `env` `get` of the netgroup's environment, before any create. Say in one line what exists.
 2. **Scope is this desk.** The tools reach everything of the owner; a task is about this desk's workspaces and environment unless the person names another object. Outside the desk, act only on an explicit name or id.
 3. **Reuse for the same job; fork for isolation.** Inside a session, a workspace that holds the repo, an environment that runs the app, a desk on it: use them. Create what is missing, and fork when the work must not disturb the original. Name each object in the answer.
 4. **Derive the set-up from the repository.** Read `docker-compose.yml`, `.env.example`, `README`, `Procfile`, `package.json`, `go.mod`, `pyproject.toml`, `Cargo.toml`: they give services, ports, variables and packages. Ask the user only what the repo does not say (which registry, which environment to share).
