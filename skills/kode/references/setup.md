@@ -24,5 +24,5 @@ Read your row.
 
 - **The desk argument.** A call acts in the desk named by its `desk` argument (id or name) on the laptop door, the remote server, the plugin and a remote connector; a door refuses a call without it. `team` names which of the teams you connected.
 - **The harness.** The harness drives one fixed desk, which it supplies itself: its agents pass no `desk`, `workspace` `create` always lands in that desk, and a task that needs another desk is for the user to open. Its tools are served by the bench, the process that serves your own tools on the desk: `desk` `stop` stops it too, so say so first and make it your last call.
-- **MCP doors.** `kode mcp` (the laptop door) and `https://dev.kodespace.io/mcp` (the remote door) serve the same tools; the remote door's default `soft_ms` is 20 s, and it cuts a wait at 20 s, or at 600 s for a client that asks for progress (`tools.md`).
+- **MCP doors.** `kode mcp` (the laptop door) and `https://dev.kodespace.io/mcp` (the remote door) serve the same tools; the remote door's default `soft_ms` is 20 s, and it cuts a wait at 20 s, or at 40 s for a client that asks for progress (`tools.md`).
 - **No tool.** Connecting a provider (the web console) and `kode env`, the tunnel to the laptop: give the user the exact command, or run it only on a host with a shell.
