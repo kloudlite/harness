@@ -625,7 +625,7 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
 
   // ---- environment
   tools.push(
-    resource("env", "Environments: the services of a stack, in the team's region. Actions: list, get, create (an empty one, or from `services`), fork (a new environment from a live one or a storage commit; a fork never merges back), start, stop, delete, wait, ttl, snapshot (`message` required), restore (rewinds this environment in place).",
+    resource("env", "Environments: the services of a stack, in the team's region. Actions: list, get, create (an empty one, or from `services`), fork (a new environment from a live one or a storage commit; a fork never merges back), start, stop, delete, wait, ttl, snapshot (`message` required), restore (a stopped environment gets a new disk from a snapshot of its volume in place of its disk).",
       ws
         ? {
             get: eact({}, [], async (env) => (await wake(env), envView(env))),
@@ -655,12 +655,10 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
               try { return JSON.stringify({ ...JSON.parse(await envView(env)), snapshot }, null, 2); }
               catch (e) { return JSON.stringify({ snapshot, note: `saved; the environment was not re-read: ${(e as Error).message}` }, null, 2); }
             }),
-            restore: eact({ source: { type: "string", description: `What to restore: ${SNAP_REF}.` }, discard: { type: "array", items: S, description: "Names of the services from the 409 `lost` list whose data you accept losing." }, ...WAITING }, ["source"], async (env, a) => {
-              // an in-place restore keeps the environment "running" throughout, so done is the restore
-              // having landed (`restore_requested_at` moved on) with every service back and ready
-              const before = (await apiJson<any>("GET", `/v1/environments/${env}`).catch(() => undefined))?.restore_requested_at;
-              const out = await api("POST", `/v1/environments/${env}/restore`, strip({ snapshot_id: a.source, discard: a.discard }));
-              return thenWaitEnv(out, a, env, true, (d) => envDone(d) && d?.restore_requested_at !== before && !!d?.restored_to);
+            restore: eact({ source: { type: "string", description: `What to restore: ${SNAP_REF}.` }, discard: { type: "array", items: S, description: "Names of the services from the 409 `lost` list whose data you accept losing." }, keep_disk: { type: "boolean", description: "Keep the old disk in the volume, detached, instead of deleting it." } }, ["source"], async (env, a) => {
+              // A disk replace on a stopped environment: nothing runs to wait for; `start` brings it up.
+              const restored = JSON.parse(await api("POST", `/v1/environments/${env}/restore`, strip({ snapshot_id: a.source, discard: a.discard, keep_disk: a.keep_disk || undefined })));
+              return JSON.stringify({ ...JSON.parse(await envView(env)), restored }, null, 2);
             }, { snapshot_id: "source" }),
           }),
   );

@@ -19,6 +19,8 @@ The status comes first; the body is one sentence. Report it as it is, then take 
 | `409 this netgroup has no environment; connect one…` | `netgroup` `connect` with `environment`. |
 | `409 conflict, retry` / `the netgroup changed; retry` / `volume {name} is being changed; retry` | Read again, repeat once. |
 | `env` action `restore` `409` with `lost` | Name the services; call again with `discard` only after a yes. |
+| `env` action `restore` `409` `stop … first: a restore replaces its disk` | `env` `stop` with `wait: true`, restore, then `start`. |
+| `409` `disk … is still mapped on …` | The node lets the disk go a moment after a stop: call again in a minute. |
 | `422` for a package; the answer lists versions | Pick a listed version. |
 | A first snapshot without `volume` | It names the volume after the workspace. Always pass `volume` on the first snapshot of a workspace that was created empty. |
 | `409 this volume is named X, not Y (this workspace is a fork of that volume…)` | Drop `volume` or pass X: a fork saves into its source's volume. |
