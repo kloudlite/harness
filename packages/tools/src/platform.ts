@@ -659,7 +659,7 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
 
   // ---- desk
   tools.push(
-    resource("desk", ws ? "The desk of this workspace and its environment. Action: list." : "Desks: the one link between workspaces and an environment. Actions: list, create, connect (sets a desk's environment; null disconnects), start, stop, delete, ttl.",
+    resource("desk", ws ? "The desk of this workspace and its environment. Action: list." : "Desks: the one link between workspaces and an environment, through the netgroup each desk owns. Actions: list, create, connect (sets a desk's environment; null disconnects), start, stop, delete, ttl.",
       ws
         ? {
             list: act({}, [], async () => {
