@@ -51,8 +51,8 @@ const tool = (tools: ReturnType<typeof platformTools>, n: string) => {
   if (!r) throw new Error(`no tool ${n}`);
   const action = n.slice(r.name.length + 1);
   const tweak: Record<string, (i: any) => any> = {
-    desk_connect: (i) => ({ action: "connect", environment: i.environment }),
-    desk_disconnect: () => ({ action: "connect", environment: null }),
+    netgroup_connect: (i) => ({ action: "connect", environment: i.environment }),
+    netgroup_disconnect: () => ({ action: "connect", environment: null }),
     workspace_fork_live: ({ workspace, ...i }) => ({ action: "fork", source: workspace, ...i }),
   };
   return { ...r, name: n, run: (i: any) => r.run(tweak[n] ? tweak[n]!(i ?? {}) : { action, ...(i ?? {}) }) };
@@ -87,11 +87,11 @@ test("packages_add merges by attr, packages_remove errors on unknown", async () 
 
 test("the workspace slice is what a workspace token reaches, folded; main keeps today's subset and all adds the workspace-only tools", async () => {
   const slice = platformTools("workspace", "w1");
-  expect(slice.map((x) => x.name)).toEqual(["workspace", "env", "desk", "service", "packages", "intercept"]);
+  expect(slice.map((x) => x.name)).toEqual(["workspace", "env", "netgroup", "service", "packages", "intercept"]);
   const actions = (t: ReturnType<typeof platformTools>, n: string) => (tool(t, n).inputSchema as any).properties.action.enum;
   expect(actions(slice, "workspace")).toEqual(["stop", "snapshot"]);
   expect(actions(slice, "env")).toEqual(["get", "wait"]);
-  expect(actions(slice, "desk")).toEqual(["list"]);
+  expect(actions(slice, "netgroup")).toEqual(["list"]);
   expect(actions(platformTools("workspace", "w1", 5000, true), "workspace")).toEqual(["snapshot"]);
   const main = platformTools("main");
   expect(actions(main, "packages")).toEqual(["list"]);
@@ -147,46 +147,53 @@ test("the workspace slice defaults env through the workspace's desk", async () =
   expect(posted("POST")).toEqual({ service: "web", workspace: "w1" });
   // in a desk whose environment is not resolved, or in none
   routes["GET /v1/workspaces/w1"] = json({ desk: "desk-1", packages: [] });
-  await expect(tool(t, "env_get").run({})).rejects.toThrow("this workspace's desk has no environment");
+  await expect(tool(t, "env_get").run({})).rejects.toThrow("this workspace's netgroup has no environment");
   routes["GET /v1/workspaces/w1"] = json({ packages: [] });
-  await expect(tool(t, "env_get").run({})).rejects.toThrow("this workspace is in no desk");
+  await expect(tool(t, "env_get").run({})).rejects.toThrow("this workspace is in no netgroup");
   expect(t.some((x) => x.name === "workspace_create")).toBe(false);
 });
 
-test("the bench offers desk list, create and connect: a bench belongs to its desk and never joins another", () => {
+test("the bench offers netgroup list, create, connect, join and leave; a workspace slice only lists its own", () => {
   for (const kind of ["main", "all"] as const) {
-    const e = (tool(platformTools(kind, "w1"), "desk").inputSchema as any).properties.action.enum;
-    expect(e).toEqual(expect.arrayContaining(["list", "create", "connect"]));
-    expect(e).not.toContain("use");
-    expect(e).not.toContain("current");
+    const e = (tool(platformTools(kind, "w1"), "netgroup").inputSchema as any).properties.action.enum;
+    expect(e).toEqual(expect.arrayContaining(["list", "get", "create", "connect", "join", "leave"]));
   }
-  expect((tool(platformTools("workspace", "w1"), "desk").inputSchema as any).properties.action.enum).toEqual(["list"]);
+  expect((tool(platformTools("workspace", "w1"), "netgroup").inputSchema as any).properties.action.enum).toEqual(["list"]);
+  expect(platformTools("main").map((t) => t.name)).not.toContain("desk");
 });
 
-test("desk_list in a workspace shows its own desk and environment", async () => {
-  routes["GET /v1/workspaces/w1"] = json({ desk: "desk-1", environment: "e9" });
-  expect(JSON.parse(await tool(platformTools("workspace", "w1"), "desk_list").run({}))).toEqual({ desk: "desk-1", environment: "e9" });
+test("netgroup_list in a workspace shows its own netgroup and environment", async () => {
+  routes["GET /v1/workspaces/w1"] = json({ netgroup: "ng-1", environment: "e9" });
+  expect(JSON.parse(await tool(platformTools("workspace", "w1"), "netgroup_list").run({}))).toEqual({ netgroup: "ng-1", environment: "e9" });
 });
 
-test("desk connect sets or clears an environment (null disconnects); desk defaults to the thread's own", async () => {
+test("netgroup connect sets or clears an environment (null disconnects); it defaults to the runtime's own", async () => {
   const t = platformTools("main");
   delete process.env.KD_DESK;
-  expect(await tool(t, "desk_connect").run({ environment: "e2" })).toContain("no desk");
+  expect(await tool(t, "netgroup_connect").run({ environment: "e2" })).toContain("no netgroup");
   process.env.KD_DESK = "desk-1";
-  routes["GET /v1/desks/desk-1"] = json({ id: "desk-1", name: "main", environment: "e2" });
-  routes["PUT /v1/desks/desk-1/environment"] = json({ id: "desk-1", name: "main", environment: "e2" });
-  expect(JSON.parse(await tool(t, "desk_connect").run({ environment: "e2" }))).toEqual({ id: "desk-1", name: "main", environment: "e2" });
+  routes["GET /v1/netgroups/desk-1"] = json({ id: "netgroup-desk-1", name: "main", environment: "e2", state: "running" });
+  routes["PUT /v1/netgroups/desk-1/environment"] = json({});
+  expect(JSON.parse(await tool(t, "netgroup_connect").run({ environment: "e2" }))).toEqual({ id: "netgroup-desk-1", name: "main", environment: "e2", state: "running" });
   expect(calls.filter((c) => c.method === "PUT").at(-1)!.body).toEqual({ environment: "e2" });
-  routes["PUT /v1/desks/desk-1/environment"] = json({ id: "desk-1", name: "main", environment: null });
-  routes["GET /v1/desks/desk-1"] = json({ id: "desk-1", name: "main", environment: null });
-  expect(JSON.parse(await tool(t, "desk_connect").run({ environment: null }))).toEqual({ id: "desk-1", name: "main", environment: null });
+  await tool(t, "netgroup_disconnect").run({});
   expect(calls.filter((c) => c.method === "PUT").at(-1)!.body).toEqual({ environment: null });
-  // an explicit desk wins over KD_DESK
-  routes["PUT /v1/desks/other/environment"] = json({});
-  routes["GET /v1/desks/other"] = json({ id: "other", name: "other", environment: "e3" });
-  expect(JSON.parse(await tool(t, "desk").run({ action: "connect", desk: "other", environment: "e3" })).id).toBe("other");
-  routes["PUT /v1/desks/desk-1/environment"] = json({ error: "no such desk" }, 404);
-  expect(await tool(t, "desk_connect").run({ environment: "e2" })).toContain("ended");
+  // an explicit netgroup wins over the runtime's own
+  routes["PUT /v1/netgroups/ng-2/environment"] = json({});
+  routes["GET /v1/netgroups/ng-2"] = json({ id: "ng-2", name: "review", environment: "e3" });
+  expect(JSON.parse(await tool(t, "netgroup").run({ action: "connect", netgroup: "ng-2", environment: "e3" })).id).toBe("ng-2");
+  routes["PUT /v1/netgroups/desk-1/environment"] = json({ error: "not found" }, 404);
+  expect(await tool(t, "netgroup_connect").run({ environment: "e2" })).toContain("ended");
+});
+
+test("netgroup join and leave move a standalone workspace in and out", async () => {
+  const t = platformTools("main");
+  routes["POST /v1/netgroups/ng-2/workspaces"] = json({ id: "ng-2" });
+  await tool(t, "netgroup_join").run({ netgroup: "ng-2", workspace: "laptop" });
+  expect(calls.at(-1)).toMatchObject({ method: "POST", url: "/v1/netgroups/ng-2/workspaces", body: { workspace: "laptop" } });
+  routes["DELETE /v1/netgroups/ng-2/workspaces/laptop"] = () => new Response(null, { status: 204 });
+  routes["GET /v1/netgroups/ng-2"] = json({ id: "ng-2", name: "review", environment: null });
+  expect(JSON.parse(await tool(t, "netgroup_leave").run({ netgroup: "ng-2", workspace: "laptop" })).id).toBe("ng-2");
 });
 
 test("env_get folds service_status readiness into services[]; a live workspace fork sends task only when given", async () => {
@@ -480,11 +487,11 @@ const CASES: [string, any, string, string, any?][] = [
   ["secret_delete", { owner: "acme", name: "DB_URL", mine: true }, "DELETE", "/v1/secrets/acme/mine/DB_URL"],
   ["workspace_env_set", { workspace: "w1", variables: { A: "${{ secrets.A }}" }, replace: true, restart_on_change: true }, "PUT", "/v1/workspaces/w1/env", { env: { A: "${{ secrets.A }}" }, restartOnEnvChange: true }],
   ["connector_list", { owner: "acme" }, "GET", "/v1/connectors?owner=acme"],
-  ["desk_create", { name: "fix", team: "acme", environment: "dev" }, "POST", "/v1/desks", { name: "fix", team: "acme", environment: "dev" }],
-  ["desk_stop", { desk: "s1" }, "POST", "/v1/desks/s1/stop"],
-  ["desk_start", { desk: "s1" }, "POST", "/v1/desks/s1/start"],
-  ["desk_delete", { desk: "s1" }, "DELETE", "/v1/desks/s1"],
-  ["desk_ttl", { desk: "s1", ttl_secs: 600 }, "PUT", "/v1/desks/s1/ttl", { ttl_secs: 600 }],
+  ["netgroup_create", { name: "fix", team: "acme", environment: "dev" }, "POST", "/v1/netgroups", { name: "fix", team: "acme", environment: "dev" }],
+  ["netgroup_stop", { netgroup: "s1" }, "POST", "/v1/netgroups/s1/stop"],
+  ["netgroup_start", { netgroup: "s1" }, "POST", "/v1/netgroups/s1/start"],
+  ["netgroup_delete", { netgroup: "s1" }, "DELETE", "/v1/netgroups/s1"],
+  ["netgroup_ttl", { netgroup: "s1", ttl_secs: 600 }, "PUT", "/v1/netgroups/s1/ttl", { ttl_secs: 600 }],
   ["workspace_ttl", { workspace: "w1", clear: true }, "PUT", "/v1/workspaces/w1/ttl", { ttl_secs: null }],
   ["env_ttl", { env: "e1", ttl_secs: 86400 }, "PUT", "/v1/environments/e1/ttl", { ttl_secs: 86400 }],
 ];
@@ -493,7 +500,7 @@ for (const [name, args, method, url, body] of CASES) {
     const t = tool(platformTools("main"), name);
     expect(t).toBeDefined();
     // a verb answers the object it changed, so it reads it back (and `delete` reads it first)
-    for (const o of ["/v1/workspaces/w1", "/v1/desks/s1", "/v1/environments/e1", "/v1/capsules/cap-1", "/v1/pipelines/acme/ci", "/v1/pipelines/acme/ci/runs/r1"]) routes[`GET ${o}`] = ok();
+    for (const o of ["/v1/workspaces/w1", "/v1/netgroups/s1", "/v1/environments/e1", "/v1/capsules/cap-1", "/v1/pipelines/acme/ci", "/v1/pipelines/acme/ci/runs/r1"]) routes[`GET ${o}`] = ok();
     routes[`${method} ${url}`] = ok();
     await t.run(args);
     const sent = calls.filter((c) => c.method === method && c.url === url).at(-1)!;
@@ -735,7 +742,7 @@ test("ttl tools clear with null when ttl_secs is omitted, and the wait tools tak
 });
 
 test("a ttl tool needs ttl_secs or clear", async () => {
-  for (const [n, a, url] of [["desk_ttl", { desk: "s1" }, "/v1/desks/s1/ttl"], ["workspace_ttl", { workspace: "w1" }, "/v1/workspaces/w1/ttl"], ["env_ttl", { env: "e1" }, "/v1/environments/e1/ttl"]] as const) {
+  for (const [n, a, url] of [["netgroup_ttl", { netgroup: "s1" }, "/v1/netgroups/s1/ttl"], ["workspace_ttl", { workspace: "w1" }, "/v1/workspaces/w1/ttl"], ["env_ttl", { env: "e1" }, "/v1/environments/e1/ttl"]] as const) {
     routes[`PUT ${url}`] = json({});
     routes[`GET ${url.replace("/ttl", "")}`] = json({});
     calls = [];
@@ -825,7 +832,7 @@ test("env create with wait answers the created object and a hint when the desk i
   routes["GET /v1/environments/env-new"] = () => new Response("that environment is not connected to this desk", { status: 403 });
   const out = JSON.parse(await tool(t, "env_create").run({ name: "shop", services: [{ name: "db", image: "postgres:16", ports: [5432] }], wait: true, soft_ms: 50 }));
   expect(out.id).toBe("env-new");
-  expect(out.hint).toContain("desk");
+  expect(out.hint).toContain("netgroup");
 });
 
 test("env restore takes source; snapshot_id is its alias there, and listed only as fork's", async () => {
@@ -899,9 +906,9 @@ test("workspace resize patches the size it is given and answers the API's verdic
   expect(actionsOf("workspace")).not.toContain("resize");
 });
 
-test("desk stop answers without a second read", async () => {
-  routes["POST /v1/desks/s1/stop"] = json({}, 202);
-  expect(JSON.parse(await tool(platformTools("main"), "desk_stop").run({ desk: "s1" }))).toEqual({ id: "s1", state: "stopping" });
+test("netgroup stop answers without a second read", async () => {
+  routes["POST /v1/netgroups/s1/stop"] = json({}, 202);
+  expect(JSON.parse(await tool(platformTools("main"), "netgroup_stop").run({ netgroup: "s1" }))).toEqual({ id: "s1", state: "stopping" });
   expect(calls.filter((c) => c.method === "GET")).toHaveLength(0);
 });
 

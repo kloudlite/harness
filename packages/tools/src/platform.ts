@@ -80,19 +80,19 @@ export async function deskWorkspaces(team?: string): Promise<any[]> {
   return desk ? all.filter((w) => w.desk === desk && w.id !== process.env.KD_BENCH) : all;
 }
 
-const NO_DESK = "no desk is set (KD_DESK is not set)";
+const NO_NETGROUP = "no netgroup is set: pass `netgroup`";
 
-/** A desk's `{id, name, environment}`: the thread's own (KD_DESK) unless `desk` names another. A
- * bench belongs to one desk, and `desk connect` here only moves a desk's environment. */
-async function currentDesk(desk?: string): Promise<string> {
-  const id = desk ?? process.env.KD_DESK;
-  if (!id) return NO_DESK;
-  const r = await raw("GET", `/v1/desks/${seg(id)}`);
+/** A netgroup's `{id, name, environment, state}`: the runtime's own (KD_DESK, read as its netgroup) unless
+ * `netgroup` names another. */
+async function currentNetgroup(netgroup?: string): Promise<string> {
+  const id = netgroup ?? process.env.KD_DESK;
+  if (!id) return NO_NETGROUP;
+  const r = await raw("GET", `/v1/netgroups/${seg(id)}`);
   if (r.unavailable) throw new Error(UNAVAILABLE);
-  if (r.status === 404 || r.status === 403) return `desk ${id} has ended`;
+  if (r.status === 404 || r.status === 403) return `netgroup ${id} has ended`;
   if (r.status < 200 || r.status >= 300) throw new Error(httpError(r.status, r.text));
   const d = r.data as any;
-  return JSON.stringify({ id: d.id, name: d.name, environment: d.environment });
+  return JSON.stringify({ id: d.id, name: d.name, environment: d.environment, state: d.state });
 }
 
 /** Wake an idle-stopped environment before a read that needs it up. Only an idle-stopped one: a
@@ -209,9 +209,10 @@ async function load(path: string): Promise<{ doc: any } | { err: string }> {
 }
 
 const OWNER = { type: "string", description: "The owner: your handle, or a team slug." };
-const OWNER_DEFAULT = { type: "string", description: "The owner: your handle, or a team slug. Default: this desk's team." };
+const OWNER_DEFAULT = { type: "string", description: "The owner: your handle, or a team slug. Default: this netgroup's team." };
 const SBX = { type: "string", description: "The capsule id or name." };
-const SES = { type: "string", description: "The desk id, name or `team/name`." };
+const NG = { type: "string", description: "The netgroup id, name or `team/name`; a desk's id reaches its netgroup." };
+const JOINER = { type: "string", description: "A workspace id or name: a standalone one of yours to join, or a member to leave." };
 const PIPE = { type: "string", description: "The pipeline name." };
 const RUN = { type: "string", description: "The run id (the `id` of a run from `run list` or `run start`)." };
 const TIMEOUT = { type: "number", description: "Milliseconds this call waits before it answers (default 20000 on a remote connector, at most 20000, or 40000 when the client asks for progress; default 25000, maximum 900000 in the harness). At the limit the answer has `timed_out: true`: call again." };
@@ -230,9 +231,9 @@ const TAIL = { type: "integer", description: "Keep only the last N lines (defaul
 const HEAD = { type: "integer", description: "Keep only the first N lines (applied before `tail`)." };
 const PVER = { type: "integer", description: "A version number. `get`: that version. `delete`: only that version (not the latest, not one a run reads)." };
 const OFFSET = { type: "integer", description: "Byte offset into the job's output. `logs`: the whole page from there (`next`, `complete`), else the last lines. `wait`: also answers that page as `output`." };
-const TEAMSLUG = { type: "string", description: "The team slug. In a desk its own team is used." };
+const TEAMSLUG = { type: "string", description: "The team slug. In a netgroup its own team is used." };
 const TEAM = { type: "string", description: "A team you belong to. Omit it for your own." };
-const ENVREF = { anyOf: [{ type: "string" }, { type: "null" }], description: "An environment id or name of the desk's team. `connect` with null disconnects." };
+const ENVREF = { anyOf: [{ type: "string" }, { type: "null" }], description: "An environment id or name of the netgroup's team. `connect` with null disconnects." };
 const MAX_TAIL = 2000;
 
 /** Cut a log to its first `head` and last `tail` lines (tail defaults to 200); a note says how many lines went. */
@@ -474,10 +475,10 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
     if (!ws) return { err: "error: env is required" };
     const g = await load(W);
     if ("err" in g) return g;
-    if (!g.doc?.desk) return { err: "error: this workspace is in no desk" };
-    return g.doc.environment ? { env: g.doc.environment } : { err: "error: this workspace's desk has no environment" };
+    if (!g.doc?.netgroup && !g.doc?.desk) return { err: "error: this workspace is in no netgroup" };
+    return g.doc.environment ? { env: g.doc.environment } : { err: "error: this workspace's netgroup has no environment" };
   };
-  const ENVP = ws ? { ...ENV, description: "The environment id or name. Default: the environment of this workspace's desk." } : ENV;
+  const ENVP = ws ? { ...ENV, description: "The environment id or name. Default: the environment of this workspace's netgroup." } : ENV;
   const eact = (props: Props, req: string[], run: (env: string, a: any) => Promise<string>, alias?: Record<string, string>): Action => ({
     ...act({ env: ENVP, ...props }, ws ? req : ["env", ...req], async (a) => {
       const e = await envOf(a);
@@ -508,7 +509,7 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
       // answers the object and the way in rather than the 403 the first poll met.
       const m = String(e?.message ?? e);
       if (m.startsWith("403") && m.includes("not connected to this desk")) {
-        return JSON.stringify({ ...d, hint: "created; this desk is not connected to it: `desk` `connect` with `environment`, then `env` `wait`" }, null, 2);
+        return JSON.stringify({ ...d, hint: "created; this netgroup is not connected to it: `netgroup` `connect` with `environment`, then `env` `wait`" }, null, 2);
       }
       throw e;
     }
@@ -666,40 +667,43 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
           }),
   );
 
-  // ---- desk
+  // ---- netgroup
   tools.push(
-    resource("desk", ws ? "The desk of this workspace and its environment. Action: list." : "Desks: the one link between workspaces and an environment, through the netgroup each desk owns. Actions: list, create, connect (sets a desk's environment; null disconnects), start, stop, delete, ttl.",
+    resource("netgroup", ws ? "The netgroup of this workspace and its environment. Action: list." : "Netgroups: workspaces and capsules joined to one environment, with the intercepts they hold there. Actions: list, get, create, connect (sets one's environment; null disconnects), start, stop, delete, ttl, join (a standalone workspace joins), leave.",
       ws
         ? {
             list: act({}, [], async () => {
               const g = await load(W);
-              return "err" in g ? g.err : JSON.stringify({ desk: g.doc?.desk ?? null, environment: g.doc?.environment ?? null }, null, 2);
+              return "err" in g ? g.err : JSON.stringify({ netgroup: g.doc?.netgroup ?? null, environment: g.doc?.environment ?? null }, null, 2);
             }),
           }
         : {
-            list: act({ team: TEAM }, [], async (a) => api("GET", `/v1/desks${qs({ team: a.team })}`)),
+            list: act({ team: TEAM }, [], async (a) => api("GET", `/v1/netgroups${qs({ team: a.team })}`)),
+            get: act({ netgroup: NG }, [], async (a) => currentNetgroup(a.netgroup)),
             create: act({ name: S, team: TEAM, environment: ENVREF, ttl_secs: TTL }, ["name"], async (a) =>
-              api("POST", "/v1/desks", strip({ name: a.name, team: a.team, environment: a.environment, ttl_secs: a.ttl_secs }))),
-            connect: act({ desk: SES, environment: ENVREF }, [], async (a) => {
-              const id = a.desk ?? process.env.KD_DESK;
-              if (!id) return NO_DESK;
+              api("POST", "/v1/netgroups", strip({ name: a.name, team: a.team, environment: a.environment, ttl_secs: a.ttl_secs }))),
+            connect: act({ netgroup: NG, environment: ENVREF }, [], async (a) => {
+              const id = a.netgroup ?? process.env.KD_DESK;
+              if (!id) return NO_NETGROUP;
               if (a.environment === undefined) return "error: `environment` is required (an id or name, or null to disconnect)";
-              const r = await raw("PUT", `/v1/desks/${seg(id)}/environment`, { environment: a.environment });
+              const r = await raw("PUT", `/v1/netgroups/${seg(id)}/environment`, { environment: a.environment });
               if (r.unavailable) throw new Error(UNAVAILABLE);
-              if (r.status === 404 || r.status === 403) return `desk ${id} has ended`;
+              if (r.status === 404 || r.status === 403) return `netgroup ${id} has ended`;
               if (r.status < 200 || r.status >= 300) throw new Error(httpError(r.status, r.text));
-              return currentDesk(id);
+              return currentNetgroup(id);
             }, ["environment"]),
-            start: act({ desk: SES, ...WAITING }, ["desk"], async (a) => thenWait(await api("POST", `/v1/desks/${seg(a.desk)}/start`), a, { kind: "desk", path: () => `/v1/desks/${seg(a.desk)}`, done: (d) => d?.state === "running", id: () => a.desk, reread: true })),
-            // no follow-up read: a stop of the bench's own desk ends the link before a second call answers
-            stop: act({ desk: SES }, ["desk"], async (a) => {
-              const out = await api("POST", `/v1/desks/${seg(a.desk)}/stop`);
+            start: act({ netgroup: NG, ...WAITING }, ["netgroup"], async (a) => thenWait(await api("POST", `/v1/netgroups/${seg(a.netgroup)}/start`), a, { kind: "netgroup", path: () => `/v1/netgroups/${seg(a.netgroup)}`, done: (d) => d?.state === "running", id: () => a.netgroup, reread: true })),
+            // no follow-up read: a stop of the runtime's own netgroup ends the link before a second call answers
+            stop: act({ netgroup: NG }, ["netgroup"], async (a) => {
+              const out = await api("POST", `/v1/netgroups/${seg(a.netgroup)}/stop`);
               let body: any;
               try { body = JSON.parse(out); } catch {}
-              return JSON.stringify({ id: a.desk, state: "stopping", ...(body && typeof body === "object" ? body : {}) }, null, 2);
+              return JSON.stringify({ id: a.netgroup, state: "stopping", ...(body && typeof body === "object" ? body : {}) }, null, 2);
             }),
-            delete: act({ desk: SES }, ["desk"], async (a) => deleting(`/v1/desks/${seg(a.desk)}`, () => api("DELETE", `/v1/desks/${seg(a.desk)}`))),
-            ttl: act({ desk: SES, ttl_secs: TTL, clear: CLEAR }, ["desk"], async (a) => { const b = ttlBody(a); return typeof b === "string" ? b : (await api("PUT", `/v1/desks/${seg(a.desk)}/ttl`, b), api("GET", `/v1/desks/${seg(a.desk)}`)); }),
+            delete: act({ netgroup: NG }, ["netgroup"], async (a) => deleting(`/v1/netgroups/${seg(a.netgroup)}`, () => api("DELETE", `/v1/netgroups/${seg(a.netgroup)}`))),
+            ttl: act({ netgroup: NG, ttl_secs: TTL, clear: CLEAR }, ["netgroup"], async (a) => { const b = ttlBody(a); return typeof b === "string" ? b : (await api("PUT", `/v1/netgroups/${seg(a.netgroup)}/ttl`, b), api("GET", `/v1/netgroups/${seg(a.netgroup)}`)); }),
+            join: act({ netgroup: NG, workspace: JOINER }, ["netgroup", "workspace"], async (a) => api("POST", `/v1/netgroups/${seg(a.netgroup)}/workspaces`, { workspace: a.workspace })),
+            leave: act({ netgroup: NG, workspace: JOINER }, ["netgroup", "workspace"], async (a) => { await api("DELETE", `/v1/netgroups/${seg(a.netgroup)}/workspaces/${seg(a.workspace)}`); return currentNetgroup(a.netgroup); }),
           }),
   );
 
@@ -782,7 +786,7 @@ function mainOnly(tickMs: number): ToolDef[] {
   /** The owner a volume name is looked up under: a name is unique per owner, so the name routes are keyed by both. */
   const nameOwner = (a: any): string => {
     const owner = own(a);
-    if (!owner) throw new Error("`owner` is required: there is no desk team to default to");
+    if (!owner) throw new Error("`owner` is required: there is no netgroup team to default to");
     return owner;
   };
   /** Put `tag` on one snapshot of the named volume (`version` or `snapshot`), moving it there. */
@@ -801,7 +805,7 @@ function mainOnly(tickMs: number): ToolDef[] {
   const pipe = (a: any) => `/v1/pipelines/${seg(own(a))}/${seg(a.pipeline)}`;
   const run = (a: any) => `${pipe(a)}/runs/${seg(a.run)}`;
   const secret = (a: any) => `/v1/secrets/${seg(a.owner ?? process.env.KD_TEAM)}${a.mine ? "/mine" : ""}`;
-  const PROJECT = { type: "string", description: "The project: its owner (a team slug or your handle). Same as `owner`. Default: this desk's team." };
+  const PROJECT = { type: "string", description: "The project: its owner (a team slug or your handle). Same as `owner`. Default: this netgroup's team." };
   const MEM_SECTION = { type: "string", enum: ["architecture", "sources", "run", "environments", "volumes", "desks", "conventions", "plan", "open-work"], description: "One section. Default (read): all, in this order." };
   const memOwner = (a: any) => {
     if (a.project && a.owner && a.project !== a.owner) throw new Error("`project` and `owner` name the same thing; give one, or the same value");

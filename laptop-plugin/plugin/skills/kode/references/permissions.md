@@ -15,7 +15,7 @@ The one rule behind every row: a worker may do anything its task needs on its li
 |---|---|---|
 | `status` | none | Call it at the start of each turn |
 | `quota` | none | Read it before each fan-out |
-| `desk` | `list` | |
+| `netgroup` | `list` | |
 | `workspace`, `env` | `list`, `get`, `wait` | |
 | `capsule`, `run` | `list`, `get`, `wait`, `logs` | |
 | `volume`, `pipeline` | `list`, `get` | |

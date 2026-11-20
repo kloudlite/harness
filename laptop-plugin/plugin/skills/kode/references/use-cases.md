@@ -24,7 +24,7 @@ Every case starts and ends the same way, so the cases do not repeat it. **Start*
 ## 1. Build a multi-service system from zero
 
 **Situation.** A new product needs `api`, `worker`, `web` and a `db`.
-**Steps.** Coordinator: `quota`. `env` `create` with the services as data, `db` with a mount for its data, and `ttl_secs`. `desk` `create` connected to it. `workspace` `create`, one for each service, each with its packages, then `ttl`. One Solo worker for each workspace (`worker_ask` with that workspace), each with the intercept of its own service granted. Workers: write, run the code as a background process, verify through the intercept, commit, push, `REPORT.md`. Coordinator: read the reports, then brief one Desk verification worker for the end-to-end run.
+**Steps.** Coordinator: `quota`. `env` `create` with the services as data, `db` with a mount for its data, and `ttl_secs`. `netgroup` `create` connected to it. `workspace` `create`, one for each service, each with its packages, then `ttl`. One Solo worker for each workspace (`worker_ask` with that workspace), each with the intercept of its own service granted. Workers: write, run the code as a background process, verify through the intercept, commit, push, `REPORT.md`. Coordinator: read the reports, then brief one Desk verification worker for the end-to-end run.
 **End.** Coordinator: `env` `snapshot` with `volume: "shop-env"`, a `description`, `labels: ["shop"]` and a `message`: the first commit of a volume makes `base`. One workspace that holds the repositories is snapshotted the same way as `shop-code`. `memory` `write`: the two volumes and `@base`, the repositories, how to run. The workspaces and the environment deleted. A later `env` `create` with `source: "shop-env@base"` starts from it.
 
 ## 2. Repair one bug against real data
@@ -49,13 +49,13 @@ Every case starts and ends the same way, so the cases do not repeat it. **Start*
 
 ## 6. Review a pull request by running it
 
-**Steps.** Coordinator: `env` `fork` with `source` `shop` (a live copy) and `ttl_secs`; `desk` `connect` to the copy; `workspace` `fork` from `shop-code@base`, then `ttl`. Desk verification worker: check out the branch of the pull request. Intercept the changed service in the copy. Run the suite in a capsule; call the service directly. `REPORT.md` with the end of the log and a verdict.
+**Steps.** Coordinator: `env` `fork` with `source` `shop` (a live copy) and `ttl_secs`; `netgroup` `connect` to the copy; `workspace` `fork` from `shop-code@base`, then `ttl`. Desk verification worker: check out the branch of the pull request. Intercept the changed service in the copy. Run the suite in a capsule; call the service directly. `REPORT.md` with the end of the log and a verdict.
 **End.** The intercept stopped, the environment copy deleted. The workspace holds a git branch that is not merged: it is pushed to origin, the workspace is deleted plainly and `base` does not move; `open-work` names the git branch when the review left work to continue.
 
 ## 7. Reproduce a data-dependent bug safely
 
-**Steps.** Coordinator: `env` `fork` with `source` `shop` and `ttl_secs`; `desk` `connect` to the copy. Now change data, drop tables and stop services freely. Repair as in case 2.
-**End.** `desk` `connect` back to `shop`; the copy deleted. If other people need the broken state, `env` `snapshot` the copy first: it becomes a snapshot of the `shop-env` volume, because a copy shares its source's volume. Give it a tag of its own (`tag: "bug-1432"`), never `base`, say in the `message` that the data is broken, and `volume` `untag` it when the bug is closed.
+**Steps.** Coordinator: `env` `fork` with `source` `shop` and `ttl_secs`; `netgroup` `connect` to the copy. Now change data, drop tables and stop services freely. Repair as in case 2.
+**End.** `netgroup` `connect` back to `shop`; the copy deleted. If other people need the broken state, `env` `snapshot` the copy first: it becomes a snapshot of the `shop-env` volume, because a copy shares its source's volume. Give it a tag of its own (`tag: "bug-1432"`), never `base`, say in the `message` that the data is broken, and `volume` `untag` it when the bug is closed.
 
 ## 8. Verify a release end to end
 
@@ -87,7 +87,7 @@ Every case starts and ends the same way, so the cases do not repeat it. **Start*
 ## 13. Bring a new repository into Kode (the first session)
 
 **Situation.** The memory is empty and `volume` `list` with the project label finds nothing.
-**Steps.** Coordinator: first brainstorm with the person and write the initial draft of the memory, then agree it (`memory.md`). Then read the compose file or the manifests of the repository. `env` `create` with them as services, a mount for each service that keeps data, and `ttl_secs`. `desk` `create` connected to it. `workspace` `create` with the packages that the repository needs, then `ttl`. Solo worker: clone, run the app as a background process, call it, close the gaps. Write `KODE.md` at the root of the repository: the environment, the packages and the run command, for the next agent. Push.
+**Steps.** Coordinator: first brainstorm with the person and write the initial draft of the memory, then agree it (`memory.md`). Then read the compose file or the manifests of the repository. `env` `create` with them as services, a mount for each service that keeps data, and `ttl_secs`. `netgroup` `create` connected to it. `workspace` `create` with the packages that the repository needs, then `ttl`. Solo worker: clone, run the app as a background process, call it, close the gaps. Write `KODE.md` at the root of the repository: the environment, the packages and the run command, for the next agent. Push.
 **End.** Coordinator: `env` `snapshot` with `volume: "shop-env"` and `workspace` `snapshot` with `volume: "shop-code"`, each with a `description`, `labels` with the project name and a `message`; each first commit makes `base`. `memory` `write`: the draft made true, `volumes` and `environments` (each volume with `@base`), `sources`, `run`, `desks`, and the `plan` step marked done. The workspace and the environment deleted.
 
 ## 14. Two agents test their changes against each other

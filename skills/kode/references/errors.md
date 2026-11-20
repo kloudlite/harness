@@ -16,7 +16,7 @@ The status comes first; the body is one sentence. Report it as it is, then take 
 | `409 this snapshot is the base of …` / `… is where … stands now (its latest push)` | A live workspace or environment was built from it or last pushed it. Delete that workspace first (after its own snapshot), or keep the commit. |
 | `409 snapshot {N} is tagged {t}; move or delete the tag first` | A tagged snapshot is kept. Keep it, or `volume` `untag` it first when nobody starts from that tag any more; never untag `base` to delete its snapshot. |
 | `409 the volume still has a workspace or environment` | Delete the owner first, if the user asked. |
-| `409 this desk has no environment; connect one…` | `desk` `connect` with `environment`. |
+| `409 this desk has no environment; connect one…` | `netgroup` `connect` with `environment`. |
 | `409 conflict, retry` / `the desk changed; retry` / `volume {name} is being changed; retry` | Read again, repeat once. |
 | `env` action `restore` `409` with `lost` | Name the services; call again with `discard` only after a yes. |
 | `422` for a package; the answer lists versions | Pick a listed version. |
