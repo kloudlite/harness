@@ -266,7 +266,7 @@ export async function podHold(ws: string): Promise<void> {
 export async function deskHold(id = process.env.KD_DESK): Promise<void> {
   if (!id) return;
   try {
-    await apiJson("POST", `/v1/desks/${seg(id)}/hold`);
+    await apiJson("POST", `/v1/netgroups/${seg(id)}/hold`);
   } catch {}
 }
 

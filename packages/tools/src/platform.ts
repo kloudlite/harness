@@ -572,7 +572,7 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
             create: act({ name: S, image: S, packages: SL, team: S, ttl_secs: TTL, cpu: NEW_CPU, memory_gb: NEW_MEM, device: { type: "string", description: "A device id (dev-…, from `kode devices list`): make a device workspace, whose folder is on that machine and whose tools run there. The device must be online and active in this team." }, access: { type: "array", items: { type: "string" }, description: "Device workspaces only: names of extra sandbox access (`xcode`, `user-temp`, `android`, `pty`), defined on the person's own machine (built in, or added with `kode devices access add`). A name the machine does not define keeps the workspace from starting (`AccessUndefined`)." }, ...WAITING }, ["name"], async (a) => {
               const body = { name: a.name, image: a.image, packages: a.packages, cpu: a.cpu, memory_gb: a.memory_gb, device: a.device, access: a.access };
               const ses = process.env.KD_DESK;
-              return thenWaitWs(await ttlAfter(a, "/v1/workspaces", ses ? await api("POST", `/v1/desks/${seg(ses)}/workspaces`, strip(body)) : await api("POST", "/v1/workspaces", strip({ team: a.team, ...body }))), a);
+              return thenWaitWs(await ttlAfter(a, "/v1/workspaces", ses ? await api("POST", `/v1/netgroups/${seg(ses)}/workspaces`, strip(body)) : await api("POST", "/v1/workspaces", strip({ team: a.team, ...body }))), a);
             }),
             // A fork is a NEW workspace: from a live one (`source`, a copy of its home as it is now that
             // joins this desk) or from a storage commit (`snapshot_id`). It never merges back: its work
@@ -610,7 +610,7 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
               const saved = await saveBeforeDelete(a, doc, (s, ms) => settled(s, ms));
               if (saved.writing) return JSON.stringify(saved.writing, null, 2);
               // `keep_disk` goes by the workspace's own route, the one that keeps a disk
-              await api("DELETE", a.keep_disk ? `${path}?keep_disk=true` : ses ? `/v1/desks/${seg(ses)}/workspaces/${seg(a.workspace)}` : path);
+              await api("DELETE", a.keep_disk ? `${path}?keep_disk=true` : ses ? `/v1/netgroups/${seg(ses)}/workspaces/${seg(a.workspace)}?delete=true` : path);
               return JSON.stringify({ ...doc, state: "deleted", ...strip({ snapshot: saved.snapshot, kept_disk: a.keep_disk ? doc?.disk?.id : undefined }), saved: saved.saved }, null, 2);
             }),
             wait: mact({ timeout_ms: TIMEOUT }, [], async (a) => pollUntil(() => api("GET", `/v1/workspaces/${seg(a.workspace)}`), wsAny, timeoutMs(a), tickMs)),
@@ -826,7 +826,7 @@ function mainOnly(tickMs: number): ToolDef[] {
         const cmd = Array.isArray(a.command) ? a.command : ["sh", "-c", String(a.command)];
         const body = { cmd, image: a.image, packages: a.packages, env: a.variables, timeout_secs: a.lifetime_s ?? a.timeout_s, from_workspace: a.from_workspace, from_snapshot: a.from_snapshot };
         const ses = process.env.KD_DESK;
-        const out = ses ? await api("POST", `/v1/desks/${seg(ses)}/capsules`, strip(body)) : await api("POST", "/v1/capsules", strip({ team: a.team, ...body }));
+        const out = ses ? await api("POST", `/v1/netgroups/${seg(ses)}/capsules`, strip(body)) : await api("POST", "/v1/capsules", strip({ team: a.team, ...body }));
         if (!a.wait) return out;
         const id = JSON.parse(out).id;
         return capsuleWait(`/v1/capsules/${seg(id)}`, softMs(a), () => promoted(id, "capsule"));

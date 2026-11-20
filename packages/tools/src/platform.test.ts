@@ -323,8 +323,8 @@ test("in a desk, workspace_create and workspace_delete go through the desk; with
   routes["POST /v1/workspaces"] = json({ id: "ws-1" }, 201);
   routes["DELETE /v1/workspaces/w1"] = () => new Response(null, { status: 204 });
   routes["GET /v1/workspaces/w1"] = json({ id: "w1", state: "ready" });
-  routes["POST /v1/desks/desk-1/workspaces"] = json({ id: "ws-2" }, 201);
-  routes["DELETE /v1/desks/desk-1/workspaces/w1"] = () => new Response(null, { status: 204 });
+  routes["POST /v1/netgroups/desk-1/workspaces"] = json({ id: "ws-2" }, 201);
+  routes["DELETE /v1/netgroups/desk-1/workspaces/w1?delete=true"] = () => new Response(null, { status: 204 });
   await tool(t, "workspace_create").run({ name: "backend", team: "acme" });
   await tool(t, "workspace_delete").run({ workspace: "w1", skip_snapshot: true });
   process.env.KD_DESK = "desk-1";
@@ -338,9 +338,9 @@ test("in a desk, workspace_create and workspace_delete go through the desk; with
     "POST /v1/workspaces",
     "GET /v1/workspaces/w1",
     "DELETE /v1/workspaces/w1",
-    "POST /v1/desks/desk-1/workspaces",
+    "POST /v1/netgroups/desk-1/workspaces",
     "GET /v1/workspaces/w1",
-    "DELETE /v1/desks/desk-1/workspaces/w1",
+    "DELETE /v1/netgroups/desk-1/workspaces/w1?delete=true",
   ]);
   // The desk already names the owner: a `team` would only contradict it.
   expect(calls[3].body).toEqual({ name: "backend" });
@@ -596,9 +596,9 @@ test("workspace create sends `device` to make a device workspace, and fork with 
   await tool(t, "workspace_create").run({ name: "d1", device: "dev-1" });
   expect(calls.at(-1)).toMatchObject({ url: "/v1/workspaces", body: { name: "d1", device: "dev-1" } });
   process.env.KD_DESK = "s1";
-  routes["POST /v1/desks/s1/workspaces"] = json({}, 202);
+  routes["POST /v1/netgroups/s1/workspaces"] = json({}, 202);
   await tool(t, "workspace_create").run({ name: "d2", device: "dev-1" });
-  expect(calls.at(-1)).toMatchObject({ url: "/v1/desks/s1/workspaces", body: { name: "d2", device: "dev-1" } });
+  expect(calls.at(-1)).toMatchObject({ url: "/v1/netgroups/s1/workspaces", body: { name: "d2", device: "dev-1" } });
   delete process.env.KD_DESK;
   routes["POST /v1/workspaces/w1/clone"] = json({}, 202);
   await tool(t, "workspace_fork").run({ name: "d3", source: "w1", snapshot: "dsnap-1" });
@@ -613,9 +613,9 @@ test("create and fork take the size for the job (`cpu`, `memory_gb`) and send it
   await tool(t, "workspace_create").run({ name: "big", cpu: 8, memory_gb: 16 });
   expect(calls.at(-1)).toMatchObject({ url: "/v1/workspaces", body: { name: "big", cpu: 8, memory_gb: 16 } });
   process.env.KD_DESK = "s1";
-  routes["POST /v1/desks/s1/workspaces"] = json({}, 202);
+  routes["POST /v1/netgroups/s1/workspaces"] = json({}, 202);
   await tool(t, "workspace_create").run({ name: "inDesk", cpu: 2 });
-  expect(calls.at(-1)).toMatchObject({ url: "/v1/desks/s1/workspaces", body: { name: "inDesk", cpu: 2 } });
+  expect(calls.at(-1)).toMatchObject({ url: "/v1/netgroups/s1/workspaces", body: { name: "inDesk", cpu: 2 } });
   delete process.env.KD_DESK;
   await tool(t, "workspace_fork").run({ name: "c", source: "w1", cpu: 8, memory_gb: 16 });
   expect(calls.at(-1)).toMatchObject({ url: "/v1/workspaces/w1/clone", body: { name: "c", cpu: 8, memory_gb: 16 } });
@@ -659,7 +659,7 @@ test("fork: `source` forks a live workspace or environment, `snapshot_id` a stor
 
 test("capsule_create goes through the desk when there is one, with its argv array as given", async () => {
   process.env.KD_DESK = "desk-1";
-  routes["POST /v1/desks/desk-1/capsules"] = json({ id: "cap-1" }, 202);
+  routes["POST /v1/netgroups/desk-1/capsules"] = json({ id: "cap-1" }, 202);
   await tool(platformTools("main"), "capsule_create").run({ command: ["echo", "hi"], team: "acme" });
   expect(calls.at(-1)!.body).toEqual({ cmd: ["echo", "hi"] });
 });

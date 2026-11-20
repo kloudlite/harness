@@ -192,7 +192,7 @@ test("podHold posts /hold to a ready workspace", async () => {
 test("deskHold posts the desk's hold and nothing for a bench-less process", async () => {
   handler = () => new Response(null, { status: 204 });
   await deskHold("desk-1");
-  expect(log.at(-1)!.url).toBe("http://api.test/v1/desks/desk-1/hold");
+  expect(log.at(-1)!.url).toBe("http://api.test/v1/netgroups/desk-1/hold");
   log = [];
   await deskHold(undefined);
   expect(log).toEqual([]);
