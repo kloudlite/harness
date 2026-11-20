@@ -484,6 +484,9 @@ const CASES: [string, any, string, string, any?][] = [
   ["netgroup_start", { netgroup: "s1" }, "POST", "/v1/netgroups/s1/start"],
   ["netgroup_delete", { netgroup: "s1" }, "DELETE", "/v1/netgroups/s1"],
   ["netgroup_ttl", { netgroup: "s1", ttl_secs: 600 }, "PUT", "/v1/netgroups/s1/ttl", { ttl_secs: 600 }],
+  ["netgroup_create", { name: "idle-test", idle_secs: 120 }, "POST", "/v1/netgroups", { name: "idle-test", idle_secs: 120 }],
+  ["netgroup_idle", { netgroup: "s1", idle_secs: 120 }, "PUT", "/v1/netgroups/s1/idle", { idle_secs: 120 }],
+  ["netgroup_idle", { netgroup: "s1", clear: true }, "PUT", "/v1/netgroups/s1/idle", { idle_secs: null }],
   ["workspace_ttl", { workspace: "w1", clear: true }, "PUT", "/v1/workspaces/w1/ttl", { ttl_secs: null }],
   ["env_ttl", { env: "e1", ttl_secs: 86400 }, "PUT", "/v1/environments/e1/ttl", { ttl_secs: 86400 }],
 ];
@@ -729,6 +732,15 @@ test("secret_set sends the value and answers {name, updatedAt}, never the value,
 test("ttl tools clear with null when ttl_secs is omitted, and the wait tools take a timeout", () => {
   const t = platformTools("main");
   for (const n of ["capsule_wait", "run_wait"]) expect((tool(t, n).inputSchema as any).properties.timeout_ms.description).toContain("maximum 900000");
+});
+
+test("netgroup idle needs idle_secs or clear, not both", async () => {
+  routes["PUT /v1/netgroups/s1/idle"] = json({});
+  for (const a of [{ netgroup: "s1" }, { netgroup: "s1", idle_secs: 120, clear: true }]) {
+    calls = [];
+    await expect(tool(platformTools("main"), "netgroup_idle").run(a)).rejects.toThrow("idle_secs");
+    expect(calls.filter((c) => c.method === "PUT")).toHaveLength(0);
+  }
 });
 
 test("a ttl tool needs ttl_secs or clear", async () => {

@@ -221,6 +221,8 @@ const RESIZE_MEM = { type: "integer", description: "GB of memory limit, 1 to 32 
 const NEW_CPU = { type: "integer", description: "Cores of cpu limit, 1 to 8: the size for this job; default 4 CPU / 8 GB; a snapshot carries no size." };
 const NEW_MEM = { type: "integer", description: "GB of memory limit, 1 to 32: the size for this job; default 4 CPU / 8 GB; a snapshot carries no size." };
 const CLEAR = { type: "boolean", description: "`ttl` only: remove the limit instead of setting `ttl_secs`." };
+const NG_CLEAR = { type: "boolean", description: "`ttl`: remove the limit instead of setting `ttl_secs`. `idle`: follow the region's idle window again instead of setting `idle_secs`." };
+const IDLE = { type: "integer", description: "Seconds of unused time before the netgroup's members idle-stop together, 60 to 1800, in place of the region's 30 minutes. A short window suits an idle test." };
 const TAIL = { type: "integer", description: "Keep only the last N lines (default 200, maximum 2000)." };
 const HEAD = { type: "integer", description: "Keep only the first N lines (applied before `tail`)." };
 const PVER = { type: "integer", description: "A version number. `get`: that version. `delete`: only that version (not the latest, not one a run reads)." };
@@ -254,6 +256,8 @@ async function ttlAfter(a: any, base: string, out: string): Promise<string> {
 }
 const ttlBody = (a: any): { ttl_secs: number | null } | string =>
   a.clear && a.ttl_secs !== undefined ? "error: give `ttl_secs` or `clear`, not both" : a.clear ? { ttl_secs: null } : a.ttl_secs === undefined ? "error: give `ttl_secs` (600 to 2592000) or `clear: true`; neither would change the limit by guesswork" : { ttl_secs: a.ttl_secs };
+const idleBody = (a: any): { idle_secs: number | null } | string =>
+  a.clear && a.idle_secs !== undefined ? "error: give `idle_secs` or `clear`, not both" : a.clear ? { idle_secs: null } : a.idle_secs === undefined ? "error: give `idle_secs` (60 to 1800) or `clear: true` to follow the region's window" : { idle_secs: a.idle_secs };
 const clamp = (ms: number, max: number) => Math.min(max, Math.max(1, Math.round(ms)));
 /** How long a `wait` action waits: `timeout_ms`. `max_wait_ms` (ms), `timeout_s` and `timeout` (seconds) are read as aliases, never listed. */
 const timeoutMs = (a: any): number => {
@@ -665,7 +669,7 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
 
   // ---- netgroup
   tools.push(
-    resource("netgroup", ws ? "The netgroup of this workspace and its environment. Action: list." : "Netgroups: workspaces and capsules joined to one environment, with the intercepts they hold there. Actions: list, get, create, connect (sets one's environment; null disconnects), start, stop, delete, ttl, join (a standalone workspace joins), leave.",
+    resource("netgroup", ws ? "The netgroup of this workspace and its environment. Action: list." : "Netgroups: workspaces and capsules joined to one environment, with the intercepts they hold there. Actions: list, get, create, connect (sets one's environment; null disconnects), start, stop, delete, ttl, idle (its own idle window; `clear` follows the region's), join (a standalone workspace joins), leave.",
       ws
         ? {
             list: act({}, [], async () => {
@@ -676,8 +680,8 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
         : {
             list: act({ team: TEAM }, [], async (a) => api("GET", `/v1/netgroups${qs({ team: a.team })}`)),
             get: act({ netgroup: NG }, [], async (a) => currentNetgroup(a.netgroup)),
-            create: act({ name: S, team: TEAM, environment: ENVREF, ttl_secs: TTL }, ["name"], async (a) =>
-              api("POST", "/v1/netgroups", strip({ name: a.name, team: a.team, environment: a.environment, ttl_secs: a.ttl_secs }))),
+            create: act({ name: S, team: TEAM, environment: ENVREF, ttl_secs: TTL, idle_secs: IDLE }, ["name"], async (a) =>
+              api("POST", "/v1/netgroups", strip({ name: a.name, team: a.team, environment: a.environment, ttl_secs: a.ttl_secs, idle_secs: a.idle_secs }))),
             connect: act({ netgroup: NG, environment: ENVREF }, [], async (a) => {
               const id = a.netgroup ?? process.env.KD_NETGROUP;
               if (!id) return NO_NETGROUP;
@@ -697,7 +701,8 @@ export function platformTools(kind: "main" | "workspace" | "all", wsId?: string,
               return JSON.stringify({ id: a.netgroup, state: "stopping", ...(body && typeof body === "object" ? body : {}) }, null, 2);
             }),
             delete: act({ netgroup: NG }, ["netgroup"], async (a) => deleting(`/v1/netgroups/${seg(a.netgroup)}`, () => api("DELETE", `/v1/netgroups/${seg(a.netgroup)}`))),
-            ttl: act({ netgroup: NG, ttl_secs: TTL, clear: CLEAR }, ["netgroup"], async (a) => { const b = ttlBody(a); return typeof b === "string" ? b : (await api("PUT", `/v1/netgroups/${seg(a.netgroup)}/ttl`, b), api("GET", `/v1/netgroups/${seg(a.netgroup)}`)); }),
+            ttl: act({ netgroup: NG, ttl_secs: TTL, clear: NG_CLEAR }, ["netgroup"], async (a) => { const b = ttlBody(a); return typeof b === "string" ? b : (await api("PUT", `/v1/netgroups/${seg(a.netgroup)}/ttl`, b), api("GET", `/v1/netgroups/${seg(a.netgroup)}`)); }),
+            idle: act({ netgroup: NG, idle_secs: IDLE, clear: NG_CLEAR }, ["netgroup"], async (a) => { const b = idleBody(a); return typeof b === "string" ? b : api("PUT", `/v1/netgroups/${seg(a.netgroup)}/idle`, b); }),
             join: act({ netgroup: NG, workspace: JOINER }, ["netgroup", "workspace"], async (a) => api("POST", `/v1/netgroups/${seg(a.netgroup)}/workspaces`, { workspace: a.workspace })),
             leave: act({ netgroup: NG, workspace: JOINER }, ["netgroup", "workspace"], async (a) => { await api("DELETE", `/v1/netgroups/${seg(a.netgroup)}/workspaces/${seg(a.workspace)}`); return currentNetgroup(a.netgroup); }),
           }),
